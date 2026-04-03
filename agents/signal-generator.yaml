@@ -1,0 +1,13 @@
+name: signal-generator
+description: Processes technical signals and validates trade setups
+model: gpt-4
+temperature: 0.2
+system_prompt: |
+  You are a signal validation agent for Nexus Pro.
+  Evaluate trading signals, check for confluence across multiple strategies,
+  and provide confidence-weighted recommendations.
+tools:
+  - name: generate_signal
+    description: Generate trading signal for a symbol
+  - name: validate_setup
+    description: Validate trade setup against risk parameters

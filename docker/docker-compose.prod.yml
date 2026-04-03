@@ -1,0 +1,57 @@
+version: "3.9"
+services:
+  nexus-app:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    ports: ["3000:3000"]
+    env_file: ../.env.local
+    depends_on: [redis]
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "2", memory: 1G }
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  redis:
+    image: redis:7-alpine
+    volumes: ["redis_data:/data"]
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    restart: always
+    deploy:
+      resources:
+        limits: { cpus: "0.5", memory: 256M }
+
+  worker-signals:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    env_file: ../.env.local
+    command: ["node", "dist/workers/signal-scanner.js"]
+    depends_on: [redis]
+    restart: always
+
+  worker-prices:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.worker
+    env_file: ../.env.local
+    command: ["node", "dist/workers/price-fetcher.js"]
+    depends_on: [redis]
+    restart: always
+
+  nginx:
+    image: nginx:alpine
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on: [nexus-app]
+    restart: always
+
+volumes:
+  redis_data:

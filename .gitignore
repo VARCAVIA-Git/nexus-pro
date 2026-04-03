@@ -1,0 +1,17 @@
+node_modules/
+.next/
+.env.local
+.env*.local
+!.env.local.example
+*.log
+dist/
+.turbo/
+coverage/
+.DS_Store
+.vercel/
+supabase/.temp/
+docker/data/
+*.pem
+pnpm-lock.yaml
+nexus-*.sh
+setup.log
