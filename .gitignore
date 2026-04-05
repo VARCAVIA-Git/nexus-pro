@@ -12,6 +12,6 @@ coverage/
 supabase/.temp/
 docker/data/
 *.pem
-pnpm-lock.yaml
+# pnpm-lock.yaml — keep in git for Vercel
 nexus-*.sh
 setup.log

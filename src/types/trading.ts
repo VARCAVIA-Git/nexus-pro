@@ -6,9 +6,10 @@ export type Side = 'LONG' | 'SHORT';
 export type TradeStatus = 'open' | 'closed' | 'cancelled' | 'pending';
 export type OrderType = 'market' | 'limit' | 'stop' | 'stop_limit';
 export type Signal = 'BUY' | 'SELL' | 'NEUTRAL';
-export type Regime = 'BULL_TREND' | 'BEAR_TREND' | 'HIGH_VOL' | 'LOW_VOL' | 'NORMAL';
+export type SignalStrength = 'strong_buy' | 'buy' | 'neutral' | 'sell' | 'strong_sell';
+export type Regime = 'BULL_TREND' | 'BEAR_TREND' | 'HIGH_VOL' | 'LOW_VOL' | 'SIDEWAYS' | 'NORMAL';
 export type Timeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
-export type BrokerType = 'paper' | 'binance' | 'alpaca' | 'ibkr';
+export type BrokerType = 'paper' | 'alpaca';
 export type StrategyKey = 'combined_ai' | 'momentum' | 'trend' | 'reversion' | 'breakout' | 'pattern';
 
 export interface OHLCV {
@@ -61,8 +62,38 @@ export interface TradeRecord {
   isLive: boolean;
 }
 
+/** Active position tracked by the backtest/risk engine */
+export interface Position {
+  id: string;
+  symbol: string;
+  side: Side;
+  entryPrice: number;
+  stopLoss: number;
+  takeProfit: number;
+  quantity: number;
+  sizeUsd: number;
+  entryIndex: number;
+  strategy: StrategyKey;
+  confidence: number;
+  regime: Regime;
+  /** Number of bars since entry where close was below EMA21 (for trend exit) */
+  barsBelowEma21?: number;
+}
+
+export interface StrategyDecision {
+  enter: boolean;
+  side: Side;
+  confidence: number;
+}
+
+export interface ExitDecision {
+  exit: boolean;
+  reason: string;
+}
+
 export interface SignalResult {
   signal: Signal;
+  strength: SignalStrength;
   confidence: number;
   strategy: StrategyKey;
   indicators: Record<string, number>;
@@ -101,6 +132,8 @@ export interface BacktestResult {
   initialCapital: number;
   finalCapital: number;
   totalCommissions: number;
+  monteCarlo?: MonteCarloResult;
+  walkForward?: WalkForwardResult;
 }
 
 export interface MonteCarloResult {
@@ -130,7 +163,13 @@ export interface WalkForwardResult {
 export interface Indicators {
   rsi: number[];
   macd: { line: number[]; signal: number[]; histogram: number[] };
-  bollinger: { mid: (number | null)[]; upper: (number | null)[]; lower: (number | null)[] };
+  bollinger: {
+    mid: (number | null)[];
+    upper: (number | null)[];
+    lower: (number | null)[];
+    width: number[];
+    squeeze: boolean[];
+  };
   atr: number[];
   adx: number[];
   stochastic: { k: number[]; d: number[] };
@@ -138,9 +177,24 @@ export interface Indicators {
   ema21: number[];
   sma20: (number | null)[];
   sma50: (number | null)[];
-  supertrend: number[];
+  sma200: (number | null)[];
+  volume: {
+    raw: number[];
+    avg20: number[];
+    spike: boolean[];
+  };
   obv: number[];
   vwap: number[];
+}
+
+export interface RiskAssessment {
+  positionSize: number;
+  kellySize: number;
+  maxRiskAmount: number;
+  stopLossPrice: number;
+  correlationRisk: number;
+  circuitBreakerActive: boolean;
+  circuitBreakerReason?: string;
 }
 
 export interface BrokerOrder {
