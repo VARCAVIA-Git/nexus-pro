@@ -10,6 +10,10 @@ import { buildOutcome, saveOutcome } from '@/lib/engine/learning/outcome-tracker
 import { redisGet, redisSet, redisLpush, KEYS } from '@/lib/db/redis';
 import { AlpacaBroker } from '@/lib/broker/alpaca';
 import type { BotPosition, BotSignalLog } from '@/lib/engine/live-runner';
+import { classifyRegime } from '@/lib/engine/regime-classifier';
+import { evaluateEntryTiming } from '@/lib/engine/smart-timing';
+import { detectTrap } from '@/lib/engine/trap-detector';
+import { managePosition } from '@/lib/engine/position-manager';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 55; // Vercel Pro allows up to 60s
@@ -137,9 +141,23 @@ export async function GET(request: Request) {
           const lastIdx = candles.length - 1;
           const price = candles[lastIdx].close;
 
+          // Classify regime
+          const regime = classifyRegime(candles);
+          console.log(`[TICK][${config.name}] ${symbol}: regime=${regime.regime} (${regime.confidence}%) size=${regime.sizeMultiplier}x`);
+
+          // Skip entry on EXHAUSTION
+          if (regime.regime === 'EXHAUSTION' && !state.positions.find(p => p.symbol === symbol)) {
+            console.log(`[TICK][${config.name}] ${symbol}: EXHAUSTION — skipping entry`);
+            continue;
+          }
+
+          // Filter strategies by regime
+          const allowedStrats = (config.strategies as string[]).filter(s => !regime.avoidStrategies.includes(s));
+          const activeStrats = allowedStrats.length > 0 ? allowedStrats : config.strategies;
+
           let bestSignal: ReturnType<typeof generateSignal> | null = null;
           let bestConf = -1;
-          for (const stratKey of config.strategies as StrategyKey[]) {
+          for (const stratKey of activeStrats as StrategyKey[]) {
             const sig = generateSignal(candles, indicators, lastIdx, stratKey);
             if (sig.confidence > bestConf) { bestConf = sig.confidence; bestSignal = sig; }
           }
@@ -148,10 +166,27 @@ export async function GET(request: Request) {
 
           const logEntry: BotSignalLog = { botId: config.id, symbol, signal: bestSignal.signal, confidence: bestSignal.confidence, strategy: bestSignal.strategy, price, regime: bestSignal.regime, time: now.toISOString(), acted: false };
 
-          // Position monitoring with profit lock
+          // Position monitoring with regime-aware management
           const existingPos = state.positions.find(p => p.symbol === symbol);
           if (existingPos) {
             const atr = indicators.atr[lastIdx] || price * 0.02;
+
+            // Dynamic position manager
+            const posAction = managePosition({
+              entryPrice: existingPos.entryPrice, currentPrice: price,
+              side: existingPos.side, stopLoss: existingPos.stopLoss,
+              candlesSinceEntry: state.tickCount - (existingPos as any).entryTick || 0,
+            }, candles, regime.regime);
+
+            if (posAction.action === 'CLOSE_ALL') {
+              console.log(`[TICK][${config.name}] Position ${symbol}: ${posAction.reason}`);
+              // Force exit via stop trigger
+              existingPos.stopLoss = price; // triggers exit below
+            } else if (posAction.action === 'MOVE_STOP' && posAction.newStopPrice) {
+              existingPos.stopLoss = posAction.newStopPrice;
+              console.log(`[TICK][${config.name}] Position ${symbol}: ${posAction.reason}`);
+            }
+
             existingPos.stopLoss = trailingStopATR(existingPos.side, price, existingPos.stopLoss, atr, config.useTrailingStop ? capRules.stopLossATR : 999);
 
             const lock = checkProfitLock(existingPos.side, existingPos.entryPrice, price, existingPos.stopLoss, atr, existingPos.quantity);
@@ -212,6 +247,23 @@ export async function GET(request: Request) {
           if (bestSignal.signal !== 'NEUTRAL' && bestSignal.confidence >= confThreshold) {
             const side: Side = bestSignal.signal === 'BUY' ? 'LONG' : 'SHORT';
             const atr = indicators.atr[lastIdx] || price * 0.02;
+
+            // Trap detection
+            const trap = detectTrap(candles, bestSignal.signal as 'BUY' | 'SELL');
+            if (trap.trapped) {
+              console.log(`[TICK][${config.name}] ⚠️ TRAP: ${trap.trapType} (${trap.confidence}%) — ${trap.recommendation}`);
+              logEntry.reason = `trap:${trap.trapType}`;
+              state.signalLog.push(logEntry); continue;
+            }
+
+            // Smart timing
+            const timing = evaluateEntryTiming(candles, price, bestSignal.signal as 'BUY' | 'SELL', regime.regime);
+            if (!timing.shouldEnterNow) {
+              console.log(`[TICK][${config.name}] ⏳ TIMING: ${timing.suggestedAction} — ${timing.reason}`);
+              logEntry.reason = `timing:${timing.suggestedAction}`;
+              state.signalLog.push(logEntry); continue;
+            }
+
             const totalPnl = state.closedTrades.reduce((s, t) => s + (t.netPnl ?? 0), 0);
 
             const check = preTradeChecks({
@@ -226,7 +278,7 @@ export async function GET(request: Request) {
               state.rejectedTrades++;
               logEntry.reason = `rejected: ${check.reason}`;
             } else {
-              const sizing = timeframePositionSize(tradingCapital, mode, atr, price);
+              const sizing = timeframePositionSize(tradingCapital * regime.sizeMultiplier, mode, atr, price);
               if (sizing.quantity > 0 && sizing.capitalUsed < cash * 0.95 && state.positions.length < capRules.maxOpenPositions) {
                 const orderQty = parseFloat(sizing.quantity.toFixed(isCrypto(symbol) ? 6 : 0));
                 try {

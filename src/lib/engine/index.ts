@@ -20,3 +20,12 @@ export { generateMasterSignal, generateAllMasterSignals } from './master-signal'
 // Learning engine
 export { saveOutcome, loadOutcomes, buildOutcome, analyzeAssetPatterns, analyzeAllAssets, getAdaptiveWeights, isPreferredTime, optimizeStrategy, optimizeAllStrategies } from './learning';
 export type { TradeOutcome, AssetInsights, AdaptiveWeights, OptimizedParams } from './learning';
+// Advanced trading
+export { classifyRegime } from './regime-classifier';
+export type { MarketRegime, RegimeAnalysis } from './regime-classifier';
+export { evaluateEntryTiming } from './smart-timing';
+export type { EntryTiming } from './smart-timing';
+export { managePosition } from './position-manager';
+export type { PositionAction } from './position-manager';
+export { detectTrap } from './trap-detector';
+export type { TrapAnalysis } from './trap-detector';
