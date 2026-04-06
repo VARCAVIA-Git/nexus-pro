@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { fmtDollar, fmtPnl } from '@/lib/utils/format';
-import { createChart } from 'lightweight-charts';
+import type { IChartApi } from 'lightweight-charts';
 import {
   TrendingUp, TrendingDown, Minus, RefreshCw, Zap, Brain,
   AlertTriangle, ChevronDown, Calendar, Newspaper, Target,
@@ -45,14 +45,17 @@ export default function AnalysisPage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  // Render chart
+  // Render chart (dynamic import to avoid SSR issues)
   useEffect(() => {
     if (!chartRef.current || !analysis?.chartData?.length) return;
 
     // Cleanup old chart
     if (chartInstance.current) { chartInstance.current.remove(); chartInstance.current = null; }
 
-    const chart = createChart(chartRef.current, {
+    import('lightweight-charts').then(({ createChart: create }) => {
+    if (!chartRef.current) return;
+
+    const chart = create(chartRef.current, {
       width: chartRef.current.clientWidth,
       height: window.innerWidth < 768 ? 280 : 420,
       layout: { background: { color: 'transparent' } as any, textColor: '#64748b' },
@@ -102,7 +105,10 @@ export default function AnalysisPage() {
       if (chartRef.current) chart.applyOptions({ width: chartRef.current.clientWidth });
     };
     window.addEventListener('resize', handleResize);
-    return () => { window.removeEventListener('resize', handleResize); };
+
+    }); // end dynamic import
+
+    return () => { if (chartInstance.current) { chartInstance.current.remove(); chartInstance.current = null; } };
   }, [analysis]);
 
   const score = analysis?.score ?? 50;

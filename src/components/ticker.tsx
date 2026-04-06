@@ -22,9 +22,9 @@ export function Ticker() {
   }).join('  │  ');
 
   return (
-    <div className="h-9 overflow-hidden bg-n-bg-s border-b border-n-border">
+    <div className="h-8 overflow-hidden bg-n-bg-s border-b border-n-border/50">
       <div className="ticker-wrap h-full flex items-center">
-        <div className="ticker-content whitespace-nowrap font-mono text-[13px]">
+        <div className="ticker-content whitespace-nowrap font-mono text-[11px]">
           {[0, 1].map(i => (
             <span key={i} className="inline-block">
               {prices.map((p, j) => {

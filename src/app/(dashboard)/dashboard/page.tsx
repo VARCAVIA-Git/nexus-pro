@@ -115,20 +115,26 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Quick links */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          { href: '/portfolio', label: 'Portfolio', icon: Wallet },
-          { href: '/operazioni', label: 'Operazioni', icon: Target },
-          { href: '/segnali', label: 'Segnali', icon: Zap },
-          { href: '/intelligence', label: 'Intelligence', icon: Calendar },
-        ].map(l => (
-          <Link key={l.href} href={l.href} className="flex items-center gap-3 rounded-xl border border-n-border bg-n-card p-4 transition-colors hover:bg-n-card-h">
-            <l.icon size={18} className="text-n-dim" />
-            <span className="text-sm font-medium text-n-text">{l.label}</span>
-          </Link>
-        ))}
-      </div>
+      {/* Bot signal summary — only show if bots exist */}
+      {bot?.bots && bot.bots.length > 0 && (
+        <div className="rounded-xl border border-n-border bg-n-card p-4">
+          <h3 className="label mb-3">Bot attivi — ultimo check</h3>
+          <div className="space-y-1.5">
+            {bot.bots.filter((b: any) => b.status === 'running').map((b: any) => (
+              <div key={b.id} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-n-green animate-pulse-dot" />
+                  <span className="font-medium text-n-text">{b.name}</span>
+                  <span className="text-n-dim">{b.assets?.join(', ')}</span>
+                </div>
+                <span className="font-mono text-n-dim" suppressHydrationWarning>
+                  {b.stats?.totalTrades ?? 0} trades · {b.stats?.pnl >= 0 ? '+' : ''}{(b.stats?.pnl ?? 0).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
