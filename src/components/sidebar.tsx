@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { useModeStore } from '@/stores/mode-store';
 import {
-  LayoutDashboard, Briefcase, ArrowLeftRight, Zap,
+  LayoutDashboard, Briefcase, ArrowLeftRight, Zap, BarChart3,
   Bot, Brain, FlaskConical, Microscope, Activity,
   Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut,
 } from 'lucide-react';
@@ -17,6 +17,7 @@ const MAIN_NAV = [
   { href: '/portfolio', label: 'Portfolio', icon: Briefcase },
   { href: '/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
   { href: '/segnali', label: 'Segnali', icon: Zap },
+  { href: '/analysis', label: 'Analisi', icon: BarChart3 },
 ];
 
 const TOOLS_NAV = [
