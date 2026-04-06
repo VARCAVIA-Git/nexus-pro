@@ -271,6 +271,17 @@ export default function ImpostazioniPage() {
         </Section>
       </div>
 
+      {/* Ticker assets */}
+      <div className="rounded-xl border border-n-border bg-n-card p-5">
+        <h3 className="text-sm font-medium text-n-text mb-3">Ticker Wall Street</h3>
+        <p className="text-xs text-n-dim mb-3">Seleziona gli asset da mostrare nel ticker in alto.</p>
+        <div className="flex flex-wrap gap-2">
+          {['BTC', 'ETH', 'SOL', 'LINK', 'AVAX', 'DOT', 'AAPL', 'NVDA', 'TSLA', 'AMZN', 'MSFT', 'META', 'AMD', 'SPY', 'QQQ'].map(a => (
+            <button key={a} className="rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text hover:border-n-accent transition-all min-h-[36px]">{a}</button>
+          ))}
+        </div>
+      </div>
+
       {/* Account section */}
       <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-5 space-y-3">
         <h3 className="text-sm font-medium text-n-text">Account</h3>

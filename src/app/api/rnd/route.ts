@@ -85,11 +85,17 @@ export async function POST(request: Request) {
     const tfs = body.timeframes ?? ['1d', '4h', '1h'];
     for (const asset of assets) {
       for (const tf of tfs) {
-        const { candles, source } = await downloadHistory(asset, tf);
-        results.push({ asset, timeframe: tf, candles: candles.length, source });
+        try {
+          const { candles, source } = await downloadHistory(asset, tf);
+          results.push({ asset, timeframe: tf, candles: candles.length, source });
+          console.log(`[RND] Downloaded ${asset} ${tf}: ${candles.length} candles from ${source}`);
+        } catch (err: any) {
+          console.error(`[RND] Download failed ${asset} ${tf}:`, err.message);
+          results.push({ asset, timeframe: tf, candles: 0, source: 'error', error: err.message });
+        }
       }
     }
-    return NextResponse.json({ ok: true, results });
+    return NextResponse.json({ ok: true, results, totalCandles: results.reduce((s, r) => s + r.candles, 0) });
   }
 
   if (action === 'train') {

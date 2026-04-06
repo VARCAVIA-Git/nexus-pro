@@ -57,10 +57,12 @@ export async function GET(request: Request) {
   }
 
   const startTime = Date.now();
+  console.log(`[CRON TICK] ${new Date().toISOString()}`);
 
   // Load all bot configs from Redis
   const configs = await redisGet<MultiBotConfig[]>(KEYS.botConfig) ?? [];
   const runningBots = configs.filter(c => c.status === 'running');
+  console.log(`[CRON] ${configs.length} total bots, ${runningBots.length} running`);
 
   if (runningBots.length === 0) {
     return NextResponse.json({ processed: 0, message: 'No running bots' });
@@ -201,7 +203,11 @@ export async function GET(request: Request) {
           }
 
           // Entry with pre-trade checks
-          if (bestSignal.signal !== 'NEUTRAL' && bestSignal.confidence >= 0.70) {
+          // Mode-based confidence threshold
+          const confThreshold = mode === 'scalp' ? 0.55 : mode === 'intraday' ? 0.60 : 0.65;
+          console.log(`[CRON] Bot "${config.name}": ${symbol} score=${(bestSignal.confidence*100).toFixed(0)}% signal=${bestSignal.signal} threshold=${(confThreshold*100).toFixed(0)}%`);
+
+          if (bestSignal.signal !== 'NEUTRAL' && bestSignal.confidence >= confThreshold) {
             const side: Side = bestSignal.signal === 'BUY' ? 'LONG' : 'SHORT';
             const atr = indicators.atr[lastIdx] || price * 0.02;
             const totalPnl = state.closedTrades.reduce((s, t) => s + (t.netPnl ?? 0), 0);

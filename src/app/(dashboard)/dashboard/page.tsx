@@ -20,13 +20,15 @@ export default function DashboardPage() {
   const [perf, setPerf] = useState<PerfData | null>(null);
   const [balance, setBalance] = useState<number>(0);
   const [brokerConnected, setBrokerConnected] = useState(true);
+  const [recentTrades, setRecentTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = async () => {
-    const [bRes, pRes, portRes] = await Promise.allSettled([
+    const [bRes, pRes, portRes, trRes] = await Promise.allSettled([
       fetch('/api/bot/status'),
       fetch('/api/performance'),
       fetch(`/api/portfolio?env=${mode}`),
+      fetch('/api/trades?env=demo&limit=5'),
     ]);
     if (bRes.status === 'fulfilled' && bRes.value.ok) setBot(await bRes.value.json());
     if (pRes.status === 'fulfilled' && pRes.value.ok) setPerf(await pRes.value.json());
@@ -34,6 +36,10 @@ export default function DashboardPage() {
       const d = await portRes.value.json();
       setBalance(d.balance ?? 0);
       setBrokerConnected(d.connected !== false);
+    }
+    if (trRes.status === 'fulfilled' && trRes.value.ok) {
+      const d = await trRes.value.json();
+      setRecentTrades(d.trades ?? []);
     }
     setLoading(false);
   };
@@ -133,6 +139,33 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {/* Recent trades */}
+      {recentTrades.length > 0 && (
+        <div className="rounded-xl border border-n-border bg-n-card p-4">
+          <h3 className="label mb-3">Ultime operazioni</h3>
+          <div className="space-y-1.5">
+            {recentTrades.slice(0, 5).map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${t.side === 'LONG' ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`}>{t.side}</span>
+                  <span className="font-mono text-n-text">{t.symbol}</span>
+                </div>
+                <span className={`font-mono font-medium ${(t.netPnl ?? 0) >= 0 ? 'text-n-green' : 'text-n-red'}`} suppressHydrationWarning>
+                  {(t.netPnl ?? 0) >= 0 ? '+' : ''}{(t.netPnl ?? 0).toFixed(2)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {!bot?.running && (!bot?.bots || bot.bots.length === 0) && !loading && (
+        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-6 text-center">
+          <p className="text-sm text-n-dim">Crea il tuo primo bot → <Link href="/strategy" className="text-accent hover:underline">Strategy</Link></p>
         </div>
       )}
     </div>

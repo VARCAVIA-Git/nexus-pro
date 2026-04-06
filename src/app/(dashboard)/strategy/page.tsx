@@ -180,9 +180,14 @@ export default function StrategyPage() {
                   <span key={s} className="rounded bg-n-accent-dim px-1.5 py-0.5 text-[9px] text-n-text-s">{s}</span>
                 ))}
               </div>
-              <p className="text-[10px] text-n-dim mb-3" suppressHydrationWarning>
-                {bot.capitalPercent}% capitale · Rischio {bot.riskLevel}/10 · Max {bot.maxOpenPositions} pos
+              <p className="text-[10px] text-n-dim mb-1" suppressHydrationWarning>
+                {bot.capitalPercent}% capitale · Rischio {bot.riskLevel}/10 · {bot.operationMode ?? 'intraday'}
               </p>
+              {bot.lastTickAt && (
+                <p className="text-[9px] text-n-dim mb-2" suppressHydrationWarning>
+                  Ultimo tick: {Math.round((Date.now() - new Date(bot.lastTickAt).getTime()) / 1000)}s fa
+                </p>
+              )}
 
               {/* Stats */}
               <div className="grid grid-cols-3 gap-1.5">
