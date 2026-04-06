@@ -2,14 +2,14 @@
 
 import { useState, useEffect } from 'react';
 import { useModeStore } from '@/stores/mode-store';
-import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
+import { fmtDollar, fmtPnl } from '@/lib/utils/format';
+import Link from 'next/link';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 import {
   Wallet, TrendingUp, Bot, Target, RefreshCw, Calendar, Zap,
 } from 'lucide-react';
-import Link from 'next/link';
 
 interface BotStatusData { running: boolean; tickCount: number; positions: any[]; closedTrades: any[]; accountEquity: number; totalPnl: number; bots?: any[] }
 interface PerfData { totalTrades: number; wins: number; losses: number; winRate: number; totalPnl: number; dailyPnl: number; weeklyPnl: number; monthlyPnl: number; sharpeRatio: number; equityCurve: { date: string; equity: number }[] }
@@ -18,18 +18,29 @@ export default function DashboardPage() {
   const mode = useModeStore((s) => s.mode);
   const [bot, setBot] = useState<BotStatusData | null>(null);
   const [perf, setPerf] = useState<PerfData | null>(null);
+  const [balance, setBalance] = useState<number>(0);
+  const [brokerConnected, setBrokerConnected] = useState(true);
   const [loading, setLoading] = useState(true);
 
   const fetchAll = async () => {
-    const [bRes, pRes] = await Promise.allSettled([fetch('/api/bot/status'), fetch('/api/performance')]);
+    const [bRes, pRes, portRes] = await Promise.allSettled([
+      fetch('/api/bot/status'),
+      fetch('/api/performance'),
+      fetch(`/api/portfolio?env=${mode}`),
+    ]);
     if (bRes.status === 'fulfilled' && bRes.value.ok) setBot(await bRes.value.json());
     if (pRes.status === 'fulfilled' && pRes.value.ok) setPerf(await pRes.value.json());
+    if (portRes.status === 'fulfilled' && portRes.value.ok) {
+      const d = await portRes.value.json();
+      setBalance(d.balance ?? 0);
+      setBrokerConnected(d.connected !== false);
+    }
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [mode]);
 
-  const equity = bot?.accountEquity ?? 0;
+  const equity = brokerConnected ? balance : 0;
   const totalPnl = perf?.totalPnl ?? 0;
   const dailyPnl = perf?.dailyPnl ?? 0;
   const activeBots = bot?.bots?.filter(b => b.status === 'running').length ?? 0;
@@ -40,6 +51,12 @@ export default function DashboardPage() {
       {mode === 'demo' && (
         <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-4 py-2.5 text-center text-xs text-amber-400">
           Stai usando il simulatore — i dati non sono reali
+        </div>
+      )}
+
+      {mode === 'real' && !brokerConnected && !loading && (
+        <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 px-4 py-3 text-sm text-blue-300">
+          Conto live non collegato. <Link href="/connections" className="underline font-medium">Configura le API keys live →</Link>
         </div>
       )}
 

@@ -7,6 +7,16 @@ export async function POST(request: Request) {
   try {
     const body = await request.json();
 
+    // Reject real mode without live keys
+    const env = body.environment ?? 'demo';
+    if (env === 'real') {
+      const liveKey = process.env.ALPACA_LIVE_API_KEY;
+      const liveSecret = process.env.ALPACA_LIVE_SECRET_KEY;
+      if (!liveKey || !liveSecret) {
+        return NextResponse.json({ ok: false, error: 'API keys live non configurate. Vai a Connessioni per configurarle.' }, { status: 400 });
+      }
+    }
+
     // Multi-bot: if botId provided, start existing bot
     if (body.botId) {
       const result = await startBot(body.botId);

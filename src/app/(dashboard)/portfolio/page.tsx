@@ -35,6 +35,34 @@ export default function PortfolioPage() {
   const isReal = mode === 'real';
   const accent = isReal ? '#3b82f6' : '#f59e0b';
 
+  // Real mode: check if live broker is connected
+  if (isReal && data && (data as any).connected === false) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
+          <AlertTriangle size={16} className="text-blue-400 shrink-0" />
+          <p className="text-sm text-blue-300">Conto live non collegato</p>
+        </div>
+        <h1 className="text-n-text">Portfolio Real</h1>
+        <div className="rounded-xl border border-n-border bg-n-card p-6 space-y-4">
+          <h2 className="text-base font-medium text-n-text">Collega il tuo conto Alpaca Live</h2>
+          <p className="text-sm text-n-dim">{(data as any).message}</p>
+          <div className="space-y-2">
+            {['Completa la verifica identità su Alpaca', 'Genera API keys live dalla dashboard Alpaca', 'Inseriscile nella pagina Connessioni'].map((step, i) => (
+              <div key={i} className="flex items-start gap-3 rounded-lg bg-n-bg/50 px-4 py-3">
+                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-[11px] font-bold text-blue-400">{i + 1}</span>
+                <p className="text-sm text-n-text">{step}</p>
+              </div>
+            ))}
+          </div>
+          <Link href="/connections" className="flex items-center justify-center gap-2 rounded-xl bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-400 hover:bg-blue-500/20 min-h-[48px]">
+            Vai a Connessioni
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 stagger">
       {isReal && (
