@@ -6,16 +6,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
       <div className="relative flex-1 overflow-y-auto bg-n-bg">
-        {/* Top bar: hamburger space on mobile + notification bell */}
-        <div className="sticky top-0 z-40 flex items-center justify-end px-4 pt-3 pb-0 md:px-6 md:pt-4 pointer-events-none">
-          {/* Spacer for hamburger on mobile */}
-          <div className="w-12 md:hidden" />
-          <div className="flex-1" />
-          <div className="pointer-events-auto">
-            <NotificationBell />
-          </div>
+        {/* Mobile topbar */}
+        <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-n-border/50 bg-n-bg/95 backdrop-blur px-4 md:justify-end md:border-0 md:h-auto md:pt-4 md:px-6">
+          {/* Hamburger space on mobile */}
+          <div className="w-10 md:hidden" />
+          <span className="text-sm font-bold tracking-tight text-n-text md:hidden">NEXUS PRO</span>
+          <NotificationBell />
         </div>
-        <main className="px-4 pb-6 -mt-4 md:px-6 md:-mt-6">{children}</main>
+        <main className="px-4 pb-6 pt-2 md:px-6 md:pt-0 md:-mt-2">{children}</main>
       </div>
     </div>
   );

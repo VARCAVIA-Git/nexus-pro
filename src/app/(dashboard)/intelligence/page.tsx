@@ -85,8 +85,40 @@ export default function IntelligencePage() {
         </div>
       ) : (
         <>
-          {/* ═══ MARKET OVERVIEW TABLE ═══ */}
-          <div className="rounded-xl border border-n-border bg-n-card">
+          {/* ═══ MARKET OVERVIEW — Mobile Cards ═══ */}
+          <div className="md:hidden space-y-2">
+            {signals.map((s) => (
+              <div key={`m-${s.asset}`} onClick={() => setExpanded(expanded === s.asset ? null : s.asset)} className={`rounded-xl border p-3.5 cursor-pointer transition-all ${s.recommendation.includes('ENTER') ? 'border-green-500/20 bg-green-500/5' : s.recommendation.includes('EXIT') ? 'border-red-500/20 bg-red-500/5' : 'border-n-border bg-n-card'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-bold text-n-text">{s.asset}</span>
+                    <AlignmentArrows alignment={s.components.mtf.alignment} direction={s.direction} />
+                  </div>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${REC_COLORS[s.recommendation] ?? ''}`}>{s.recommendation.replace('_', ' ')}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <ScoreBar score={s.score} />
+                  <span className="font-mono text-[10px] text-n-dim">News: {s.components.news.score > 0 ? '+' : ''}{s.components.news.score}</span>
+                </div>
+                {expanded === s.asset && (
+                  <div className="mt-3 space-y-3 animate-fade-in border-t border-n-border/50 pt-3">
+                    <div className="grid grid-cols-5 gap-1">
+                      {(['15m', '1h', '4h', '1d', '1w'] as const).map((tf) => { const a = s.components.mtf.timeframes[tf]; return (
+                        <div key={tf} className="rounded bg-n-bg/60 p-1.5 text-center">
+                          <p className="text-[8px] font-bold text-n-dim">{tf}</p>
+                          <p className={`font-mono text-[10px] font-bold ${a.trend === 'bullish' ? 'text-green-400' : a.trend === 'bearish' ? 'text-red-400' : 'text-n-dim'}`}>{a.trend === 'bullish' ? '↑' : a.trend === 'bearish' ? '↓' : '→'}</p>
+                        </div>
+                      ); })}
+                    </div>
+                    {s.reasoning.slice(0, 3).map((r, i) => <p key={i} className="text-[10px] text-n-text-s">• {r}</p>)}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          {/* ═══ MARKET OVERVIEW — Desktop Table ═══ */}
+          <div className="hidden md:block rounded-xl border border-n-border bg-n-card">
             <div className="border-b border-n-border px-4 py-3">
               <div className="flex items-center gap-2">
                 <BarChart3 size={14} className="text-n-text-s" />

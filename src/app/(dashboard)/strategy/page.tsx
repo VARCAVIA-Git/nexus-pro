@@ -122,7 +122,7 @@ export default function StrategyPage() {
             {allBots.filter(b => b.status === 'running').length} bot attivi · Equity: {accountEquity > 0 ? fmtDollar(accountEquity) : '—'} · Capitale disponibile: {availableCapital}%
           </p>
         </div>
-        <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-lg bg-n-text px-4 py-2 text-xs font-bold text-n-bg hover:opacity-90 transition-all self-start">
+        <button onClick={() => setShowCreate(true)} className="flex items-center justify-center gap-2 rounded-lg bg-n-text px-4 py-2.5 text-xs font-bold text-n-bg hover:opacity-90 transition-all w-full sm:w-auto min-h-[44px]">
           <Plus size={14} /> Nuovo Bot
         </button>
       </div>

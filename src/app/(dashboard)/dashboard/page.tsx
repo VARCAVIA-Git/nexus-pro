@@ -161,9 +161,9 @@ export default function DashboardPage() {
       {/* Real equity curve from bot trades */}
       {perf && perf.equityCurve.length > 1 && (
         <div className="rounded-xl border border-n-border bg-n-card p-4">
-          <div className="mb-3 flex items-center justify-between">
+          <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="text-xs font-semibold text-n-dim">Equity Curve (trade reali)</h3>
-            <div className="flex gap-2">
+            <div className="flex gap-1.5 flex-wrap">
               {[
                 { label: 'Oggi', value: perf.dailyPnl },
                 { label: '7g', value: perf.weeklyPnl },
@@ -175,7 +175,7 @@ export default function DashboardPage() {
               ))}
             </div>
           </div>
-          <div className="h-[200px]">
+          <div className="h-[160px] md:h-[200px]">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={perf.equityCurve} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
                 <defs><linearGradient id="perfGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={perf.totalPnl >= 0 ? '#22c55e' : '#ef4444'} stopOpacity={0.3} /><stop offset="100%" stopColor={perf.totalPnl >= 0 ? '#22c55e' : '#ef4444'} stopOpacity={0} /></linearGradient></defs>
@@ -203,7 +203,7 @@ export default function DashboardPage() {
           {cryptoPrices.length > 0 && (
             <div className="mb-2">
               <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-n-dim">Crypto</p>
-              <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 {cryptoPrices.map((p) => (
                   <div key={p.symbol} className="rounded-lg bg-n-bg/50 px-3 py-2">
                     <p className="font-mono text-[10px] font-bold text-n-text">{p.symbol.replace('/USD', '')}</p>
@@ -217,7 +217,7 @@ export default function DashboardPage() {
           {stockPrices.length > 0 && (
             <div>
               <p className="mb-1.5 text-[9px] font-bold uppercase tracking-wider text-n-dim">Azioni</p>
-              <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
                 {stockPrices.map((p) => (
                   <div key={p.symbol} className="rounded-lg bg-n-bg/50 px-3 py-2">
                     <p className="font-mono text-[10px] font-bold text-n-text">{p.symbol}</p>
