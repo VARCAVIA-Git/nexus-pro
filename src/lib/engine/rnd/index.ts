@@ -18,3 +18,5 @@ export { FAMOUS_STRATEGIES } from './famous-strategies';
 export type { FamousStrategy } from './famous-strategies';
 export { generateAssetProfile } from './asset-profile';
 export type { AssetProfile } from './asset-profile';
+export { analyzeBehavior } from './behavior-analysis';
+export type { BehaviorAnalysis } from './behavior-analysis';

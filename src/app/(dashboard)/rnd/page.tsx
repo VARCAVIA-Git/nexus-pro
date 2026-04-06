@@ -153,6 +153,48 @@ export default function RnDPage() {
 
           {behavior.bestHours?.length > 0 && <p className="text-xs text-n-green">Migliori ore: {behavior.bestHours.join(', ')} UTC</p>}
           {behavior.worstHours?.length > 0 && <p className="text-xs text-n-red">Evitare: {behavior.worstHours.join(', ')} UTC</p>}
+
+          {/* Summary stats */}
+          {behavior.summary && (
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <div className="rounded-lg bg-n-bg/50 p-2 text-center"><p className="text-[9px] text-n-dim">Trend</p><p className={`font-mono text-xs font-medium ${behavior.summary.overallTrend === 'BULLISH' ? 'text-n-green' : behavior.summary.overallTrend === 'BEARISH' ? 'text-n-red' : 'text-n-dim'}`}>{behavior.summary.overallTrend}</p></div>
+              <div className="rounded-lg bg-n-bg/50 p-2 text-center"><p className="text-[9px] text-n-dim">Avg Return</p><p className="font-mono text-xs text-n-text">{behavior.summary.avgDailyReturn}%</p></div>
+              <div className="rounded-lg bg-n-bg/50 p-2 text-center"><p className="text-[9px] text-n-dim">Best Day</p><p className="font-mono text-xs text-n-green">+{behavior.summary.maxDailyGain}%</p></div>
+              <div className="rounded-lg bg-n-bg/50 p-2 text-center"><p className="text-[9px] text-n-dim">Worst Day</p><p className="font-mono text-xs text-n-red">{behavior.summary.maxDailyLoss}%</p></div>
+            </div>
+          )}
+
+          {/* Reactions */}
+          {behavior.reactions && (
+            <div className="grid grid-cols-2 gap-2">
+              <div className="rounded-lg bg-n-bg/50 p-2"><p className="text-[9px] text-n-dim">After +2% candle</p><p className="text-[10px] text-n-text">Next 4h: {behavior.reactions.afterBigUp2pct?.avgNext4h}% · Cont: {behavior.reactions.afterBigUp2pct?.continuationRate}%</p></div>
+              <div className="rounded-lg bg-n-bg/50 p-2"><p className="text-[9px] text-n-dim">After -2% candle</p><p className="text-[10px] text-n-text">Next 4h: {behavior.reactions.afterBigDown2pct?.avgNext4h}% · Bounce: {behavior.reactions.afterBigDown2pct?.bounceRate}%</p></div>
+            </div>
+          )}
+
+          {/* Key levels */}
+          {behavior.keyLevels?.length > 0 && (
+            <div>
+              <p className="text-[9px] text-n-dim mb-1">Livelli chiave</p>
+              <div className="flex flex-wrap gap-1.5">
+                {behavior.keyLevels.slice(0, 6).map((l: any, i: number) => (
+                  <span key={i} className={`rounded px-2 py-0.5 font-mono text-[10px] ${l.type === 'support' ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`}>
+                    {l.type === 'support' ? 'S' : 'R'} ${l.price.toLocaleString('en-US')} ({l.touches}x)
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Best trading windows */}
+          {behavior.bestTradingWindows?.length > 0 && (
+            <div>
+              <p className="text-[9px] text-n-dim mb-1">Finestre migliori</p>
+              {behavior.bestTradingWindows.slice(0, 3).map((w: any, i: number) => (
+                <p key={i} className="text-[10px] text-n-green">{w.description} — WR {w.winRate}% ({w.sampleSize}n)</p>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

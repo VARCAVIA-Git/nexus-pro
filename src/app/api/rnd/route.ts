@@ -4,6 +4,7 @@ import { computeIndicators } from '@/lib/engine/indicators';
 import { detectPatterns, patternScore } from '@/lib/engine/patterns';
 import { runBacktest } from '@/lib/engine/backtest';
 import { generateAssetProfile } from '@/lib/engine/rnd/asset-profile';
+import { analyzeBehavior as deepBehavior } from '@/lib/engine/rnd/behavior-analysis';
 import { downloadHistory } from '@/lib/engine/rnd/history-loader';
 import { FAMOUS_STRATEGIES } from '@/lib/engine/rnd/famous-strategies';
 import { redisGet, redisSet } from '@/lib/db/redis';
@@ -230,7 +231,7 @@ export async function POST(request: Request) {
       case 'analyze-behavior': {
         const candles = await loadCandles(asset, tf);
         if (!candles.length) return NextResponse.json({ error: 'Nessun dato. Esegui prima il download.' }, { status: 400 });
-        const behavior = analyzeBehavior(candles);
+        const behavior = deepBehavior(candles);
         await redisSet(`nexus:rnd:behavior:${asset}:${tf}`, behavior, 86400);
         return NextResponse.json({ phase: 'behavior', data: behavior });
       }
