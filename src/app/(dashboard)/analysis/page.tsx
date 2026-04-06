@@ -9,9 +9,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-const ASSETS = [
-  { symbol: 'BTC/USD', label: 'BTC' }, { symbol: 'ETH/USD', label: 'ETH' }, { symbol: 'SOL/USD', label: 'SOL' }, { symbol: 'LINK/USD', label: 'LINK' },
-  { symbol: 'AAPL', label: 'AAPL' }, { symbol: 'NVDA', label: 'NVDA' }, { symbol: 'TSLA', label: 'TSLA' }, { symbol: 'AMZN', label: 'AMZN' }, { symbol: 'MSFT', label: 'MSFT' },
+const ALL_ASSETS = [
+  // Crypto
+  { symbol: 'BTC/USD', label: 'BTC', cat: 'crypto' }, { symbol: 'ETH/USD', label: 'ETH', cat: 'crypto' }, { symbol: 'SOL/USD', label: 'SOL', cat: 'crypto' },
+  { symbol: 'LINK/USD', label: 'LINK', cat: 'crypto' }, { symbol: 'AVAX/USD', label: 'AVAX', cat: 'crypto' }, { symbol: 'DOT/USD', label: 'DOT', cat: 'crypto' },
+  // Stocks
+  { symbol: 'AAPL', label: 'AAPL', cat: 'stock' }, { symbol: 'NVDA', label: 'NVDA', cat: 'stock' }, { symbol: 'TSLA', label: 'TSLA', cat: 'stock' },
+  { symbol: 'AMZN', label: 'AMZN', cat: 'stock' }, { symbol: 'MSFT', label: 'MSFT', cat: 'stock' }, { symbol: 'META', label: 'META', cat: 'stock' },
+  { symbol: 'AMD', label: 'AMD', cat: 'stock' }, { symbol: 'NFLX', label: 'NFLX', cat: 'stock' }, { symbol: 'SPY', label: 'SPY', cat: 'stock' }, { symbol: 'QQQ', label: 'QQQ', cat: 'stock' },
 ];
 const TFS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
 const REC_COLORS: Record<string, string> = { STRONG_BUY: 'bg-green-500/20 text-green-400', BUY: 'bg-green-500/10 text-green-400', HOLD: 'bg-n-border text-n-dim', SELL: 'bg-red-500/10 text-red-400', STRONG_SELL: 'bg-red-500/20 text-red-400' };
@@ -19,11 +24,14 @@ const REC_COLORS: Record<string, string> = { STRONG_BUY: 'bg-green-500/20 text-g
 export default function AnalysisPage() {
   const [asset, setAsset] = useState('BTC/USD');
   const [tf, setTf] = useState('1h');
+  const [assetSearch, setAssetSearch] = useState('');
   const [analysis, setAnalysis] = useState<any>(null);
   const [loading, setLoading] = useState(false);
   const [chartLoading, setChartLoading] = useState(true);
   const chartRef = useRef<HTMLDivElement>(null);
   const chartInstance = useRef<any>(null);
+
+  const ASSETS = ALL_ASSETS.filter(a => !assetSearch || a.label.toLowerCase().includes(assetSearch.toLowerCase()) || a.symbol.toLowerCase().includes(assetSearch.toLowerCase()));
 
   // Fetch chart data + indicators on asset/tf change
   const fetchData = useCallback(async () => {
@@ -106,8 +114,9 @@ export default function AnalysisPage() {
       {/* Asset + Timeframe selector */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-2 flex-wrap">
-          {ASSETS.map(a => (
-            <button key={a.symbol} onClick={() => setAsset(a.symbol)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${asset === a.symbol ? 'bg-n-accent-dim text-accent' : 'text-n-dim hover:text-n-text'}`}>
+          <input type="text" value={assetSearch} onChange={e => setAssetSearch(e.target.value)} placeholder="Cerca..." className="rounded-lg border border-n-border bg-n-card px-2.5 py-1.5 text-xs text-n-text w-20 focus:outline-none focus:border-n-accent" />
+          {ASSETS.slice(0, 12).map(a => (
+            <button key={a.symbol} onClick={() => { setAsset(a.symbol); setAssetSearch(''); }} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${asset === a.symbol ? 'bg-n-accent-dim text-accent' : 'text-n-dim hover:text-n-text'}`}>
               {a.label}
             </button>
           ))}

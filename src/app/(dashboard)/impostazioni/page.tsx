@@ -91,13 +91,44 @@ export default function ImpostazioniPage() {
   const [twelveDataKey, setTwelveDataKey] = useState('');
   const [coinGeckoKey, setCoinGeckoKey] = useState('');
 
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [saving, setSaving] = useState(false);
+
   useEffect(() => {
     fetch('/api/broker/status').then(r => r.json()).then(setBrokerStatus).catch(() => {});
     fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => { if (d?.user) { setDisplayName(d.user.name || ''); setEmail(d.user.email || ''); } }).catch(() => {});
+    fetch('/api/settings').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.settings) {
+        if (d.settings.timezone) setTimezone(d.settings.timezone);
+        if (d.settings.emailAlerts !== undefined) setEmailAlerts(d.settings.emailAlerts);
+        if (d.settings.telegramAlerts !== undefined) setTelegramAlerts(d.settings.telegramAlerts);
+        if (d.settings.pushNotifications !== undefined) setPushNotifications(d.settings.pushNotifications);
+      }
+    }).catch(() => {});
   }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: displayName, email, timezone, emailAlerts, telegramAlerts, pushNotifications, tradeNotifications, signalNotifications }),
+      });
+      setToast(res.ok ? { msg: 'Impostazioni salvate', ok: true } : { msg: 'Errore nel salvataggio', ok: false });
+    } catch { setToast({ msg: 'Errore di connessione', ok: false }); }
+    setSaving(false);
+    setTimeout(() => setToast(null), 3000);
+  };
 
   return (
     <div className="space-y-5">
+      {/* Toast */}
+      {toast && (
+        <div className={`fixed top-4 right-4 z-50 rounded-xl px-4 py-3 text-sm font-medium shadow-lg animate-fade-in ${toast.ok ? 'bg-green-500/90 text-white' : 'bg-red-500/90 text-white'}`}>
+          {toast.msg}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold text-n-text">Impostazioni</h1>
@@ -107,8 +138,8 @@ export default function ImpostazioniPage() {
           <button className="flex items-center gap-1.5 rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text transition-colors">
             <RotateCcw size={13} /> Reset
           </button>
-          <button className="flex items-center gap-1.5 rounded-lg bg-n-text px-4 py-1.5 text-xs font-semibold text-n-bg hover:opacity-90 transition-all">
-            <Save size={13} /> Salva
+          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-n-text px-4 py-1.5 text-xs font-semibold text-n-bg hover:opacity-90 transition-all disabled:opacity-50">
+            <Save size={13} /> {saving ? 'Salvataggio...' : 'Salva'}
           </button>
         </div>
       </div>

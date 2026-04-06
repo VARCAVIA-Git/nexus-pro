@@ -13,8 +13,8 @@ module.exports = {
       max_restarts: 10,
     },
     {
-      name: 'nexus-bot',
-      script: 'src/workers/bot-worker.js',
+      name: 'nexus-cron',
+      script: 'src/workers/cron-worker.js',
       restart_delay: 5000,
       max_restarts: 10,
     },
