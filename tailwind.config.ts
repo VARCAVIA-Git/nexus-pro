@@ -26,8 +26,15 @@ const config: Config = {
         },
       },
       fontFamily: {
-        sans: ["Outfit", "system-ui", "sans-serif"],
-        mono: ["IBM Plex Mono", "Fira Code", "monospace"],
+        sans: ["Inter", "Segoe UI", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["Roboto Mono", "SF Mono", "Consolas", "monospace"],
+      },
+      borderRadius: {
+        xl: "12px",
+        "2xl": "16px",
+      },
+      spacing: {
+        "card": "20px",
       },
     },
   },

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -11,17 +11,17 @@
   --bg-card: #181b25;
   --bg-card-hover: #1e222e;
   --bg-input: #0c0e14;
-  --border: #252836;
-  --border-bright: #353849;
+  --border: rgba(255,255,255,0.06);
+  --border-bright: rgba(255,255,255,0.12);
   --accent: #7c85a0;
-  --accent-dim: rgba(124, 133, 160, 0.15);
+  --accent-dim: rgba(124, 133, 160, 0.12);
   --accent-hover: #6b7490;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-dim: #4a5164;
-  --green: #22c55e;
-  --red: #ef4444;
-  --yellow: #eab308;
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
   --blue: #60a5fa;
 }
 
@@ -32,16 +32,16 @@
   --bg-card: #2a1f10;
   --bg-card-hover: #332613;
   --bg-input: #1a1208;
-  --border: #3d2e14;
-  --border-bright: #5c4520;
+  --border: rgba(255,255,255,0.06);
+  --border-bright: rgba(255,255,255,0.12);
   --accent: #f59e0b;
-  --accent-dim: rgba(245, 158, 11, 0.15);
+  --accent-dim: rgba(245, 158, 11, 0.12);
   --accent-hover: #d97706;
   --text-primary: #fef3c7;
   --text-secondary: #d4a054;
   --text-dim: #8b7340;
-  --green: #22c55e;
-  --red: #ef4444;
+  --green: #34d399;
+  --red: #f87171;
   --yellow: #f59e0b;
   --blue: #60a5fa;
 }
@@ -53,17 +53,17 @@
   --bg-card: #111b2e;
   --bg-card-hover: #162237;
   --bg-input: #080e1a;
-  --border: #1e2d45;
-  --border-bright: #2a3f5f;
+  --border: rgba(255,255,255,0.06);
+  --border-bright: rgba(255,255,255,0.12);
   --accent: #3b82f6;
-  --accent-dim: rgba(59, 130, 246, 0.15);
+  --accent-dim: rgba(59, 130, 246, 0.12);
   --accent-hover: #2563eb;
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-dim: #475569;
-  --green: #22c55e;
-  --red: #ef4444;
-  --yellow: #eab308;
+  --green: #34d399;
+  --red: #f87171;
+  --yellow: #fbbf24;
   --blue: #3b82f6;
 }
 
@@ -73,15 +73,22 @@
 }
 
 body {
-  font-family: 'Outfit', system-ui, sans-serif;
+  font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, sans-serif;
   background: var(--bg-primary);
   color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.01em;
 }
 
 code, .font-mono {
-  font-family: 'IBM Plex Mono', 'Fira Code', monospace;
+  font-family: 'Roboto Mono', 'SF Mono', 'Consolas', monospace;
 }
+
+h1 { font-size: 28px; font-weight: 400; letter-spacing: -0.02em; line-height: 1.2; }
+h2 { font-size: 22px; font-weight: 500; letter-spacing: -0.015em; line-height: 1.3; }
+h3 { font-size: 18px; font-weight: 500; letter-spacing: -0.01em; line-height: 1.4; }
 
 /* ── Utility classes ───────────────────────────── */
 @layer utilities {
@@ -93,11 +100,28 @@ code, .font-mono {
   .glow-accent {
     box-shadow: 0 0 20px var(--accent-dim), 0 0 60px rgba(0,0,0,0.3);
   }
+
+  /* Material-style label */
+  .label {
+    font-size: 11px;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-dim);
+  }
+
+  /* Large financial numbers */
+  .text-financial {
+    font-family: 'Roboto Mono', monospace;
+    font-size: 32px;
+    font-weight: 500;
+    letter-spacing: -0.02em;
+  }
 }
 
 /* ── Animations ────────────────────────────────── */
 @keyframes fade-in {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(6px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
@@ -106,23 +130,23 @@ code, .font-mono {
   50% { opacity: 0.3; }
 }
 
-.animate-fade-in { animation: fade-in 0.3s ease-out both; }
+.animate-fade-in { animation: fade-in 0.25s ease-out both; }
 .animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
 
 /* ── Stagger children ──────────────────────────── */
-.stagger > * { animation: fade-in 0.35s ease-out both; }
+.stagger > * { animation: fade-in 0.3s ease-out both; }
 .stagger > *:nth-child(1) { animation-delay: 0ms; }
-.stagger > *:nth-child(2) { animation-delay: 50ms; }
-.stagger > *:nth-child(3) { animation-delay: 100ms; }
-.stagger > *:nth-child(4) { animation-delay: 150ms; }
-.stagger > *:nth-child(5) { animation-delay: 200ms; }
-.stagger > *:nth-child(6) { animation-delay: 250ms; }
-.stagger > *:nth-child(7) { animation-delay: 300ms; }
-.stagger > *:nth-child(8) { animation-delay: 350ms; }
+.stagger > *:nth-child(2) { animation-delay: 40ms; }
+.stagger > *:nth-child(3) { animation-delay: 80ms; }
+.stagger > *:nth-child(4) { animation-delay: 120ms; }
+.stagger > *:nth-child(5) { animation-delay: 160ms; }
+.stagger > *:nth-child(6) { animation-delay: 200ms; }
+.stagger > *:nth-child(7) { animation-delay: 240ms; }
+.stagger > *:nth-child(8) { animation-delay: 280ms; }
 
 /* ── Recharts overrides ────────────────────────── */
 .recharts-cartesian-grid-horizontal line,
 .recharts-cartesian-grid-vertical line {
   stroke: var(--border) !important;
 }
-.recharts-text { fill: var(--text-dim) !important; font-size: 11px; }
+.recharts-text { fill: var(--text-dim) !important; font-size: 11px; font-family: 'Roboto Mono', monospace; }
