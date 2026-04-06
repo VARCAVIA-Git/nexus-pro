@@ -10,3 +10,9 @@ export { runStrategyLab } from './strategy-lab';
 export type { LabReport, LabExperiment } from './strategy-lab';
 export { buildAssetKnowledge, getKnowledgeBase, saveKnowledgeBase } from './knowledge-base';
 export type { KnowledgeEntry } from './knowledge-base';
+// New: History loader + trainer + famous strategies
+export { downloadHistory, downloadCryptoHistory, downloadStockHistory, TRAINABLE_ASSETS, TRAINABLE_TFS } from './history-loader';
+export { trainStrategy, runFullTraining } from './strategy-trainer';
+export type { TrainingResult, TrainingReport } from './strategy-trainer';
+export { FAMOUS_STRATEGIES } from './famous-strategies';
+export type { FamousStrategy } from './famous-strategies';
