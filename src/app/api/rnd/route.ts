@@ -5,9 +5,10 @@ import {
   buildAssetKnowledge, saveKnowledgeBase, getKnowledgeBase,
   downloadHistory, TRAINABLE_ASSETS, TRAINABLE_TFS,
   trainStrategy, runFullTraining, FAMOUS_STRATEGIES,
+  generateAssetProfile,
 } from '@/lib/engine/rnd';
 import type { StrategyKey } from '@/types';
-import { redisGet, KEYS } from '@/lib/db/redis';
+import { redisGet, redisSet, KEYS } from '@/lib/db/redis';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 55;
@@ -122,6 +123,16 @@ export async function POST(request: Request) {
     if (candles.length < 100) return NextResponse.json({ error: 'Insufficient data' }, { status: 400 });
     const result = strat.test(candles);
     return NextResponse.json({ ok: true, strategy: strat.name, asset, ...result });
+  }
+
+  if (action === 'generate-profile') {
+    const asset = body.asset; const tf = body.timeframe ?? '1h';
+    if (!asset) return NextResponse.json({ error: 'Asset required' }, { status: 400 });
+    const { candles } = await downloadHistory(asset, tf);
+    if (candles.length < 20) return NextResponse.json({ error: 'Insufficient data' }, { status: 400 });
+    const profile = generateAssetProfile(candles, asset, tf);
+    await redisSet(`nexus:rnd:profile:${asset}:${tf}`, profile, 86400);
+    return NextResponse.json({ ok: true, profile });
   }
 
   return NextResponse.json({ error: 'Unknown action' }, { status: 400 });

@@ -298,12 +298,30 @@ export async function GET(request: Request) {
             continue;
           }
 
-          // Entry with pre-trade checks
+          // Asset profile check (avoid hours / best hours boost)
+          let profileBoost = 0;
+          try {
+            const profile = await redisGet<any>(`nexus:rnd:profile:${symbol}:1d`);
+            if (profile) {
+              const currentHour = new Date().getUTCHours();
+              if (profile.avoidHours?.includes(currentHour)) {
+                console.log(`[TICK][${config.name}] ${symbol}: hour ${currentHour} UTC in avoidHours — skipping`);
+                logEntry.reason = `profile:avoid_hour_${currentHour}`;
+                state.signalLog.push(logEntry); continue;
+              }
+              if (profile.bestHours?.includes(currentHour)) {
+                profileBoost = 5;
+                console.log(`[TICK][${config.name}] ${symbol}: hour ${currentHour} UTC is best hour — +5 boost`);
+              }
+            }
+          } catch {}
+
           // Mode-based confidence threshold
           const confThreshold = mode === 'scalp' ? 0.55 : mode === 'intraday' ? 0.60 : 0.65;
-          console.log(`[CRON] Bot "${config.name}": ${symbol} score=${(bestSignal.confidence*100).toFixed(0)}% signal=${bestSignal.signal} threshold=${(confThreshold*100).toFixed(0)}%`);
+          const adjustedConf = bestSignal.confidence + (profileBoost / 100);
+          console.log(`[CRON] Bot "${config.name}": ${symbol} score=${(adjustedConf*100).toFixed(0)}% signal=${bestSignal.signal} threshold=${(confThreshold*100).toFixed(0)}%`);
 
-          if (bestSignal.signal !== 'NEUTRAL' && bestSignal.confidence >= confThreshold) {
+          if (bestSignal.signal !== 'NEUTRAL' && adjustedConf >= confThreshold) {
             const side: Side = bestSignal.signal === 'BUY' ? 'LONG' : 'SHORT';
             const atr = indicators.atr[lastIdx] || price * 0.02;
 

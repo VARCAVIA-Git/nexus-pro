@@ -16,3 +16,5 @@ export { trainStrategy, runFullTraining } from './strategy-trainer';
 export type { TrainingResult, TrainingReport } from './strategy-trainer';
 export { FAMOUS_STRATEGIES } from './famous-strategies';
 export type { FamousStrategy } from './famous-strategies';
+export { generateAssetProfile } from './asset-profile';
+export type { AssetProfile } from './asset-profile';
