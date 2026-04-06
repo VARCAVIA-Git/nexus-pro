@@ -138,11 +138,13 @@ export default function RnDPage() {
           {/* Hourly heatmap — only for intraday timeframes */}
           {(tf === '15m' || tf === '1h' || tf === '4h') && beh?.hourly && (
             <div>
-              <p className="text-[9px] text-n-dim mb-1.5 flex items-center gap-1"><Clock size={10} /> Win Rate per ora UTC</p>
-              <div className="grid grid-cols-12 gap-0.5 sm:grid-cols-24">
+              <p className="text-xs text-n-dim mb-2 flex items-center gap-1"><Clock size={11} /> Win Rate per ora UTC</p>
+              <div className="grid grid-cols-6 gap-1 sm:grid-cols-12">
                 {(beh.hourly ?? []).map((h: any) => (
-                  <div key={h.hour} title={`${h.hour}:00 UTC — WR ${h.winRate}% (${h.sampleSize}n) avg ${h.avgReturn}%`} className={`rounded text-[7px] sm:text-[8px] font-mono flex items-center justify-center aspect-square ${hrColor(h.winRate)}`}>
-                    {h.hour}
+                  <div key={h.hour} title={`${h.hour}:00 UTC — WR ${h.winRate}% (${h.sampleSize} candele) avg ${h.avgReturn}%`} className={`rounded p-1.5 text-center ${hrColor(h.winRate)}`}>
+                    <p className="text-[9px] opacity-80">{h.hour}h</p>
+                    <p className="text-xs font-bold font-mono">{h.winRate}%</p>
+                    <p className="text-[8px] opacity-60">{h.sampleSize}x</p>
                   </div>
                 ))}
               </div>
@@ -154,15 +156,21 @@ export default function RnDPage() {
             </div>
           )}
 
-          {/* Daily */}
-          <div className="flex gap-1.5 flex-wrap">
-            {(beh.daily ?? []).map((d: any) => (
-              <div key={d.day} className="rounded-lg bg-n-bg/50 px-3 py-1.5 text-center min-w-[52px]">
-                <p className="text-[8px] text-n-dim">{d.dayName ?? DAYS[d.day]}</p>
-                <p className={`font-mono text-[11px] font-medium ${d.winRate > 55 ? 'text-n-green' : d.winRate < 45 ? 'text-n-red' : 'text-n-text'}`}>{d.winRate}%</p>
+          {/* Daily WR */}
+          {beh?.daily && (
+            <div>
+              <p className="text-xs text-n-dim mb-2">Win Rate per giorno</p>
+              <div className="grid grid-cols-7 gap-1">
+                {(beh.daily ?? []).map((d: any) => (
+                  <div key={d.day} className={`rounded p-2 text-center ${d.winRate > 55 ? 'bg-green-500/20 text-n-green' : d.winRate < 45 ? 'bg-red-500/20 text-n-red' : 'bg-n-bg/50 text-n-text'}`}>
+                    <p className="text-[9px] opacity-80">{d.dayName ?? DAYS[d.day]}</p>
+                    <p className="text-sm font-bold font-mono">{d.winRate}%</p>
+                    <p className="text-[8px] opacity-60">{d.sampleSize}x</p>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          )}
 
           {/* Reactions */}
           {beh.reactions && (
@@ -186,11 +194,27 @@ export default function RnDPage() {
             </div>
           )}
 
-          {/* Best/worst windows */}
+          {/* Best/worst trading windows */}
           {beh.bestTradingWindows?.length > 0 && (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <div><p className="text-[9px] text-n-green mb-1">Finestre migliori</p>{beh.bestTradingWindows.slice(0, 3).map((w: any, i: number) => <p key={i} className="text-[10px] text-n-text">{w.description} — WR {w.winRate}%</p>)}</div>
-              {beh.worstTradingWindows?.length > 0 && <div><p className="text-[9px] text-n-red mb-1">Da evitare</p>{beh.worstTradingWindows.slice(0, 3).map((w: any, i: number) => <p key={i} className="text-[10px] text-n-dim">{w.description} — WR {w.winRate}%</p>)}</div>}
+            <div>
+              <p className="text-xs text-n-green font-medium mb-2">Migliori finestre di trading</p>
+              {beh.bestTradingWindows.slice(0, 5).map((w: any, i: number) => (
+                <div key={i} className="flex justify-between py-1 border-b border-n-border/20 text-[11px]">
+                  <span className="text-n-text">{w.description}</span>
+                  <span className="font-mono text-n-green">{w.winRate}% WR ({w.sampleSize}x)</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {beh.worstTradingWindows?.length > 0 && (
+            <div>
+              <p className="text-xs text-n-red font-medium mb-2">Finestre da evitare</p>
+              {beh.worstTradingWindows.slice(0, 3).map((w: any, i: number) => (
+                <div key={i} className="flex justify-between py-1 border-b border-n-border/20 text-[11px]">
+                  <span className="text-n-text">{w.description}</span>
+                  <span className="font-mono text-n-red">{w.winRate}% WR ({w.sampleSize}x)</span>
+                </div>
+              ))}
             </div>
           )}
         </div>

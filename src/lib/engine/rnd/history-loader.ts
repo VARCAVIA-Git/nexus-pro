@@ -29,16 +29,19 @@ function getAlpacaHeaders(): Record<string, string> {
 
 async function downloadFromAlpaca(asset: string, tf: string, months = 3): Promise<OHLCV[]> {
   const headers = getAlpacaHeaders();
-  if (!headers['APCA-API-KEY-ID']) return [];
+  if (!headers['APCA-API-KEY-ID']) { console.log('[HISTORY] Alpaca: no API key'); return []; }
 
   const alpacaTF = TF_ALPACA[tf]; if (!alpacaTF) return [];
   const crypto = isCrypto(asset);
   const end = new Date();
   const start = new Date(end.getTime() - months * 30 * 86400000);
 
+  console.log(`[HISTORY] Alpaca request: ${asset} ${tf} months=${months} ${start.toISOString().slice(0,10)} → ${end.toISOString().slice(0,10)}`);
+
   const allCandles: OHLCV[] = [];
   let pageToken: string | null = null;
   let pages = 0;
+  const MAX_PAGES = 30; // raised from 10 — needed for high-resolution timeframes over 6mo
 
   do {
     const params = new URLSearchParams({
@@ -69,7 +72,8 @@ async function downloadFromAlpaca(asset: string, tf: string, months = 3): Promis
 
       pageToken = data.next_page_token ?? null;
       pages++;
-      if (pages > 10) break; // safety: max 10 pages
+      console.log(`[HISTORY] Alpaca page ${pages}: +${bars.length} bars (total=${allCandles.length}) ${pageToken ? 'next_token=yes' : 'done'}`);
+      if (pages >= MAX_PAGES) { console.log(`[HISTORY] Max pages (${MAX_PAGES}) reached`); break; }
       if (pageToken) await new Promise(r => setTimeout(r, 200));
     } catch (err: any) {
       console.log(`[HISTORY] Alpaca error ${asset}: ${err.message}`);
@@ -77,8 +81,14 @@ async function downloadFromAlpaca(asset: string, tf: string, months = 3): Promis
     }
   } while (pageToken);
 
-  console.log(`[HISTORY] Alpaca ${asset} ${tf}: ${allCandles.length} candles (${pages} pages)`);
-  return allCandles.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  const sorted = allCandles.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  if (sorted.length > 0) {
+    const first = new Date(sorted[0].date).toISOString().slice(0, 10);
+    const last = new Date(sorted[sorted.length - 1].date).toISOString().slice(0, 10);
+    const spanDays = (new Date(sorted[sorted.length - 1].date).getTime() - new Date(sorted[0].date).getTime()) / 86400000;
+    console.log(`[HISTORY] Alpaca ${asset} ${tf}: ${sorted.length} candles, ${first} → ${last} (${spanDays.toFixed(0)} days)`);
+  }
+  return sorted;
 }
 
 // ── CoinGecko fallback (crypto, no volume) ────────────────
@@ -143,7 +153,18 @@ export async function downloadHistory(asset: string, tf: string, months = 6): Pr
 
   try {
     const cached = await redisGet<OHLCV[]>(cacheKey);
-    if (cached && cached.length > 50) return { candles: cached, source: 'cache' };
+    if (cached && cached.length > 50) {
+      // Validate cache covers at least 80% of requested period
+      const firstMs = new Date(cached[0].date).getTime();
+      const lastMs = new Date(cached[cached.length - 1].date).getTime();
+      const spanMonths = (lastMs - firstMs) / (30 * 86400000);
+      const requiredSpan = months * 0.8;
+      if (spanMonths >= requiredSpan) {
+        console.log(`[HISTORY] Cache HIT ${asset} ${tf}: ${cached.length} candles, ${spanMonths.toFixed(1)}mo (need ${months}mo)`);
+        return { candles: cached, source: 'cache' };
+      }
+      console.log(`[HISTORY] Cache STALE ${asset} ${tf}: covers ${spanMonths.toFixed(1)}mo, need ${months}mo — re-downloading`);
+    }
   } catch {}
 
   const crypto = isCrypto(asset);

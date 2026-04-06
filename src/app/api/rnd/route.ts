@@ -259,8 +259,14 @@ function testStrategies(candles: OHLCV[], asset: string) {
 }
 
 function generateReport(asset: string, tf: string, behavior: any, indicators: any[], patterns: any[], strategies: any[]) {
-  const recommended = strategies.filter((s: any) => s.grade === 'A' || s.grade === 'B').slice(0, 3);
-  const avoid = strategies.filter((s: any) => s.grade === 'D' || s.grade === 'F');
+  // Recommended: top 3 BY RETURN that are positive (any grade)
+  // Avoid: only those that LOSE money (negative return)
+  const sortedByReturn = [...strategies].sort((a: any, b: any) => (b.totalReturn ?? 0) - (a.totalReturn ?? 0));
+  const recommended = sortedByReturn.filter((s: any) => (s.totalReturn ?? 0) > 0).slice(0, 3);
+  const avoid = sortedByReturn.filter((s: any) => (s.totalReturn ?? 0) < 0).map((s: any) => ({
+    ...s,
+    reason: `Perde ${Math.abs(s.totalReturn).toFixed(2)}% — ${s.recommendation ?? 'NEVER'}`,
+  }));
   const topIndicators = indicators.filter((i: any) => i.accuracy > 55).slice(0, 5);
   const topPatterns = patterns.filter((p: any) => p.winRate > 55 && p.occurrences >= 3).slice(0, 5);
 
@@ -275,14 +281,17 @@ function generateReport(asset: string, tf: string, behavior: any, indicators: an
   confidence = Math.max(20, Math.min(90, confidence));
 
   let keyInsight = '';
-  if (strategies[0] && topIndicators[0]) {
-    keyInsight = `Migliore strategia: ${strategies[0].name} (${strategies[0].totalReturn}% return, ${strategies[0].winRate}% WR). Indicatore più affidabile: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}% accuracy).`;
-  } else if (strategies[0]) {
-    keyInsight = `Migliore strategia: ${strategies[0].name} con ${strategies[0].totalReturn}% return.`;
-  } else if (topIndicators[0]) {
-    keyInsight = `Nessuna strategia testata. Indicatore più affidabile: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}%).`;
-  } else {
-    keyInsight = 'Analisi incompleta — eseguire tutte le fasi per un rapporto completo.';
+  const top = recommended[0];
+  if (recommended.length === 0) {
+    keyInsight = 'Nessuna strategia profittevole trovata su questo asset/timeframe/periodo. Provare un timeframe diverso o un periodo più lungo.';
+  } else if (top && (top.grade === 'A' || top.grade === 'B')) {
+    keyInsight = `Strategia consigliata: ${top.name} (+${top.totalReturn}% return, ${top.winRate}% WR, Sharpe ${top.sharpe ?? top.sharpeRatio}). Grade ${top.grade}.`;
+    if (topIndicators[0]) keyInsight += ` Indicatore più affidabile: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}% accuracy).`;
+  } else if (top && top.grade === 'C') {
+    keyInsight = `Migliore strategia: ${top.name} (+${top.totalReturn}% return, ${top.winRate}% WR). Profittabile ma marginale — monitorare con attenzione.`;
+  } else if (top) {
+    // Grade D — positive but weak
+    keyInsight = `Migliore strategia: ${top.name} (+${top.totalReturn}% return), ma con rendimento marginale. Considerare un timeframe diverso o un periodo più lungo per risultati migliori.`;
   }
 
   // Trading schedule from behavior
@@ -350,13 +359,16 @@ export async function POST(request: Request) {
     switch (action) {
       case 'download': {
         const months = parseInt(body.period ?? '6');
+        console.log(`[RND] Download ${asset} ${tf} months=${months}`);
         const { candles, source } = await downloadHistory(asset, tf, months);
         if (candles.length < 50) return NextResponse.json({ error: `Solo ${candles.length} candele. Servono almeno 50.` }, { status: 400 });
         const compressed = candles.map(c => [new Date(c.date).getTime(), c.open, c.high, c.low, c.close, c.volume]);
         await redisSet(`nexus:rnd:candles:${asset}:${tf}`, compressed, 604800);
         const from = candles[0].date.slice(0, 10);
         const to = candles[candles.length - 1].date.slice(0, 10);
-        return NextResponse.json({ phase: 'download', candles: candles.length, source, from, to, volumeReal: candles.some(c => c.volume > 0) });
+        const spanDays = Math.round((new Date(candles[candles.length - 1].date).getTime() - new Date(candles[0].date).getTime()) / 86400000);
+        console.log(`[RND] Download done: ${candles.length} candles, ${from} → ${to} (${spanDays} days, requested ${months}mo)`);
+        return NextResponse.json({ phase: 'download', candles: candles.length, source, from, to, spanDays, requestedMonths: months, volumeReal: candles.some(c => c.volume > 0) });
       }
 
       case 'analyze-behavior': {
