@@ -243,7 +243,7 @@ export default function RnDPage() {
                   <td className="py-1.5 text-right font-mono text-n-dim">{r.signals}</td>
                   <td className={`py-1.5 text-right font-mono font-medium ${r.accuracy > 60 ? 'text-n-green' : r.accuracy < 45 ? 'text-n-red' : 'text-n-text'}`}>{r.accuracy}%</td>
                   <td className={`py-1.5 text-right font-mono ${r.avgReturn > 0 ? 'text-n-green' : 'text-n-red'}`}>{r.avgReturn > 0 ? '+' : ''}{r.avgReturn}%</td>
-                  <td className="py-1.5 text-right">{r.accuracy > 60 ? <span className="text-n-green">HIGH</span> : r.accuracy > 50 ? <span className="text-n-text">MED</span> : <span className="text-n-red">LOW</span>}</td>
+                  <td className="py-1.5 text-right">{r.accuracy >= 65 && r.avgReturn > 0.05 ? <span className="text-n-green">HIGH</span> : r.accuracy >= 55 && r.avgReturn > 0 ? <span className="text-n-text">MED</span> : <span className="text-n-red">LOW</span>}</td>
                 </tr>
               ))}</tbody>
             </table>

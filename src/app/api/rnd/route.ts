@@ -89,38 +89,45 @@ function analyzeIndicators(candles: OHLCV[], tf: string) {
         if (!check(i)) continue;
         signals++;
 
-        // Adaptive target = 0.5 × ATR (not fixed)
+        // Target scales with sqrt(lookAhead) — random walk volatility model
+        // For BTC 1h, lookAhead=24, ATR=1.5% → target ~2.1% (above typical noise)
         const atr = ind.atr[i] ?? 0;
-        const targetPct = atr > 0 ? Math.max(0.003, (atr * 0.5) / candles[i].close) : 0.005;
+        const atrPct = atr > 0 ? atr / candles[i].close : 0.01;
+        const targetPct = Math.max(0.008, atrPct * Math.sqrt(lookAhead / 12));
 
-        // Look ahead for best/worst PnL in the direction
-        let bestPnl = 0, worstPnl = 0;
-        for (let j = 1; j <= lookAhead && i + j < candles.length; j++) {
-          const fwd = candles[i + j].close;
-          const pnl = dir === 'BUY' ? (fwd - candles[i].close) / candles[i].close : (candles[i].close - fwd) / candles[i].close;
-          if (pnl > bestPnl) bestPnl = pnl;
-          if (pnl < worstPnl) worstPnl = pnl;
-        }
-
-        // Final return at end of lookAhead window
+        // Final return at end of lookAhead window — this is what actually matters
         const futureClose = candles[Math.min(i + lookAhead, candles.length - 1)].close;
         const finalRet = dir === 'BUY' ? (futureClose - candles[i].close) / candles[i].close : (candles[i].close - futureClose) / candles[i].close;
         totalRet += finalRet;
 
-        if (bestPnl >= targetPct) wins++;
-        else if (worstPnl <= -targetPct) losses++;
+        // Win = the FINAL return exceeded target in the correct direction
+        // Loss = the FINAL return was negative beyond target
+        // This eliminates "noise wins" where price briefly hit target then reversed
+        if (finalRet >= targetPct) wins++;
+        else if (finalRet <= -targetPct) losses++;
       } catch {}
     }
-    if (signals >= 3) {
+    if (signals >= 5) {
+      const accuracy = wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 50;
+      const avgReturn = Math.round((totalRet / signals) * 10000) / 100;
       results.push({
         name, condition: cond, signals, wins, losses,
-        accuracy: wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 50,
-        avgReturn: Math.round((totalRet / signals) * 10000) / 100,
+        accuracy,
+        avgReturn,
       });
     }
   }
 
-  return results.sort((a, b) => b.accuracy - a.accuracy);
+  // Filter: keep indicators with positive expectancy
+  // (accuracy ≥ 50 AND positive avg return) OR clear edge (accuracy ≥ 60)
+  return results
+    .filter(r => (r.accuracy >= 50 && r.avgReturn > 0) || r.accuracy >= 60)
+    .sort((a, b) => {
+      // Score = accuracy + avgReturn × 100 (rewards both metrics)
+      const scoreA = a.accuracy + a.avgReturn * 100;
+      const scoreB = b.accuracy + b.avgReturn * 100;
+      return scoreB - scoreA;
+    });
 }
 
 function analyzePatterns(candles: OHLCV[]) {
