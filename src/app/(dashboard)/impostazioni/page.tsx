@@ -3,8 +3,9 @@
 import { useState, useEffect } from 'react';
 import {
   Shield, DollarSign, Gauge, Bell, Key,
-  Save, RotateCcw, User, Globe, AlertTriangle,
+  Save, RotateCcw, User, Globe, AlertTriangle, LogOut,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 function Section({ title, icon: Icon, children }: { title: string; icon: React.ElementType; children: React.ReactNode }) {
   return (
@@ -56,9 +57,16 @@ function InputField({ label, value, onChange, type = 'text', placeholder }: {
 }
 
 export default function ImpostazioniPage() {
+  const router = useRouter();
+
+  const handleLogout = async () => {
+    await fetch('/api/auth/logout', { method: 'POST' });
+    router.push('/login');
+  };
+
   // Profile
-  const [displayName, setDisplayName] = useState('Trader');
-  const [email, setEmail] = useState('trader@nexuspro.io');
+  const [displayName, setDisplayName] = useState('');
+  const [email, setEmail] = useState('');
   const [timezone, setTimezone] = useState('Europe/Rome');
 
   // Notifications
@@ -85,6 +93,7 @@ export default function ImpostazioniPage() {
 
   useEffect(() => {
     fetch('/api/broker/status').then(r => r.json()).then(setBrokerStatus).catch(() => {});
+    fetch('/api/auth/me').then(r => r.ok ? r.json() : null).then(d => { if (d?.user) { setDisplayName(d.user.name || ''); setEmail(d.user.email || ''); } }).catch(() => {});
   }, []);
 
   return (
@@ -229,6 +238,15 @@ export default function ImpostazioniPage() {
             </div>
           </div>
         </Section>
+      </div>
+
+      {/* Account section */}
+      <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-5 space-y-3">
+        <h3 className="text-sm font-medium text-n-text">Account</h3>
+        <p className="text-xs text-n-dim">{email || 'Non autenticato'}</p>
+        <button onClick={handleLogout} className="flex items-center gap-2 rounded-xl bg-red-500/10 px-4 py-2.5 text-sm font-medium text-red-400 hover:bg-red-500/20 transition-all min-h-[44px]">
+          <LogOut size={14} /> Logout
+        </button>
       </div>
     </div>
   );

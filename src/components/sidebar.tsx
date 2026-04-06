@@ -7,8 +7,9 @@ import { useModeStore } from '@/stores/mode-store';
 import {
   LayoutDashboard, Briefcase, ArrowLeftRight, Zap,
   Bot, Brain, FlaskConical, Microscope, Activity,
-  Settings, Plug, Menu, X, Rocket, ArrowRightLeft,
+  Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut,
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 const MAIN_NAV = [
@@ -44,6 +45,7 @@ function NavLink({ href, label, icon: Icon, pathname, onClick }: {
 }
 
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
+  const router = useRouter();
   const { mode, toggle } = useModeStore();
   const isDemo = mode === 'demo';
 
@@ -101,6 +103,9 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           <span className="text-[10px] text-n-dim">Engine</span>
           <span className={clsx('font-mono text-[10px] font-medium', botRunning ? 'text-n-green' : 'text-n-dim')}>{botRunning ? 'active' : 'idle'}</span>
         </div>
+        <button onClick={async () => { await fetch('/api/auth/logout', { method: 'POST' }); router.push('/login'); onNavigate?.(); }} className="flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2 text-xs text-n-dim hover:text-n-red hover:bg-red-500/10 transition-all min-h-[40px]">
+          <LogOut size={13} /> Logout
+        </button>
       </div>
     </aside>
   );
