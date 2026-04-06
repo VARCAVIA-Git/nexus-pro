@@ -29,9 +29,12 @@ export function evaluateEntryTiming(candles: OHLCV[], currentPrice: number, sign
     return { shouldEnterNow: false, reason: `Price at ${(pricePos * 100).toFixed(0)}% of candle — wait bounce`, suggestedAction: 'WAIT_PULLBACK' };
   }
 
-  // 2. Volume check
-  const avgVol = candles.slice(-20).reduce((s, c) => s + c.volume, 0) / 20;
-  if (avgVol > 0 && last.volume < avgVol * 0.7) {
+  // 2. Volume check — only if volume looks real (varies significantly, not synthetic)
+  const vols = candles.slice(-20).map(c => c.volume);
+  const avgVol = vols.reduce((s, v) => s + v, 0) / 20;
+  const volStdDev = Math.sqrt(vols.reduce((s, v) => s + (v - avgVol) ** 2, 0) / 20);
+  const volumeLooksReal = avgVol > 0 && volStdDev / avgVol > 0.1; // Real volume has >10% coefficient of variation
+  if (volumeLooksReal && last.volume < avgVol * 0.7) {
     return { shouldEnterNow: false, reason: 'Volume below 70% average', suggestedAction: 'WAIT_VOLUME' };
   }
 

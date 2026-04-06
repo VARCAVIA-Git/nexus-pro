@@ -18,7 +18,9 @@ import { managePosition } from '@/lib/engine/position-manager';
 export const dynamic = 'force-dynamic';
 export const maxDuration = 55; // Vercel Pro allows up to 60s
 
-// ── Data Fetching ─────────────────────────────────────────
+// ── Data Fetching — Alpaca primary, CoinGecko/TwelveData fallback ───
+
+import { fetchAlpacaBars } from '@/lib/data/providers/alpaca-data';
 
 const TD_URL = 'https://api.twelvedata.com';
 const CG_URL = 'https://api.coingecko.com/api/v3';
@@ -26,13 +28,33 @@ const COIN_MAP: Record<string, string> = { 'BTC/USD': 'bitcoin', 'ETH/USD': 'eth
 
 function isCrypto(s: string) { return s.includes('/'); }
 
-async function fetchCandles(symbol: string): Promise<OHLCV[]> {
-  if (isCrypto(symbol)) {
-    const id = COIN_MAP[symbol]; if (!id) return [];
-    try { const r = await fetch(`${CG_URL}/coins/${id}/ohlc?vs_currency=usd&days=250`); if (!r.ok) return []; const d: number[][] = await r.json(); return d.map(x => ({ date: new Date(x[0]).toISOString().slice(0, 10), open: x[1], high: x[2], low: x[3], close: x[4], volume: Math.round(1e6 * (0.5 + Math.random() * 0.8)) })); } catch { return []; }
+async function fetchCandles(symbol: string): Promise<{ candles: OHLCV[]; volumeReliable: boolean }> {
+  // Try Alpaca Data API first (has real volume for everything)
+  const alpaca = await fetchAlpacaBars(symbol, '1d', 200);
+  if (alpaca.length >= 20) {
+    return { candles: alpaca, volumeReliable: true };
   }
-  const k = process.env.TWELVE_DATA_API_KEY; if (!k) return [];
-  try { const r = await fetch(`${TD_URL}/time_series?symbol=${symbol}&interval=1day&outputsize=250&apikey=${k}`); if (!r.ok) return []; const d = await r.json(); if (d.status === 'error' || !d.values) return []; return d.values.reverse().map((v: any) => ({ date: v.datetime.slice(0, 10), open: +v.open, high: +v.high, low: +v.low, close: +v.close, volume: parseInt(v.volume) || 0 })); } catch { return []; }
+
+  // Fallback
+  if (isCrypto(symbol)) {
+    const id = COIN_MAP[symbol]; if (!id) return { candles: [], volumeReliable: false };
+    try {
+      const r = await fetch(`${CG_URL}/coins/${id}/ohlc?vs_currency=usd&days=14`);
+      if (!r.ok) return { candles: [], volumeReliable: false };
+      const d: number[][] = await r.json();
+      const candles = d.map(x => ({ date: new Date(x[0]).toISOString().slice(0, 10), open: x[1], high: x[2], low: x[3], close: x[4], volume: 0 }));
+      return { candles, volumeReliable: false };
+    } catch { return { candles: [], volumeReliable: false }; }
+  }
+
+  const k = process.env.TWELVE_DATA_API_KEY; if (!k) return { candles: [], volumeReliable: false };
+  try {
+    const r = await fetch(`${TD_URL}/time_series?symbol=${symbol}&interval=1day&outputsize=200&apikey=${k}`);
+    if (!r.ok) return { candles: [], volumeReliable: false };
+    const d = await r.json(); if (d.status === 'error' || !d.values) return { candles: [], volumeReliable: false };
+    const candles = d.values.reverse().map((v: any) => ({ date: v.datetime.slice(0, 10), open: +v.open, high: +v.high, low: +v.low, close: +v.close, volume: parseInt(v.volume) || 0 }));
+    return { candles, volumeReliable: true };
+  } catch { return { candles: [], volumeReliable: false }; }
 }
 
 // ── Redis State Keys ──────────────────────────────────────
@@ -166,10 +188,13 @@ export async function GET(request: Request) {
 
         try {
           console.log(`[TICK][${config.name}] Fetching ${symbol}...`);
-          const candles = await fetchCandles(symbol);
-          console.log(`[TICK][${config.name}] ${symbol}: ${candles.length} candles, price=$${candles[candles.length-1]?.close?.toFixed(2) ?? '?'}`);
-          if (candles.length < 60) { console.log(`[TICK][${config.name}] ${symbol}: SKIP — insufficient data`); continue; }
-          if (candles.every(c => c.volume === 0)) candles.forEach((c, i) => { c.volume = Math.round(1e6 * (0.5 + Math.sin(i / 10) * 0.3 + Math.random() * 0.4)); });
+          const { candles, volumeReliable } = await fetchCandles(symbol);
+          console.log(`[TICK][${config.name}] ${symbol}: ${candles.length} candles, vol=${volumeReliable ? 'REAL' : 'NO'}, price=$${candles[candles.length-1]?.close?.toFixed(2) ?? '?'}`);
+          if (candles.length < 20) { console.log(`[TICK][${config.name}] ${symbol}: SKIP — insufficient data (${candles.length})`); continue; }
+          // Only inject synthetic volume if no volume at all AND not reliable
+          if (!volumeReliable && candles.every(c => c.volume === 0)) {
+            candles.forEach((c, i) => { c.volume = Math.round(1e6 * (0.8 + Math.sin(i / 10) * 0.3)); });
+          }
 
           const indicators = computeIndicators(candles);
           const lastIdx = candles.length - 1;

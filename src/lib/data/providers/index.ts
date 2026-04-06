@@ -1,27 +1,32 @@
 // ═══════════════════════════════════════════════════════════════
 // MARKET DATA PROVIDERS
-// - Twelve Data: stocks (AAPL, NVDA, TSLA, etc.)
-// - CoinGecko: crypto (BTC/USD, ETH/USD, etc.)
-// - Alpaca Data API: fallback for both (via broker)
+// Priority: Alpaca Data API (real volume) → CoinGecko/TwelveData fallback
 // ═══════════════════════════════════════════════════════════════
 
 export { TwelveDataProvider } from './twelve-data';
 export type { TwelveDataConfig } from './twelve-data';
 export { CoinGeckoProvider } from './coingecko';
 export type { CoinGeckoConfig } from './coingecko';
+export { fetchAlpacaBars, fetchAlpacaCryptoBars, fetchAlpacaStockBars } from './alpaca-data';
 
 import type { OHLCV, Timeframe } from '@/types';
+import { fetchAlpacaBars } from './alpaca-data';
 import { TwelveDataProvider } from './twelve-data';
 import { CoinGeckoProvider } from './coingecko';
 
-/** Check if a symbol is crypto */
 function isCrypto(symbol: string): boolean {
   return symbol.includes('/');
 }
 
+export interface CandleResult {
+  candles: OHLCV[];
+  volumeReliable: boolean;
+  source: 'alpaca' | 'coingecko' | 'twelvedata';
+}
+
 /**
  * Unified market data fetcher.
- * Routes crypto to CoinGecko, stocks to Twelve Data.
+ * Priority: Alpaca (real volume) → CoinGecko/TwelveData (fallback)
  */
 export class MarketDataRouter {
   private twelveData: TwelveDataProvider;
@@ -32,19 +37,34 @@ export class MarketDataRouter {
     this.coinGecko = new CoinGeckoProvider();
   }
 
-  /** Get OHLCV candles — auto-routes based on symbol type */
-  async getCandles(symbol: string, timeframe: Timeframe, limit = 200): Promise<OHLCV[]> {
-    if (isCrypto(symbol)) {
-      // CoinGecko OHLC endpoint uses days, not bar count
-      const daysMap: Record<Timeframe, number> = {
-        '1m': 1, '5m': 1, '15m': 1, '1h': 2, '4h': 14, '1d': limit, '1w': limit * 7,
-      };
-      return this.coinGecko.getCandles(symbol, daysMap[timeframe] ?? 90);
+  /** Get OHLCV candles with volume reliability flag */
+  async getCandlesWithMeta(symbol: string, timeframe: Timeframe, limit = 200): Promise<CandleResult> {
+    // Try Alpaca first (has real volume for both crypto and stocks)
+    const alpacaCandles = await fetchAlpacaBars(symbol, timeframe, limit);
+    if (alpacaCandles.length >= 20) {
+      console.log(`[DATA] ${symbol} ${timeframe}: ${alpacaCandles.length} candles from Alpaca (real volume)`);
+      return { candles: alpacaCandles, volumeReliable: true, source: 'alpaca' };
     }
-    return this.twelveData.getCandles(symbol, timeframe, limit);
+
+    // Fallback
+    if (isCrypto(symbol)) {
+      const daysMap: Record<Timeframe, number> = { '1m': 1, '5m': 1, '15m': 1, '1h': 2, '4h': 14, '1d': 90, '1w': 365 };
+      const candles = await this.coinGecko.getCandles(symbol, daysMap[timeframe] ?? 90);
+      console.log(`[DATA] ${symbol} ${timeframe}: ${candles.length} candles from CoinGecko (NO real volume)`);
+      return { candles, volumeReliable: false, source: 'coingecko' };
+    }
+
+    const candles = await this.twelveData.getCandles(symbol, timeframe, limit);
+    console.log(`[DATA] ${symbol} ${timeframe}: ${candles.length} candles from TwelveData (real volume)`);
+    return { candles, volumeReliable: true, source: 'twelvedata' };
   }
 
-  /** Get current price — auto-routes */
+  /** Legacy: get candles without meta (backward compat) */
+  async getCandles(symbol: string, timeframe: Timeframe, limit = 200): Promise<OHLCV[]> {
+    const { candles } = await this.getCandlesWithMeta(symbol, timeframe, limit);
+    return candles;
+  }
+
   async getPrice(symbol: string) {
     if (isCrypto(symbol)) {
       const data = await this.coinGecko.getPrice(symbol);
@@ -53,11 +73,9 @@ export class MarketDataRouter {
     return this.twelveData.getPrice(symbol);
   }
 
-  /** Get prices for mixed symbols */
   async getPrices(symbols: string[]) {
     const cryptoSymbols = symbols.filter(isCrypto);
     const stockSymbols = symbols.filter((s) => !isCrypto(s));
-
     const result: Record<string, { price: number; change: number; changePct: number }> = {};
 
     if (cryptoSymbols.length > 0) {
@@ -66,17 +84,14 @@ export class MarketDataRouter {
         result[sym] = { price: data.price, change: data.change24h, changePct: data.changePct24h };
       }
     }
-
     if (stockSymbols.length > 0) {
       const stockPrices = await this.twelveData.getPrices(stockSymbols);
       Object.assign(result, stockPrices);
     }
-
     return result;
   }
 }
 
-/** Singleton instance */
 let _router: MarketDataRouter | null = null;
 export function getMarketDataRouter(): MarketDataRouter {
   if (!_router) _router = new MarketDataRouter();

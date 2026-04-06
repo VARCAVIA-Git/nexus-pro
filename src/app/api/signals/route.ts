@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { generateSignal } from '@/lib/engine/strategies';
 import { redisGet, redisSet } from '@/lib/db/redis';
+import { fetchAlpacaBars } from '@/lib/data/providers/alpaca-data';
 import type { OHLCV, StrategyKey, SignalStrength } from '@/types';
 
 const TWELVE_DATA_URL = 'https://api.twelvedata.com';
@@ -88,14 +89,20 @@ export async function GET(request: Request) {
       }
     } catch {}
 
-    // Fetch real data
-    const isCrypto = symbol.includes('/');
+    // Fetch real data — Alpaca primary, CoinGecko/TwelveData fallback
     let candles: OHLCV[] = [];
+    const isCrypto = symbol.includes('/');
 
-    if (isCrypto) {
-      candles = await fetchCryptoCandles(symbol);
-    } else {
-      candles = await fetchStockCandles(symbol);
+    // Try Alpaca first (has real volume)
+    candles = await fetchAlpacaBars(symbol, '1d', 100);
+
+    // Fallback if Alpaca returns too few
+    if (candles.length < 20) {
+      if (isCrypto) {
+        candles = await fetchCryptoCandles(symbol);
+      } else {
+        candles = await fetchStockCandles(symbol);
+      }
     }
 
     // If we don't have enough data, skip this symbol (NO synthetic fallback)

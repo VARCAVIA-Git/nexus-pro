@@ -31,11 +31,13 @@ export function detectTrap(candles: OHLCV[], signal: 'BUY' | 'SELL'): TrapAnalys
     return { trapped: true, trapType: 'BEAR_TRAP', confidence: 75, recommendation: 'Breakdown failed — skip SELL' };
   }
 
-  // Fakeout: breakout on low volume
-  if (signal === 'BUY' && lastC.close > high20 && avgVol > 0 && lastC.volume < avgVol * 0.8) {
+  // Fakeout: breakout on low volume — only check if volume data looks real
+  const volStdDev = Math.sqrt(last20.reduce((s, c) => s + (c.volume - avgVol) ** 2, 0) / 20);
+  const volumeIsReal = avgVol > 0 && volStdDev / avgVol > 0.1;
+  if (volumeIsReal && signal === 'BUY' && lastC.close > high20 && lastC.volume < avgVol * 0.8) {
     return { trapped: true, trapType: 'FAKEOUT', confidence: 65, recommendation: 'Low volume breakout — likely fakeout' };
   }
-  if (signal === 'SELL' && lastC.close < low20 && avgVol > 0 && lastC.volume < avgVol * 0.8) {
+  if (volumeIsReal && signal === 'SELL' && lastC.close < low20 && lastC.volume < avgVol * 0.8) {
     return { trapped: true, trapType: 'FAKEOUT', confidence: 65, recommendation: 'Low volume breakdown — likely fakeout' };
   }
 
