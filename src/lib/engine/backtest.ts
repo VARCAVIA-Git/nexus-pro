@@ -1,6 +1,6 @@
 import type {
   OHLCV, TradingConfig, StrategyKey, BacktestResult, TradeRecord,
-  Side, Position, MonteCarloResult, WalkForwardResult,
+  Side, Position, MonteCarloResult, WalkForwardResult, Indicators,
 } from '@/types';
 import { computeIndicators } from './indicators';
 import { getStrategy, generateSignal } from './strategies';
@@ -16,18 +16,20 @@ export function runBacktest(
   config: TradingConfig,
   strategyKey: StrategyKey,
   symbol = '',
+  precomputedIndicators?: Indicators,
 ): BacktestResult {
   if (candles.length < 60) {
     return emptyResult(config);
   }
 
-  const indicators = computeIndicators(candles);
+  const indicators = precomputedIndicators ?? computeIndicators(candles);
   const strategy = getStrategy(strategyKey);
   const trades: TradeRecord[] = [];
   let capital = config.capital;
   const equity: number[] = [];
   let openPosition: Position | null = null;
   let cooldown = 0;
+  let peakCapital = config.capital;
 
   const startBar = Math.max(50, 200); // need SMA200 warmup
   const effectiveStart = Math.min(startBar, candles.length - 10);
@@ -151,9 +153,9 @@ export function runBacktest(
     if (cooldown > 0) cooldown--;
     equity.push(capital);
 
-    // Max drawdown circuit breaker
-    const peak = Math.max(...equity.slice(Math.max(0, equity.length - 50), equity.length));
-    const dd = ((peak - capital) / peak) * 100;
+    // Max drawdown circuit breaker (track peak incrementally)
+    if (capital > peakCapital) peakCapital = capital;
+    const dd = peakCapital > 0 ? ((peakCapital - capital) / peakCapital) * 100 : 0;
     if (dd >= config.maxDrawdownLimit) break;
   }
 

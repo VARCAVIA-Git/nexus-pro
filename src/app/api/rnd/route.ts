@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import type { OHLCV, StrategyKey, TradingConfig } from '@/types';
+import type { OHLCV, StrategyKey, TradingConfig, Indicators } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { detectPatterns, patternScore } from '@/lib/engine/patterns';
 import { runBacktest } from '@/lib/engine/backtest';
@@ -133,8 +133,20 @@ function analyzePatterns(candles: OHLCV[]) {
 
 function testStrategies(candles: OHLCV[], asset: string) {
   if (candles.length < 100) return [];
-  const strategies: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum', 'combined_ai'];
-  const SL = [2, 3, 4, 5]; const TP = [4, 6, 8, 10];
+
+  // Limit candles for performance: max 2000 for sub-hourly, 3000 otherwise
+  const maxCandles = candles.length > 3000 ? 3000 : candles.length;
+  const trimmed = candles.length > maxCandles ? candles.slice(-maxCandles) : candles;
+
+  console.log(`[RND] Strategy test: ${trimmed.length} candles (from ${candles.length})`);
+
+  // Pre-compute indicators ONCE (the main perf bottleneck)
+  const indicators = computeIndicators(trimmed);
+
+  // Skip 'pattern' (O(n^2) pattern detection per bar) and 'combined_ai' (calls all sub-strategies)
+  const strategies: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
+  // Reduced grid: 3×3 = 9 combos per strategy (not 16)
+  const SL = [2, 3, 5]; const TP = [4, 6, 10];
   const results: any[] = [];
 
   for (const strat of strategies) {
@@ -144,32 +156,39 @@ function testStrategies(candles: OHLCV[], asset: string) {
         if (tp <= sl) continue;
         const config: TradingConfig = { capital: 10000, riskPerTrade: 3, maxPositions: 3, stopLossPct: sl, takeProfitPct: tp, trailingStop: true, trailingPct: 2, commissionPct: 0.1, slippagePct: 0.05, cooldownBars: 2, kellyFraction: 0.25, maxDrawdownLimit: 30, dailyLossLimit: 5 };
         try {
-          const bt = runBacktest(candles, config, strat, asset);
+          const bt = runBacktest(trimmed, config, strat, asset, indicators);
           if (bt.totalTrades < 3) continue;
           const score = bt.sharpeRatio * 0.4 + Math.min(bt.profitFactor, 5) * 0.3 + (bt.winRate / 100) * 0.3;
           if (score > bestScore) {
             bestScore = score;
             best = { name: strat, sl, tp, trades: bt.totalTrades, winRate: Math.round(bt.winRate * 10) / 10, totalReturn: Math.round(bt.returnPct * 10) / 10, sharpe: Math.round(bt.sharpeRatio * 100) / 100, maxDD: Math.round(bt.maxDrawdown * 10) / 10, profitFactor: Math.round(Math.min(bt.profitFactor, 99) * 100) / 100, score: Math.round(score * 100) / 100 };
           }
-        } catch {}
+        } catch (e: any) {
+          console.warn(`[RND] Backtest failed ${strat} SL=${sl} TP=${tp}:`, e.message);
+        }
       }
     }
     if (best) {
       best.grade = best.sharpe > 2 && best.winRate > 60 ? 'A' : best.sharpe > 1.5 && best.winRate > 55 ? 'B' : best.sharpe > 1 && best.winRate > 50 ? 'C' : best.sharpe > 0.5 ? 'D' : 'F';
       results.push(best);
     }
+    console.log(`[RND] ${strat}: ${best ? `score=${best.score} grade=${best.grade}` : 'no valid result'}`);
   }
 
-  // Also test famous strategies
+  // Test famous strategies (use trimmed candles)
   for (const fs of FAMOUS_STRATEGIES) {
     try {
-      const r = fs.test(candles);
+      const r = fs.test(trimmed);
       if (r.trades >= 3) {
-        results.push({ name: `${fs.name} (${fs.author})`, sl: 0, tp: 0, trades: r.trades, winRate: r.winRate, totalReturn: r.totalReturn, sharpe: r.sharpe, maxDD: 0, profitFactor: 0, score: r.sharpe * 0.5 + (r.winRate / 100) * 0.5, grade: r.sharpe > 1.5 && r.winRate > 55 ? 'B' : r.sharpe > 1 ? 'C' : 'D' });
+        const score = r.sharpe * 0.5 + (r.winRate / 100) * 0.5;
+        results.push({ name: `${fs.name} (${fs.author})`, sl: 0, tp: 0, trades: r.trades, winRate: r.winRate, totalReturn: r.totalReturn, sharpe: r.sharpe, maxDD: 0, profitFactor: 0, score: Math.round(score * 100) / 100, grade: r.sharpe > 1.5 && r.winRate > 55 ? 'B' : r.sharpe > 1 ? 'C' : r.totalReturn > 0 ? 'D' : 'F' });
       }
-    } catch {}
+    } catch (e: any) {
+      console.warn(`[RND] Famous strategy ${fs.name} failed:`, e.message);
+    }
   }
 
+  console.log(`[RND] Strategy test complete: ${results.length} strategies ranked`);
   return results.sort((a, b) => b.score - a.score);
 }
 
@@ -255,27 +274,39 @@ export async function POST(request: Request) {
       case 'test-strategies': {
         const candles = await loadCandles(asset, tf);
         if (!candles.length) return NextResponse.json({ error: 'Nessun dato.' }, { status: 400 });
-        const strategies = testStrategies(candles, asset);
-        await redisSet(`nexus:rnd:strategies:${asset}:${tf}`, strategies, 86400);
-        return NextResponse.json({ phase: 'strategies', data: strategies });
+        console.log(`[RND] Starting strategy test: ${asset} ${tf}, ${candles.length} candles`);
+        try {
+          const strategies = testStrategies(candles, asset);
+          console.log(`[RND] Strategy test done: ${strategies.length} strategies`);
+          await redisSet(`nexus:rnd:strategies:${asset}:${tf}`, strategies, 86400);
+          return NextResponse.json({ phase: 'strategies', data: strategies });
+        } catch (error: any) {
+          console.error(`[RND] Strategy test FAILED:`, error.message, error.stack?.split('\n').slice(0, 5).join('\n'));
+          return NextResponse.json({ error: `Strategie: ${error.message}` }, { status: 500 });
+        }
       }
 
       case 'generate-report': {
-        const behavior = await redisGet(`nexus:rnd:behavior:${asset}:${tf}`) ?? {};
-        const indicators = await redisGet<any[]>(`nexus:rnd:indicators:${asset}:${tf}`) ?? [];
-        const patterns = await redisGet<any[]>(`nexus:rnd:patterns:${asset}:${tf}`) ?? [];
-        const strategies = await redisGet<any[]>(`nexus:rnd:strategies:${asset}:${tf}`) ?? [];
-        const report = generateReport(asset, tf, behavior, indicators, patterns, strategies);
-        await redisSet(`nexus:rnd:report:${asset}:${tf}`, report, 86400);
-        // Also generate asset profile for bots
-        const candles = await loadCandles(asset, tf);
-        if (candles.length > 20) {
-          const profile = generateAssetProfile(candles, asset, tf);
-          profile.bestIndicators = indicators.filter((i: any) => i.accuracy > 55).slice(0, 5).map((i: any) => ({ name: `${i.name} ${i.condition}`, accuracy: i.accuracy }));
-          if (strategies[0]) profile.bestStrategy = { name: strategies[0].name, winRate: strategies[0].winRate, returnPct: strategies[0].totalReturn };
-          await redisSet(`nexus:rnd:profile:${asset}:${tf}`, profile, 86400);
+        try {
+          const behavior = await redisGet(`nexus:rnd:behavior:${asset}:${tf}`) ?? {};
+          const rIndicators = await redisGet<any[]>(`nexus:rnd:indicators:${asset}:${tf}`) ?? [];
+          const rPatterns = await redisGet<any[]>(`nexus:rnd:patterns:${asset}:${tf}`) ?? [];
+          const rStrategies = await redisGet<any[]>(`nexus:rnd:strategies:${asset}:${tf}`) ?? [];
+          const report = generateReport(asset, tf, behavior, rIndicators, rPatterns, rStrategies);
+          await redisSet(`nexus:rnd:report:${asset}:${tf}`, report, 86400);
+          // Also generate asset profile for bots
+          const candles = await loadCandles(asset, tf);
+          if (candles.length > 20) {
+            const profile = generateAssetProfile(candles, asset, tf);
+            profile.bestIndicators = rIndicators.filter((i: any) => i.accuracy > 55).slice(0, 5).map((i: any) => ({ name: `${i.name} ${i.condition}`, accuracy: i.accuracy }));
+            if (rStrategies[0]) profile.bestStrategy = { name: rStrategies[0].name, winRate: rStrategies[0].winRate, returnPct: rStrategies[0].totalReturn };
+            await redisSet(`nexus:rnd:profile:${asset}:${tf}`, profile, 86400);
+          }
+          return NextResponse.json({ phase: 'report', data: report });
+        } catch (error: any) {
+          console.error(`[RND] Report generation FAILED:`, error.message);
+          return NextResponse.json({ error: `Rapporto: ${error.message}` }, { status: 500 });
         }
-        return NextResponse.json({ phase: 'report', data: report });
       }
 
       default:
