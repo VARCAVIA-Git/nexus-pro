@@ -24,7 +24,10 @@ export function getAllRunnableStrategies(indicators: Indicators): RunnableStrate
   const all: RunnableStrategy[] = [];
 
   // ── Custom strategies (require pre-computed indicators) ──
-  const customKeys: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum', 'pattern', 'combined_ai'];
+  // EXCLUDED: 'pattern' and 'combined_ai' — they call detectPatterns(slice) per bar
+  // which is O(n²) and times out the 55s maxDuration on 3000+ candles.
+  // They're still available for live trading (single-bar evaluation).
+  const customKeys: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
   for (const key of customKeys) {
     const strat = strategyMap[key];
     if (!strat) continue;

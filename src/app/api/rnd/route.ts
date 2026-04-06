@@ -158,9 +158,10 @@ function analyzePatterns(candles: OHLCV[]) {
 
 function testStrategies(candles: OHLCV[], asset: string) {
   if (candles.length < 100) return [];
+  const t0 = Date.now();
 
-  // Limit candles for performance: max 3000
-  const trimmed = candles.length > 3000 ? candles.slice(-3000) : candles;
+  // Limit candles for performance: max 2500 (was 3000) — safer for 55s timeout on 1GB server
+  const trimmed = candles.length > 2500 ? candles.slice(-2500) : candles;
 
   // ── Data validation ──
   const sample0 = trimmed[0]; const sampleMid = trimmed[Math.floor(trimmed.length / 2)]; const sampleEnd = trimmed[trimmed.length - 1];
@@ -300,7 +301,7 @@ function testStrategies(candles: OHLCV[], asset: string) {
 
   // Sort by expectancy descending (true edge per trade)
   results.sort((a, b) => (b.expectancy ?? -999) - (a.expectancy ?? -999));
-  console.log(`[RND][STRAT] === DONE === ${results.length} strategies tested`);
+  console.log(`[RND][STRAT] === DONE === ${results.length} strategies in ${Date.now() - t0}ms`);
   return results;
 }
 
