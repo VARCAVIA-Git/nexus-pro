@@ -123,22 +123,23 @@ async function downloadFromTwelveData(asset: string, tf: string): Promise<OHLCV[
 
 // ── Public API ────────────────────────────────────────────
 
-export async function downloadCryptoHistory(asset: string, tf: string): Promise<OHLCV[]> {
+export async function downloadCryptoHistory(asset: string, tf: string, months = 6): Promise<OHLCV[]> {
   // Alpaca first (real volume + deep history)
-  const alpaca = await downloadFromAlpaca(asset, tf, 6);
+  const alpaca = await downloadFromAlpaca(asset, tf, months);
   if (alpaca.length >= 20) return alpaca;
   // CoinGecko fallback
   return downloadFromCoinGecko(asset, tf);
 }
 
-export async function downloadStockHistory(asset: string, tf: string): Promise<OHLCV[]> {
-  const alpaca = await downloadFromAlpaca(asset, tf, 6);
+export async function downloadStockHistory(asset: string, tf: string, months = 6): Promise<OHLCV[]> {
+  const alpaca = await downloadFromAlpaca(asset, tf, months);
   if (alpaca.length >= 20) return alpaca;
   return downloadFromTwelveData(asset, tf);
 }
 
-export async function downloadHistory(asset: string, tf: string): Promise<{ candles: OHLCV[]; source: string }> {
-  const cacheKey = `nexus:history:${asset}:${tf}`;
+export async function downloadHistory(asset: string, tf: string, months = 6): Promise<{ candles: OHLCV[]; source: string }> {
+  // Cache key includes months so different periods don't collide
+  const cacheKey = `nexus:history:${asset}:${tf}:${months}m`;
 
   try {
     const cached = await redisGet<OHLCV[]>(cacheKey);
@@ -146,7 +147,7 @@ export async function downloadHistory(asset: string, tf: string): Promise<{ cand
   } catch {}
 
   const crypto = isCrypto(asset);
-  const candles = crypto ? await downloadCryptoHistory(asset, tf) : await downloadStockHistory(asset, tf);
+  const candles = crypto ? await downloadCryptoHistory(asset, tf, months) : await downloadStockHistory(asset, tf, months);
   const source = candles.length > 0 && candles[0].volume > 0 ? 'alpaca' : crypto ? 'coingecko' : 'twelvedata';
 
   if (candles.length > 20) {

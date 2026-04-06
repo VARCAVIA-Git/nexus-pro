@@ -16,7 +16,8 @@ export const maxDuration = 55;
 async function loadCandles(asset: string, tf: string): Promise<OHLCV[]> {
   const raw = await redisGet<number[][]>(`nexus:rnd:candles:${asset}:${tf}`);
   if (!raw) return [];
-  return raw.map(c => ({ date: String(c[0]), open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5] ?? 0 }));
+  // c[0] is a timestamp in ms (number). Convert to ISO string so new Date(c.date) works.
+  return raw.map(c => ({ date: new Date(c[0]).toISOString(), open: c[1], high: c[2], low: c[3], close: c[4], volume: c[5] ?? 0 }));
 }
 
 function analyzeBehavior(candles: OHLCV[]) {
@@ -349,7 +350,7 @@ export async function POST(request: Request) {
     switch (action) {
       case 'download': {
         const months = parseInt(body.period ?? '6');
-        const { candles, source } = await downloadHistory(asset, tf);
+        const { candles, source } = await downloadHistory(asset, tf, months);
         if (candles.length < 50) return NextResponse.json({ error: `Solo ${candles.length} candele. Servono almeno 50.` }, { status: 400 });
         const compressed = candles.map(c => [new Date(c.date).getTime(), c.open, c.high, c.low, c.close, c.volume]);
         await redisSet(`nexus:rnd:candles:${asset}:${tf}`, compressed, 604800);

@@ -34,6 +34,24 @@ function rate(wr: number): string {
 function avg(arr: number[]): number { return arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : 0; }
 function std(arr: number[]): number { const m = avg(arr); return arr.length > 1 ? Math.sqrt(arr.reduce((s, v) => s + (v - m) ** 2, 0) / arr.length) : 0; }
 
+/**
+ * Robust date parser — handles ISO strings, numeric ms timestamps,
+ * and numeric strings of ms timestamps. Returns null on invalid.
+ */
+function parseDate(d: string | number): Date | null {
+  if (typeof d === 'number') return new Date(d < 1e12 ? d * 1000 : d);
+  if (typeof d === 'string') {
+    // Pure numeric string → parse as ms timestamp (or seconds if too small)
+    if (/^\d+$/.test(d)) {
+      const n = parseInt(d, 10);
+      return new Date(n < 1e12 ? n * 1000 : n);
+    }
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? null : dt;
+  }
+  return null;
+}
+
 export function analyzeBehavior(candles: OHLCV[]): BehaviorAnalysis {
   const n = candles.length;
 
@@ -43,9 +61,15 @@ export function analyzeBehavior(candles: OHLCV[]): BehaviorAnalysis {
   const lastPrice = candles[n - 1]?.close ?? 0;
   const totalChange = firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 
+  // Diagnostic log for date parsing
+  const dt0 = parseDate(candles[0].date);
+  const dtN = parseDate(candles[n - 1].date);
+  console.log(`[BEHAVIOR] First date raw=${JSON.stringify(candles[0].date)} parsed=${dt0?.toISOString() ?? 'INVALID'}`);
+  console.log(`[BEHAVIOR] Last  date raw=${JSON.stringify(candles[n - 1].date)} parsed=${dtN?.toISOString() ?? 'INVALID'}`);
+
   const summary = {
     totalCandles: n,
-    periodDays: n > 1 ? Math.round((new Date(candles[n - 1].date).getTime() - new Date(candles[0].date).getTime()) / 86400000) : 0,
+    periodDays: dt0 && dtN ? Math.round((dtN.getTime() - dt0.getTime()) / 86400000) : 0,
     avgDailyReturn: Math.round(avg(returns) * 1000) / 1000,
     avgDailyVolatility: Math.round(std(returns) * 1000) / 1000,
     maxDailyGain: Math.round(Math.max(...returns) * 100) / 100,
@@ -59,8 +83,8 @@ export function analyzeBehavior(candles: OHLCV[]): BehaviorAnalysis {
   for (let h = 0; h < 24; h++) hBuckets[h] = { returns: [], vols: [], greens: 0, total: 0 };
 
   for (const c of candles) {
-    const dt = new Date(c.date);
-    if (isNaN(dt.getTime())) continue;
+    const dt = parseDate(c.date);
+    if (!dt) continue;
     const h = dt.getUTCHours();
     const ret = c.open > 0 ? ((c.close - c.open) / c.open) * 100 : 0;
     hBuckets[h].returns.push(ret);
@@ -83,8 +107,8 @@ export function analyzeBehavior(candles: OHLCV[]): BehaviorAnalysis {
   const dBuckets: Record<number, { returns: number[]; greens: number; total: number }> = {};
   for (let d = 0; d < 7; d++) dBuckets[d] = { returns: [], greens: 0, total: 0 };
   for (const c of candles) {
-    const dt = new Date(c.date);
-    if (isNaN(dt.getTime())) continue;
+    const dt = parseDate(c.date);
+    if (!dt) continue;
     const d = dt.getUTCDay();
     const ret = c.open > 0 ? ((c.close - c.open) / c.open) * 100 : 0;
     dBuckets[d].returns.push(ret);
@@ -177,8 +201,8 @@ export function analyzeBehavior(candles: OHLCV[]): BehaviorAnalysis {
   // Best/worst trading windows (hour+day combos)
   const windows: Record<string, { returns: number[]; greens: number; total: number }> = {};
   for (const c of candles) {
-    const dt = new Date(c.date);
-    if (isNaN(dt.getTime())) continue;
+    const dt = parseDate(c.date);
+    if (!dt) continue;
     const h = dt.getUTCHours();
     const d = dt.getUTCDay();
     const key = `${DAY_NAMES[d]} ${h}:00-${h + 1}:00 UTC`;
