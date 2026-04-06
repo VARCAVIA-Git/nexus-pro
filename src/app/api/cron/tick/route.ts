@@ -72,43 +72,77 @@ export async function GET(request: Request) {
     return NextResponse.json({ processed: 0, message: 'No running bots' });
   }
 
-  // Create broker
-  const apiKey = process.env.ALPACA_API_KEY ?? '';
-  const apiSecret = process.env.ALPACA_API_SECRET ?? '';
-  if (!apiKey || !apiSecret) {
-    return NextResponse.json({ error: 'Alpaca not configured' }, { status: 500 });
+  // Broker credentials per mode
+  const paperKey = process.env.ALPACA_API_KEY ?? '';
+  const paperSecret = process.env.ALPACA_API_SECRET ?? '';
+  const liveKey = process.env.ALPACA_LIVE_API_KEY ?? '';
+  const liveSecret = process.env.ALPACA_LIVE_SECRET_KEY ?? '';
+
+  function getBrokerForBot(botEnv: string): { broker: AlpacaBroker; ok: boolean; error?: string } {
+    if (botEnv === 'real') {
+      if (!liveKey || !liveSecret) {
+        return { broker: null as any, ok: false, error: 'Live API keys not configured' };
+      }
+      return { broker: new AlpacaBroker(liveKey, liveSecret, false), ok: true };
+    }
+    if (!paperKey || !paperSecret) {
+      return { broker: null as any, ok: false, error: 'Paper API keys not configured' };
+    }
+    return { broker: new AlpacaBroker(paperKey, paperSecret, true), ok: true };
   }
-  const broker = new AlpacaBroker(apiKey, apiSecret, true);
+
+  // Get equity from paper account for initial display (most bots are demo)
   let equity = 0, cash = 0;
-  try {
-    await broker.connect();
-    const bal = await broker.getBalance();
-    equity = bal.total;
-    cash = bal.available;
-  } catch (err: any) {
-    return NextResponse.json({ error: `Broker: ${err.message}` }, { status: 500 });
+  if (paperKey && paperSecret) {
+    try {
+      const paperBroker = new AlpacaBroker(paperKey, paperSecret, true);
+      await paperBroker.connect();
+      const bal = await paperBroker.getBalance();
+      equity = bal.total; cash = bal.available;
+    } catch {}
   }
 
   const results: Array<{ botId: string; name: string; ticked: boolean; signals: number; error?: string }> = [];
 
   for (const config of runningBots) {
-    // Time guard: don't start a new bot tick if close to timeout
     if (Date.now() - startTime > 45000) break;
 
     try {
-      // Load persisted state
+      // Get broker for this bot's mode
+      const botMode = config.environment ?? 'demo';
+      const { broker, ok: brokerOk, error: brokerErr } = getBrokerForBot(botMode);
+      console.log(`[CRON][${config.name}] Mode: ${botMode}, using ${botMode === 'real' ? 'LIVE' : 'PAPER'} Alpaca`);
+
+      if (!brokerOk) {
+        console.log(`[CRON][${config.name}] ⚠️ Broker error: ${brokerErr} — skipping`);
+        results.push({ botId: config.id, name: config.name, ticked: false, signals: 0, error: brokerErr });
+        continue;
+      }
+
+      // Get this bot's account equity
+      let botEquity = equity, botCash = cash;
+      try {
+        await broker.connect();
+        const bal = await broker.getBalance();
+        botEquity = bal.total; botCash = bal.available;
+      } catch (err: any) {
+        console.log(`[CRON][${config.name}] Broker connect failed: ${err.message}`);
+        results.push({ botId: config.id, name: config.name, ticked: false, signals: 0, error: err.message });
+        continue;
+      }
+
       const state = await redisGet<PersistedBotState>(BOT_STATE_KEY(config.id)) ?? {
         positions: [], closedTrades: [], signalLog: [], tickCount: 0,
-        initialEquity: equity, rejectedTrades: 0, profitLocks: 0, lastTick: '',
+        initialEquity: botEquity, rejectedTrades: 0, profitLocks: 0, lastTick: '',
       };
 
       const now = new Date();
       state.tickCount++;
       state.lastTick = now.toISOString();
-      if (!state.initialEquity) state.initialEquity = equity;
+      if (!state.initialEquity) state.initialEquity = botEquity;
 
       const riskParams = calculateRiskParams(config.riskLevel);
-      const tradingCapital = equity * (config.capitalPercent / 100);
+      const tradingCapital = botEquity * (config.capitalPercent / 100);
       const mode = config.operationMode ?? 'intraday';
       const capRules = getCapitalRules(mode);
       let signalCount = 0;
@@ -279,7 +313,7 @@ export async function GET(request: Request) {
               logEntry.reason = `rejected: ${check.reason}`;
             } else {
               const sizing = timeframePositionSize(tradingCapital * regime.sizeMultiplier, mode, atr, price);
-              if (sizing.quantity > 0 && sizing.capitalUsed < cash * 0.95 && state.positions.length < capRules.maxOpenPositions) {
+              if (sizing.quantity > 0 && sizing.capitalUsed < botCash * 0.95 && state.positions.length < capRules.maxOpenPositions) {
                 const orderQty = parseFloat(sizing.quantity.toFixed(isCrypto(symbol) ? 6 : 0));
                 try {
                   const order = await broker.placeOrder({ symbol, side, type: 'market', quantity: orderQty });
