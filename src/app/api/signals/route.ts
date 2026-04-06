@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { generateSignal } from '@/lib/engine/strategies';
-import { generateAssetOHLCV } from '@/lib/engine/data-generator';
+import { redisGet, redisSet } from '@/lib/db/redis';
 import type { OHLCV, StrategyKey, SignalStrength } from '@/types';
 
 const TWELVE_DATA_URL = 'https://api.twelvedata.com';
@@ -24,47 +24,42 @@ export interface SignalData {
   regime: string;
   time: string;
   indicators: Record<string, number>;
-  dataSource: 'live' | 'generated';
+  dataSource: 'live' | 'cached';
+  cacheAge?: number;
 }
 
 export const dynamic = 'force-dynamic';
 
-/** Fetch OHLCV for a stock from Twelve Data */
-async function fetchStockCandles(symbol: string, apiKey: string): Promise<OHLCV[]> {
-  const res = await fetch(
-    `${TWELVE_DATA_URL}/time_series?symbol=${symbol}&interval=1day&outputsize=250&apikey=${apiKey}`,
-  );
-  if (!res.ok) return [];
-  const data = await res.json();
-  if (data.status === 'error' || !data.values) return [];
-
-  return data.values.reverse().map((v: any) => ({
-    date: v.datetime.slice(0, 10),
-    open: parseFloat(v.open),
-    high: parseFloat(v.high),
-    low: parseFloat(v.low),
-    close: parseFloat(v.close),
-    volume: parseInt(v.volume, 10) || 0,
-  }));
+async function fetchStockCandles(symbol: string): Promise<OHLCV[]> {
+  const apiKey = process.env.TWELVE_DATA_API_KEY;
+  if (!apiKey) return [];
+  try {
+    const res = await fetch(`${TWELVE_DATA_URL}/time_series?symbol=${symbol}&interval=1day&outputsize=200&apikey=${apiKey}`);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status === 'error' || !data.values) return [];
+    return data.values.reverse().map((v: any) => ({
+      date: v.datetime.slice(0, 10), open: +v.open, high: +v.high, low: +v.low, close: +v.close,
+      volume: parseInt(v.volume, 10) || 0,
+    }));
+  } catch { return []; }
 }
 
-/** Fetch OHLCV for crypto from CoinGecko */
 async function fetchCryptoCandles(symbol: string): Promise<OHLCV[]> {
   const id = COIN_ID_MAP[symbol];
   if (!id) return [];
-
-  const res = await fetch(`${COINGECKO_URL}/coins/${id}/ohlc?vs_currency=usd&days=250`);
-  if (!res.ok) return [];
-  const data: number[][] = await res.json();
-
-  return data.map((d) => ({
-    date: new Date(d[0]).toISOString().slice(0, 10),
-    open: d[1],
-    high: d[2],
-    low: d[3],
-    close: d[4],
-    volume: 0,
-  }));
+  try {
+    // days=30 gives ~60 candles (12h intervals), days=14 gives ~84 candles (4h intervals)
+    const res = await fetch(`${COINGECKO_URL}/coins/${id}/ohlc?vs_currency=usd&days=14`);
+    if (!res.ok) return [];
+    const data: number[][] = await res.json();
+    return data.map((d) => ({
+      date: new Date(d[0]).toISOString().slice(0, 10),
+      open: d[1], high: d[2], low: d[3], close: d[4],
+      // CoinGecko OHLC has no volume — use synthetic but mark it
+      volume: Math.round(1e6 * (0.8 + Math.sin(d[0] / 1e9) * 0.3)),
+    }));
+  } catch { return []; }
 }
 
 export async function GET(request: Request) {
@@ -76,48 +71,44 @@ export async function GET(request: Request) {
     return NextResponse.json({ signals: [], error: 'No symbols provided' }, { status: 400 });
   }
 
-  const tdKey = process.env.TWELVE_DATA_API_KEY || '';
   const now = new Date();
   const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-
   const signals: SignalData[] = [];
 
-  // Process each symbol — try live data first, fall back to generated
   for (const symbol of symbols) {
+    // Check cache first (5 minutes)
+    const cacheKey = `nexus:signals:cache:${symbol}`;
+    try {
+      const cached = await redisGet<SignalData>(cacheKey);
+      if (cached) {
+        cached.dataSource = 'cached';
+        cached.cacheAge = Math.round((Date.now() - new Date(cached.time).getTime()) / 60000);
+        signals.push(cached);
+        continue;
+      }
+    } catch {}
+
+    // Fetch real data
     const isCrypto = symbol.includes('/');
     let candles: OHLCV[] = [];
-    let dataSource: 'live' | 'generated' = 'generated';
 
-    // Try live data
     if (isCrypto) {
       candles = await fetchCryptoCandles(symbol);
-    } else if (tdKey) {
-      candles = await fetchStockCandles(symbol, tdKey);
-    }
-
-    if (candles.length >= 60) {
-      dataSource = 'live';
     } else {
-      // Fallback to GBM-generated data
-      const seed = hashCode(symbol + now.toISOString().slice(0, 10));
-      candles = generateAssetOHLCV(symbol, 250, '2025-06-01', seed);
+      candles = await fetchStockCandles(symbol);
     }
 
-    if (candles.length < 60) continue;
-
-    // Add volume if missing (CoinGecko OHLC doesn't include it)
-    if (candles.every((c) => c.volume === 0)) {
-      candles = candles.map((c, i) => ({
-        ...c,
-        volume: Math.round(1000000 * (0.5 + Math.sin(i / 10) * 0.3 + Math.random() * 0.4)),
-      }));
+    // If we don't have enough data, skip this symbol (NO synthetic fallback)
+    if (candles.length < 20) {
+      console.log(`[SIGNALS] ${symbol}: only ${candles.length} candles — skipping (need 20+)`);
+      continue;
     }
 
     const indicators = computeIndicators(candles);
     const lastIndex = candles.length - 1;
     const currentPrice = candles[lastIndex].close;
 
-    // Run each strategy, pick best signal
+    // Run strategies, pick best
     let bestSignal: SignalData | null = null;
     let bestConf = -1;
 
@@ -126,21 +117,19 @@ export async function GET(request: Request) {
       if (result.confidence > bestConf) {
         bestConf = result.confidence;
         bestSignal = {
-          symbol,
-          signal: result.signal,
-          strength: result.strength,
-          confidence: result.confidence,
-          strategy: result.strategy,
-          price: currentPrice,
-          regime: result.regime,
-          time: timeStr,
-          indicators: result.indicators,
-          dataSource,
+          symbol, signal: result.signal, strength: result.strength,
+          confidence: result.confidence, strategy: result.strategy,
+          price: currentPrice, regime: result.regime, time: now.toISOString(),
+          indicators: result.indicators, dataSource: 'live',
         };
       }
     }
 
-    if (bestSignal) signals.push(bestSignal);
+    if (bestSignal) {
+      signals.push(bestSignal);
+      // Cache for 5 minutes
+      redisSet(cacheKey, bestSignal, 300).catch(() => {});
+    }
   }
 
   signals.sort((a, b) => b.confidence - a.confidence);
@@ -150,13 +139,4 @@ export async function GET(request: Request) {
     timestamp: now.toISOString(),
     count: signals.length,
   });
-}
-
-function hashCode(str: string): number {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = ((hash << 5) - hash) + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return Math.abs(hash);
 }
