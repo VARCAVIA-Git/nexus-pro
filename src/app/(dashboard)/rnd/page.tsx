@@ -454,6 +454,43 @@ export default function RnDPage() {
         </div>
       )}
 
+      {/* Action summary — bot config card */}
+      {rep?.actionSummary?.length > 0 && (
+        <div className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-5">
+          <h3 className="text-sm font-bold text-blue-400 mb-3 flex items-center gap-2">
+            <Zap size={14} /> Configurazione Bot Pronta
+          </h3>
+          <div className="space-y-1.5 mb-4">
+            {rep.actionSummary.map((line: string, i: number) => (
+              <div key={i} className="text-[11px] text-n-text font-mono">› {line}</div>
+            ))}
+          </div>
+          {rep.botConfig?.regimeRules?.length > 0 && (
+            <div className="border-t border-blue-500/10 pt-3 mb-3">
+              <p className="text-[10px] text-n-dim mb-1.5">Regole regime dettagliate:</p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {rep.botConfig.regimeRules.map((r: any, i: number) => (
+                  <div key={i} className={`rounded p-1.5 text-center ${r.action === 'TRADE' ? 'bg-green-500/10 text-n-green' : r.action === 'CAUTION' ? 'bg-yellow-500/10 text-yellow-400' : 'bg-red-500/10 text-n-red'}`}>
+                    <p className="text-[8px] opacity-80">{r.regime}</p>
+                    <p className="text-[10px] font-bold">{r.action}</p>
+                    <p className="text-[8px] opacity-60">{r.winRate}% WR · {r.trades}t</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          <button
+            onClick={() => {
+              setApplyMsg(`Config pronta: ${rep.botConfig.primaryStrategy}, SL ${rep.botConfig.optimalSL}%, TP ${rep.botConfig.optimalTP}%`);
+              setTimeout(() => setApplyMsg(''), 5000);
+            }}
+            className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold py-2.5 transition-colors"
+          >
+            Applica questa configurazione a un Bot
+          </button>
+        </div>
+      )}
+
       {/* Empty state */}
       {p1 === 'idle' && (
         <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-10 text-center">

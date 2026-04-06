@@ -369,12 +369,60 @@ function generateReport(asset: string, tf: string, behavior: any, indicators: an
     }
   }
 
+  // ── Bot config: actionable rules from the analysis ──
+  const primary = recommended[0];
+  const secondary = recommended[1];
+  const botConfig = {
+    primaryStrategy: primary?.name ?? null,
+    fallbackStrategy: secondary?.name ?? null,
+    optimalSL: primary?.optimalSL ?? primary?.sl ?? 2,
+    optimalTP: primary?.optimalTP ?? primary?.tp ?? 4,
+    confidenceThreshold: primary && primary.winRate > 55 ? 55 : 60,
+    avoidHours: (behavior?.hourly ?? []).filter((h: any) => h.winRate < 44 && h.sampleSize >= 5).map((h: any) => h.hour),
+    boostHours: (behavior?.hourly ?? []).filter((h: any) => h.winRate > 56 && h.sampleSize >= 5).map((h: any) => h.hour),
+    regimeRules: (primary?.byRegime ?? []).map((r: any) => ({
+      regime: r.regime,
+      action: r.winRate > 55 && r.expectancy > 0.1 ? 'TRADE' : r.winRate > 45 && r.expectancy > 0 ? 'CAUTION' : 'SKIP',
+      winRate: r.winRate,
+      expectancy: r.expectancy,
+      trades: r.trades,
+    })),
+    bestIndicator: topIndicators[0]?.name ?? null,
+    bestIndicatorCondition: topIndicators[0]?.condition ?? null,
+    maxDailyTrades: 5,
+    maxConsecutiveLosses: 3,
+    positionSizePct: primary && Math.abs(primary.maxDrawdown ?? primary.maxDD ?? 0) < 5 ? 3 : 2,
+  };
+
+  // ── Action summary: human-readable rules ──
+  const actionSummary: string[] = [];
+  if (botConfig.primaryStrategy) {
+    actionSummary.push(`STRATEGIA PRINCIPALE: ${botConfig.primaryStrategy}`);
+    if (botConfig.fallbackStrategy) actionSummary.push(`BACKUP: ${botConfig.fallbackStrategy}`);
+    actionSummary.push(`SL: ${botConfig.optimalSL}% · TP: ${botConfig.optimalTP}%`);
+    actionSummary.push(`Confidence minima: ${botConfig.confidenceThreshold}%`);
+    if (botConfig.avoidHours.length > 0) actionSummary.push(`NON tradare alle ore UTC: ${botConfig.avoidHours.join(', ')}`);
+    if (botConfig.boostHours.length > 0) actionSummary.push(`Ore migliori UTC: ${botConfig.boostHours.join(', ')}`);
+    if (botConfig.regimeRules.length > 0) {
+      const tradeRegimes = botConfig.regimeRules.filter((r: any) => r.action === 'TRADE');
+      const skipRegimes = botConfig.regimeRules.filter((r: any) => r.action === 'SKIP');
+      if (tradeRegimes.length > 0) actionSummary.push(`TRADE in regime: ${tradeRegimes.map((r: any) => `${r.regime} (${r.winRate}% WR)`).join(', ')}`);
+      if (skipRegimes.length > 0) actionSummary.push(`SKIP in regime: ${skipRegimes.map((r: any) => `${r.regime} (${r.winRate}% WR)`).join(', ')}`);
+    }
+    if (botConfig.bestIndicator) actionSummary.push(`Filtro indicatore: ${botConfig.bestIndicator} ${botConfig.bestIndicatorCondition}`);
+    actionSummary.push(`Position size: ${botConfig.positionSizePct}% del capitale`);
+    actionSummary.push(`Max ${botConfig.maxDailyTrades} trade/giorno · pausa dopo ${botConfig.maxConsecutiveLosses} loss consecutivi`);
+  } else {
+    actionSummary.push('Nessuna configurazione disponibile — nessuna strategia profittevole trovata');
+  }
+
   return {
     asset, timeframe: tf, generatedAt: new Date().toISOString(),
     dataAvailable: { behavior: !!behavior, indicators: indicators.length, patterns: patterns.length, strategies: strategies.length },
     summary: { outlook, confidence, keyInsight },
     recommended, avoid, topIndicators, topPatterns,
     tradingSchedule, warnings, insights,
+    botConfig, actionSummary,
     totalStrategiesTested: strategies.length,
     candlesAnalyzed: behavior?.totalCandles ?? behavior?.summary?.totalCandles ?? 0,
   };
