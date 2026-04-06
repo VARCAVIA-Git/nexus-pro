@@ -98,8 +98,25 @@ export default function RnDPage() {
 
       {/* Phase 1: Download */}
       {dl && (
-        <div className="rounded-xl border border-n-border bg-n-card p-4 text-xs text-n-dim flex items-center gap-2 flex-wrap">
-          <Download size={12} /><span className="text-n-text font-medium">{dl.candles} candele</span> da {dl.source} · {dl.from} → {dl.to} · Volume: <span className={dl.volumeReal ? 'text-n-green' : 'text-n-red'}>{dl.volumeReal ? 'REALE' : 'non disponibile'}</span>
+        <div className="space-y-2">
+          <div className="rounded-xl border border-n-border bg-n-card p-4 text-xs text-n-dim flex items-center gap-2 flex-wrap">
+            <Download size={12} /><span className="text-n-text font-medium">{dl.candles} candele</span> da {dl.source} · {dl.from} → {dl.to} · Volume: <span className={dl.volumeReal ? 'text-n-green' : 'text-n-red'}>{dl.volumeReal ? 'REALE' : 'non disponibile'}</span>
+          </div>
+          {dl.candles < 500 && (
+            <div className="rounded-xl border border-yellow-500/20 bg-yellow-500/10 p-3 text-xs text-yellow-400">
+              Solo {dl.candles} candele scaricate. Per risultati affidabili servono almeno 500 candele.{tf === '1d' ? ' Prova con timeframe 1h per più dati.' : ' Prova con un periodo più lungo.'}
+            </div>
+          )}
+          {dl.candles >= 500 && dl.candles < 2000 && (
+            <div className="rounded-xl border border-blue-500/20 bg-blue-500/10 p-3 text-xs text-blue-400">
+              {dl.candles} candele — sufficiente per analisi base. Per risultati più robusti usa 3-6 mesi su 1h.
+            </div>
+          )}
+          {dl.candles >= 2000 && (
+            <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-3 text-xs text-green-400">
+              {dl.candles} candele — dataset robusto per analisi completa.
+            </div>
+          )}
         </div>
       )}
 
@@ -118,17 +135,24 @@ export default function RnDPage() {
             </div>
           )}
 
-          {/* Hourly heatmap */}
-          <div>
-            <p className="text-[9px] text-n-dim mb-1.5 flex items-center gap-1"><Clock size={10} /> Win Rate per ora UTC</p>
-            <div className="grid grid-cols-12 gap-0.5 sm:grid-cols-24">
-              {(beh.hourly ?? []).map((h: any) => (
-                <div key={h.hour} title={`${h.hour}:00 UTC — WR ${h.winRate}% (${h.sampleSize}n) avg ${h.avgReturn}%`} className={`rounded text-[7px] sm:text-[8px] font-mono flex items-center justify-center aspect-square ${hrColor(h.winRate)}`}>
-                  {h.hour}
-                </div>
-              ))}
+          {/* Hourly heatmap — only for intraday timeframes */}
+          {(tf === '15m' || tf === '1h' || tf === '4h') && beh?.hourly && (
+            <div>
+              <p className="text-[9px] text-n-dim mb-1.5 flex items-center gap-1"><Clock size={10} /> Win Rate per ora UTC</p>
+              <div className="grid grid-cols-12 gap-0.5 sm:grid-cols-24">
+                {(beh.hourly ?? []).map((h: any) => (
+                  <div key={h.hour} title={`${h.hour}:00 UTC — WR ${h.winRate}% (${h.sampleSize}n) avg ${h.avgReturn}%`} className={`rounded text-[7px] sm:text-[8px] font-mono flex items-center justify-center aspect-square ${hrColor(h.winRate)}`}>
+                    {h.hour}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
+          {tf === '1d' && (
+            <div className="rounded-lg bg-n-bg/50 p-3 text-[10px] text-n-dim italic">
+              Analisi oraria non disponibile per timeframe giornaliero. Usa 1h per dettaglio orario.
+            </div>
+          )}
 
           {/* Daily */}
           <div className="flex gap-1.5 flex-wrap">

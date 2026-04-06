@@ -1,13 +1,11 @@
 import { NextResponse } from 'next/server';
-import type { OHLCV, StrategyKey, TradingConfig, Indicators } from '@/types';
+import type { OHLCV } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
-import { detectPatterns, patternScore } from '@/lib/engine/patterns';
-import { runBacktest } from '@/lib/engine/backtest';
-import { getStrategy } from '@/lib/engine/strategies';
+import { detectPatterns } from '@/lib/engine/patterns';
+import { getAllRunnableStrategies, simpleBacktest } from '@/lib/engine/rnd/strategy-runner';
 import { generateAssetProfile } from '@/lib/engine/rnd/asset-profile';
 import { analyzeBehavior as deepBehavior } from '@/lib/engine/rnd/behavior-analysis';
 import { downloadHistory } from '@/lib/engine/rnd/history-loader';
-import { FAMOUS_STRATEGIES } from '@/lib/engine/rnd/famous-strategies';
 import { redisGet, redisSet } from '@/lib/db/redis';
 
 export const dynamic = 'force-dynamic';
@@ -152,74 +150,111 @@ function testStrategies(candles: OHLCV[], asset: string) {
   // Pre-compute indicators ONCE
   const indicators = computeIndicators(trimmed);
 
-  // Log indicator health at bar 200
-  const checkIdx = Math.min(200, trimmed.length - 1);
+  // Log indicator health
+  const checkIdx = Math.min(100, trimmed.length - 1);
   console.log(`[RND][STRAT] Indicators@${checkIdx}: rsi=${indicators.rsi[checkIdx]?.toFixed(1)} adx=${indicators.adx[checkIdx]?.toFixed(1)} atr=${indicators.atr[checkIdx]?.toFixed(2)} macdH=${indicators.macd.histogram[checkIdx]?.toFixed(4)} ema21=${indicators.ema21[checkIdx]?.toFixed(2)} sma50=${indicators.sma50[checkIdx]}`);
 
-  // ── Diagnostic: count raw signals from each strategy ──
-  const diagStrats: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
-  for (const sk of diagStrats) {
-    const strat = getStrategy(sk);
-    let entryCount = 0;
-    // Scan from bar 50 (not 200 — we want to see if the strategy EVER fires)
+  // ── Get all 12 runnable strategies (6 custom + 6 famous) ──
+  const runnable = getAllRunnableStrategies(indicators);
+
+  // ── Diagnostic: count raw signals per strategy ──
+  for (const s of runnable) {
+    let buys = 0, sells = 0;
     for (let i = 50; i < trimmed.length; i++) {
-      try {
-        const d = strat.shouldEnter(trimmed, indicators, i);
-        if (d.enter) entryCount++;
-      } catch {}
+      const sig = s.run(trimmed, i);
+      if (sig.direction === 'BUY') buys++;
+      else if (sig.direction === 'SELL') sells++;
     }
-    console.log(`[RND][DIAG] ${sk}: shouldEnter fired ${entryCount}x in ${trimmed.length - 50} bars`);
+    console.log(`[RND][DIAG] ${s.name} (${s.type}): ${buys}buy ${sells}sell in ${trimmed.length - 50} bars`);
   }
 
-  // ── Run backtests (custom strategies) ──
-  const strategyKeys: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
-  const SL = [2, 3, 5]; const TP = [4, 6, 10];
+  // ── Grid search per strategy ──
+  const SL = [0.01, 0.02, 0.03];
+  const TP = [0.02, 0.04, 0.08];
   const results: any[] = [];
 
-  for (const strat of strategyKeys) {
-    let bestScore = -Infinity; let best: any = null;
+  for (const strat of runnable) {
+    let bestResult: any = null;
+    let bestSL = 0.02;
+    let bestTP = 0.04;
+    let bestScore = -Infinity;
     let maxTrades = 0;
+
     for (const sl of SL) {
       for (const tp of TP) {
         if (tp <= sl) continue;
-        const config: TradingConfig = { capital: 10000, riskPerTrade: 3, maxPositions: 3, stopLossPct: sl, takeProfitPct: tp, trailingStop: true, trailingPct: 2, commissionPct: 0.1, slippagePct: 0.05, cooldownBars: 2, kellyFraction: 0.25, maxDrawdownLimit: 30, dailyLossLimit: 5 };
         try {
-          const bt = runBacktest(trimmed, config, strat, asset, indicators);
+          const bt = simpleBacktest(trimmed, strat, sl, tp);
           maxTrades = Math.max(maxTrades, bt.totalTrades);
-          if (bt.totalTrades < 1) continue; // lowered from 3 to 1
-          const score = bt.sharpeRatio * 0.4 + Math.min(bt.profitFactor, 5) * 0.3 + (bt.winRate / 100) * 0.3;
+          if (bt.totalTrades < 1) continue;
+          const score = bt.maxDrawdown !== 0
+            ? (bt.totalReturn / Math.abs(bt.maxDrawdown)) * (bt.winRate / 50)
+            : bt.totalReturn;
           if (score > bestScore) {
             bestScore = score;
-            best = { name: strat, sl, tp, trades: bt.totalTrades, winRate: Math.round(bt.winRate * 10) / 10, totalReturn: Math.round(bt.returnPct * 10) / 10, sharpe: Math.round(bt.sharpeRatio * 100) / 100, maxDD: Math.round(bt.maxDrawdown * 10) / 10, profitFactor: Math.round(Math.min(bt.profitFactor, 99) * 100) / 100, score: Math.round(score * 100) / 100 };
+            bestResult = bt;
+            bestSL = sl;
+            bestTP = tp;
           }
         } catch (e: any) {
-          console.warn(`[RND] Backtest failed ${strat} SL=${sl} TP=${tp}:`, e.message);
+          console.warn(`[RND] simpleBacktest failed ${strat.name} SL=${sl} TP=${tp}:`, e.message);
         }
       }
     }
-    if (best) {
-      best.grade = best.sharpe > 2 && best.winRate > 60 ? 'A' : best.sharpe > 1.5 && best.winRate > 55 ? 'B' : best.sharpe > 1 && best.winRate > 50 ? 'C' : best.sharpe > 0.5 ? 'D' : 'F';
-      results.push(best);
+
+    if (bestResult) {
+      const grade =
+        bestResult.totalReturn > 15 && bestResult.winRate > 55 && bestResult.sharpeRatio > 1 ? 'A' :
+        bestResult.totalReturn > 8 && bestResult.winRate > 50 ? 'B' :
+        bestResult.totalReturn > 3 && bestResult.winRate > 45 ? 'C' :
+        bestResult.totalReturn > 0 ? 'D' : 'F';
+
+      results.push({
+        name: strat.name,
+        type: strat.type,
+        grade,
+        totalReturn: bestResult.totalReturn,
+        totalTrades: bestResult.totalTrades,
+        // Aliases for legacy display fields
+        trades: bestResult.totalTrades,
+        winRate: bestResult.winRate,
+        maxDrawdown: bestResult.maxDrawdown,
+        maxDD: Math.abs(bestResult.maxDrawdown),
+        sharpeRatio: bestResult.sharpeRatio,
+        sharpe: bestResult.sharpeRatio,
+        profitFactor: bestResult.profitFactor,
+        avgWin: bestResult.avgWin,
+        avgLoss: bestResult.avgLoss,
+        optimalSL: Math.round(bestSL * 100),
+        optimalTP: Math.round(bestTP * 100),
+        sl: Math.round(bestSL * 100),
+        tp: Math.round(bestTP * 100),
+        score: Math.round(bestScore * 100) / 100,
+        recommendation: grade === 'A' ? 'STRONG_USE' : grade === 'B' ? 'USE' : grade === 'C' ? 'CAUTION' : grade === 'D' ? 'AVOID' : 'NEVER',
+      });
+      console.log(`[RND][STRAT] ${strat.name}: trades=${bestResult.totalTrades} return=${bestResult.totalReturn}% wr=${bestResult.winRate}% grade=${grade}`);
+    } else {
+      // Always include the strategy, even with 0 trades
+      results.push({
+        name: strat.name,
+        type: strat.type,
+        grade: 'F',
+        totalReturn: 0, totalTrades: 0, trades: 0,
+        winRate: 0, maxDrawdown: 0, maxDD: 0,
+        sharpeRatio: 0, sharpe: 0, profitFactor: 0,
+        avgWin: 0, avgLoss: 0,
+        optimalSL: 2, optimalTP: 4, sl: 2, tp: 4,
+        score: -999,
+        recommendation: 'NEVER — nessun trade generato',
+      });
+      console.log(`[RND][STRAT] ${strat.name}: NO TRADES (maxAttempted=${maxTrades})`);
     }
-    console.log(`[RND][STRAT] ${strat}: maxTrades=${maxTrades} best=${best ? `trades=${best.trades} return=${best.totalReturn}% grade=${best.grade}` : 'NO RESULT'}`);
   }
 
-  // ── Famous strategies (use their own simpleBacktest) ──
-  for (const fs of FAMOUS_STRATEGIES) {
-    try {
-      const r = fs.test(trimmed);
-      console.log(`[RND][FAMOUS] ${fs.name}: trades=${r.trades} wr=${r.winRate}% return=${r.totalReturn}% sharpe=${r.sharpe}`);
-      if (r.trades >= 1) { // lowered from 3 to 1
-        const score = r.sharpe * 0.5 + (r.winRate / 100) * 0.5;
-        results.push({ name: `${fs.name} (${fs.author})`, sl: 0, tp: 0, trades: r.trades, winRate: r.winRate, totalReturn: r.totalReturn, sharpe: r.sharpe, maxDD: 0, profitFactor: 0, score: Math.round(score * 100) / 100, grade: r.sharpe > 1.5 && r.winRate > 55 ? 'B' : r.sharpe > 1 ? 'C' : r.totalReturn > 0 ? 'D' : 'F' });
-      }
-    } catch (e: any) {
-      console.error(`[RND][FAMOUS] ${fs.name} CRASHED: ${e.message}`);
-    }
-  }
-
-  console.log(`[RND][STRAT] === DONE === ${results.length} strategies with results`);
-  return results.sort((a, b) => b.score - a.score);
+  // Sort by totalReturn descending
+  results.sort((a, b) => b.totalReturn - a.totalReturn);
+  console.log(`[RND][STRAT] === DONE === ${results.length} strategies tested`);
+  return results;
 }
 
 function generateReport(asset: string, tf: string, behavior: any, indicators: any[], patterns: any[], strategies: any[]) {
