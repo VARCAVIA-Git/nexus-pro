@@ -1,213 +1,205 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import type { KnowledgeEntry } from '@/lib/engine/rnd/knowledge-base';
-import type { TrainingResult } from '@/lib/engine/rnd/strategy-trainer';
-import { Database, RefreshCw, FlaskConical, BookOpen, Zap } from 'lucide-react';
+import { Database, RefreshCw, FlaskConical, Zap, Target } from 'lucide-react';
 
-const TABS = ['Overview', 'Training', 'Knowledge Base'] as const;
-type Tab = typeof TABS[number];
-
+const ASSETS = [
+  { symbol: 'BTC/USD', label: 'BTC' }, { symbol: 'ETH/USD', label: 'ETH' }, { symbol: 'SOL/USD', label: 'SOL' }, { symbol: 'LINK/USD', label: 'LINK' },
+  { symbol: 'AAPL', label: 'AAPL' }, { symbol: 'NVDA', label: 'NVDA' }, { symbol: 'TSLA', label: 'TSLA' }, { symbol: 'SPY', label: 'SPY' },
+];
+const TFS = ['5m', '15m', '1h', '4h', '1d'];
 const GRADE_COLORS: Record<string, string> = { A: 'bg-green-500/20 text-green-400', B: 'bg-blue-500/15 text-blue-400', C: 'bg-yellow-500/15 text-yellow-400', D: 'bg-orange-500/15 text-orange-400', F: 'bg-red-500/15 text-red-400' };
-const CONFIDENCE_COLORS: Record<string, string> = { low: 'bg-red-500/10 text-red-400', medium: 'bg-yellow-500/10 text-yellow-400', high: 'bg-green-500/10 text-green-400', very_high: 'bg-green-500/20 text-green-400' };
+
+type Phase = 'idle' | 'loading' | 'complete' | 'error';
 
 export default function RnDPage() {
-  const [tab, setTab] = useState<Tab>('Overview');
-  const [warehouse, setWarehouse] = useState<any>(null);
-  const [kbCount, setKbCount] = useState(0);
-  const [knowledge, setKnowledge] = useState<KnowledgeEntry[]>([]);
-  const [training, setTraining] = useState<TrainingResult[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [actionMsg, setActionMsg] = useState('');
-  const [actionLoading, setActionLoading] = useState(false);
-  const [kbFilter, setKbFilter] = useState('');
+  const [asset, setAsset] = useState('BTC/USD');
+  const [tf, setTf] = useState('1h');
+  const [tab, setTab] = useState<'analysis' | 'knowledge'>('analysis');
 
-  const fetchAll = async () => {
-    setLoading(true);
+  const [phase1, setPhase1] = useState<Phase>('idle');
+  const [phase2, setPhase2] = useState<Phase>('idle');
+  const [phase3, setPhase3] = useState<Phase>('idle');
+  const [phase4, setPhase4] = useState<Phase>('idle');
+
+  const [downloadResult, setDownloadResult] = useState<any>(null);
+  const [indicatorResult, setIndicatorResult] = useState<any[]>([]);
+  const [patternResult, setPatternResult] = useState<any>(null);
+  const [strategyResult, setStrategyResult] = useState<any[]>([]);
+  const [knowledge, setKnowledge] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch('/api/rnd?action=knowledge').then(r => r.ok ? r.json() : null).then(d => { if (d?.knowledge) setKnowledge(d.knowledge); }).catch(() => {});
+  }, []);
+
+  const anyLoading = phase1 === 'loading' || phase2 === 'loading' || phase3 === 'loading' || phase4 === 'loading';
+
+  const runFullAnalysis = async () => {
+    setPhase1('loading'); setPhase2('idle'); setPhase3('idle'); setPhase4('idle');
+    setDownloadResult(null); setIndicatorResult([]); setPatternResult(null); setStrategyResult([]);
+
     try {
-      const [sRes, kbRes, trRes] = await Promise.allSettled([
-        fetch('/api/rnd?action=status'), fetch('/api/rnd?action=knowledge'), fetch('/api/rnd?action=training-results'),
-      ]);
-      if (sRes.status === 'fulfilled' && sRes.value.ok) { const d = await sRes.value.json(); setWarehouse(d.warehouse); setKbCount(d.knowledgeEntries); }
-      if (kbRes.status === 'fulfilled' && kbRes.value.ok) { const d = await kbRes.value.json(); setKnowledge(d.knowledge ?? []); }
-      if (trRes.status === 'fulfilled' && trRes.value.ok) { const d = await trRes.value.json(); setTraining(d.results ?? []); }
-    } catch {}
-    setLoading(false);
+      const r1 = await fetch('/api/rnd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'download-history', asset, timeframe: tf }) });
+      const d1 = await r1.json();
+      setDownloadResult(d1);
+      setPhase1(d1.candles > 0 ? 'complete' : 'error');
+    } catch { setPhase1('error'); return; }
+
+    setPhase2('loading');
+    try {
+      await fetch('/api/rnd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'scan', assets: [asset] }) });
+      const ir = await fetch(`/api/rnd?action=indicators&asset=${encodeURIComponent(asset)}`);
+      if (ir.ok) { const id = await ir.json(); setIndicatorResult(id.indicators ?? []); }
+      setPhase2('complete');
+    } catch { setPhase2('error'); }
+
+    setPhase3('loading');
+    try {
+      const pr = await fetch(`/api/rnd?action=patterns&asset=${encodeURIComponent(asset)}`);
+      if (pr.ok) setPatternResult((await pr.json()).patterns);
+      setPhase3('complete');
+    } catch { setPhase3('error'); }
+
+    setPhase4('loading');
+    try {
+      for (const s of ['trend', 'momentum', 'combined_ai', 'reversion']) {
+        await fetch('/api/rnd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'train', asset, timeframe: tf, strategy: s }) }).catch(() => {});
+      }
+      const tr = await fetch('/api/rnd?action=training-results');
+      if (tr.ok) { const td = await tr.json(); setStrategyResult((td.results ?? []).filter((r: any) => r.asset === asset).sort((a: any, b: any) => b.score - a.score)); }
+      setPhase4('complete');
+    } catch { setPhase4('error'); }
+
+    const kbr = await fetch('/api/rnd?action=knowledge');
+    if (kbr.ok) { const d = await kbr.json(); setKnowledge(d.knowledge ?? []); }
   };
 
-  useEffect(() => { fetchAll(); }, []);
-
-  const runAction = async (action: string, label: string) => {
-    setActionLoading(true); setActionMsg(`${label}...`);
-    try {
-      const res = await fetch('/api/rnd', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action }) });
-      const d = await res.json();
-      setActionMsg(d.ok ? `${label} completato` : `Errore: ${d.error ?? 'sconosciuto'}`);
-      await fetchAll();
-    } catch (e: any) { setActionMsg(`Errore: ${e.message}`); }
-    setActionLoading(false);
-    setTimeout(() => setActionMsg(''), 5000);
-  };
-
-  const filteredKb = knowledge.filter(k => !kbFilter || k.asset.toLowerCase().includes(kbFilter.toLowerCase()) || k.category.includes(kbFilter.toLowerCase()));
-
-  // Group training results into a matrix
-  const trainingMatrix: Record<string, Record<string, TrainingResult>> = {};
-  for (const t of training) {
-    if (!trainingMatrix[t.asset]) trainingMatrix[t.asset] = {};
-    const existing = trainingMatrix[t.asset][t.timeframe];
-    if (!existing || t.score > existing.score) trainingMatrix[t.asset][t.timeframe] = t;
-  }
-  const allTFs = [...new Set(training.map(t => t.timeframe))].sort();
-
-  if (loading) return <div className="flex items-center justify-center py-20"><RefreshCw size={24} className="animate-spin text-n-dim" /></div>;
+  const PI = ({ p, label }: { p: Phase; label: string }) => (
+    <div className={`flex items-center gap-1.5 text-xs ${p === 'complete' ? 'text-n-green' : p === 'loading' ? 'text-n-yellow' : p === 'error' ? 'text-n-red' : 'text-n-dim'}`}>
+      {p === 'loading' ? <RefreshCw size={11} className="animate-spin" /> : p === 'complete' ? '✓' : p === 'error' ? '✗' : '○'} {label}
+    </div>
+  );
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h1 className="text-n-text">R&D Lab</h1>
-        <div className="flex gap-2">
-          <button onClick={() => runAction('download-all', 'Download dati')} disabled={actionLoading} className="flex items-center gap-1.5 rounded-xl border border-n-border px-3 py-2 text-xs text-n-dim hover:text-n-text min-h-[40px] disabled:opacity-50">
-            <Database size={12} className={actionLoading ? 'animate-spin' : ''} /> Aggiorna Dati
-          </button>
-          <button onClick={() => runAction('scan', 'Scansione')} disabled={actionLoading} className="flex items-center gap-1.5 rounded-xl border border-n-border px-3 py-2 text-xs text-n-dim hover:text-n-text min-h-[40px] disabled:opacity-50">
-            <FlaskConical size={12} /> Scansione
-          </button>
-          <button onClick={() => runAction('train-all', 'Training')} disabled={actionLoading} className="flex items-center gap-1.5 rounded-xl bg-n-text px-3 py-2 text-xs font-medium text-n-bg min-h-[40px] disabled:opacity-50">
-            <Zap size={12} /> Training
-          </button>
-        </div>
-      </div>
+      <h1 className="text-n-text">R&D Lab</h1>
 
-      {actionMsg && <div className={`rounded-xl px-4 py-2.5 text-sm ${actionMsg.includes('Errore') ? 'bg-red-500/10 text-red-400' : 'bg-green-500/10 text-green-400'}`}>{actionMsg}</div>}
-
-      {/* Tabs */}
       <div className="flex gap-1 rounded-xl border border-n-border p-1">
-        {TABS.map(t => <button key={t} onClick={() => setTab(t)} className={`flex-1 rounded-lg py-2 text-xs font-medium transition-all ${tab === t ? 'bg-n-card text-n-text' : 'text-n-dim hover:text-n-text'}`}>{t}</button>)}
+        <button onClick={() => setTab('analysis')} className={`flex-1 rounded-lg py-2 text-xs font-medium ${tab === 'analysis' ? 'bg-n-card text-n-text' : 'text-n-dim'}`}>Analisi Profonda</button>
+        <button onClick={() => setTab('knowledge')} className={`flex-1 rounded-lg py-2 text-xs font-medium ${tab === 'knowledge' ? 'bg-n-card text-n-text' : 'text-n-dim'}`}>Knowledge Base ({knowledge.length})</button>
       </div>
 
-      {/* TAB: Overview */}
-      {tab === 'Overview' && (
+      {tab === 'analysis' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-3 gap-3">
-            <div className="rounded-xl border border-n-border bg-n-card p-4 text-center"><p className="label">Dataset</p><p className="mt-1 font-mono text-2xl font-medium text-n-text">{warehouse?.items?.length ?? 0}</p></div>
-            <div className="rounded-xl border border-n-border bg-n-card p-4 text-center"><p className="label">Candele</p><p className="mt-1 font-mono text-2xl font-medium text-n-text">{warehouse?.items?.reduce((s: number, i: any) => s + (i.candles ?? 0), 0) ?? 0}</p></div>
-            <div className="rounded-xl border border-n-border bg-n-card p-4 text-center"><p className="label">Knowledge</p><p className="mt-1 font-mono text-2xl font-medium text-n-text">{kbCount}</p></div>
+          <div className="rounded-xl border border-n-border bg-n-card p-5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <p className="label mb-1.5">Asset</p>
+                <select value={asset} onChange={e => setAsset(e.target.value)} className="w-full rounded-xl border border-n-border bg-n-input px-3 py-2.5 text-sm text-n-text min-h-[44px]">
+                  {ASSETS.map(a => <option key={a.symbol} value={a.symbol}>{a.label}</option>)}
+                </select>
+              </div>
+              <div>
+                <p className="label mb-1.5">Timeframe</p>
+                <select value={tf} onChange={e => setTf(e.target.value)} className="w-full rounded-xl border border-n-border bg-n-input px-3 py-2.5 text-sm text-n-text min-h-[44px]">
+                  {TFS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button onClick={runFullAnalysis} disabled={anyLoading} className="w-full rounded-xl bg-n-text py-2.5 text-sm font-medium text-n-bg min-h-[44px] disabled:opacity-50 flex items-center justify-center gap-2">
+                  {anyLoading ? <RefreshCw size={14} className="animate-spin" /> : <FlaskConical size={14} />} {anyLoading ? 'Analisi in corso...' : 'Analisi Completa'}
+                </button>
+              </div>
+            </div>
           </div>
 
-          {knowledge.length > 0 && (
-            <div className="rounded-xl border border-n-border bg-n-card p-4">
-              <h3 className="label mb-3">Ultime scoperte</h3>
-              <div className="space-y-1.5">
-                {knowledge.slice(0, 8).map(k => (
-                  <div key={k.id} className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-n-dim shrink-0">{k.asset}</span>
-                      <span className="text-n-text-s truncate">{k.finding.slice(0, 60)}</span>
-                    </div>
-                    <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-medium ${CONFIDENCE_COLORS[k.confidence] ?? ''}`}>{(k.winRate * 100).toFixed(0)}%</span>
-                  </div>
-                ))}
+          {phase1 !== 'idle' && (
+            <div className="rounded-xl border border-n-border bg-n-card p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <PI p={phase1} label={`Download (${downloadResult?.candles ?? '?'})`} />
+                <PI p={phase2} label={`Indicatori (${indicatorResult.length})`} />
+                <PI p={phase3} label="Pattern" />
+                <PI p={phase4} label={`Strategie (${strategyResult.length})`} />
               </div>
-            </div>
-          )}
 
-          {knowledge.length === 0 && (
-            <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center">
-              <FlaskConical size={24} className="mx-auto text-n-dim mb-2" />
-              <p className="text-sm text-n-dim">Clicca "Aggiorna Dati" poi "Scansione" per popolare la Knowledge Base</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB: Training */}
-      {tab === 'Training' && (
-        <div className="space-y-4">
-          {Object.keys(trainingMatrix).length === 0 ? (
-            <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center">
-              <Zap size={24} className="mx-auto text-n-dim mb-2" />
-              <p className="text-sm text-n-dim">Clicca "Training" per testare tutte le combinazioni asset × timeframe × strategia</p>
-            </div>
-          ) : (
-            <div className="rounded-xl border border-n-border bg-n-card overflow-x-auto">
-              <table className="w-full text-left min-w-[500px]">
-                <thead>
-                  <tr className="border-b border-n-border">
-                    <th className="px-3 py-2.5 text-[10px] font-medium text-n-dim">Asset</th>
-                    {allTFs.map(tf => <th key={tf} className="px-3 py-2.5 text-[10px] font-medium text-n-dim text-center">{tf}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {Object.entries(trainingMatrix).map(([asset, tfs]) => (
-                    <tr key={asset} className="border-b border-n-border/50">
-                      <td className="px-3 py-2 font-mono text-xs font-medium text-n-text">{asset}</td>
-                      {allTFs.map(tf => {
-                        const r = tfs[tf];
-                        return (
-                          <td key={tf} className="px-3 py-2 text-center">
-                            {r ? (
-                              <span className={`inline-block rounded px-2 py-0.5 text-[10px] font-bold ${GRADE_COLORS[r.grade] ?? ''}`} title={`${r.strategy} — WR ${r.metrics.winRate}% — Sharpe ${r.metrics.sharpe}`}>
-                                {r.grade}-{r.strategy.slice(0, 4)}
-                              </span>
-                            ) : <span className="text-[10px] text-n-dim">—</span>}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {training.filter(t => t.grade === 'A' || t.grade === 'B').length > 0 && (
-            <div className="rounded-xl border border-n-border bg-n-card p-4">
-              <h3 className="label mb-3">Top Combinazioni</h3>
-              <div className="space-y-1.5">
-                {training.filter(t => t.grade === 'A' || t.grade === 'B').slice(0, 10).map((t, i) => (
-                  <div key={i} className="flex items-center justify-between text-xs">
-                    <span className="text-n-text">{t.asset} × {t.timeframe} × {t.strategy}</span>
-                    <div className="flex items-center gap-2">
-                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${GRADE_COLORS[t.grade]}`}>{t.grade}</span>
-                      <span className="font-mono text-n-dim">WR {t.metrics.winRate}% · S {t.metrics.sharpe}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB: Knowledge Base */}
-      {tab === 'Knowledge Base' && (
-        <div className="space-y-3">
-          <input type="text" value={kbFilter} onChange={e => setKbFilter(e.target.value)} placeholder="Filtra per asset o categoria..." className="w-full rounded-xl border border-n-border bg-n-card px-4 py-2.5 text-sm text-n-text placeholder:text-n-dim focus:outline-none focus:border-n-accent" />
-
-          {filteredKb.length === 0 ? (
-            <p className="text-sm text-n-dim text-center py-8">Nessuna entry. Avvia "Scansione" per popolare.</p>
-          ) : (
-            <div className="space-y-1.5">
-              {filteredKb.slice(0, 40).map(k => (
-                <div key={k.id} className="flex items-start gap-3 rounded-xl border border-n-border bg-n-card p-3">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap mb-0.5">
-                      <span className="font-mono text-[10px] text-n-dim">{k.asset}</span>
-                      <span className={`rounded px-1.5 py-0.5 text-[8px] font-medium ${CONFIDENCE_COLORS[k.confidence] ?? ''}`}>{k.confidence}</span>
-                      {k.actionable && <span className="rounded bg-green-500/10 px-1 py-0.5 text-[8px] font-medium text-green-400">ACTIONABLE</span>}
-                    </div>
-                    <p className="text-[11px] text-n-text leading-snug">{k.finding}</p>
-                    <p className="text-[9px] text-n-dim mt-0.5">{k.recommendation}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`font-mono text-xs font-medium ${k.winRate > 0.6 ? 'text-n-green' : k.winRate < 0.4 ? 'text-n-red' : 'text-n-text'}`}>{(k.winRate * 100).toFixed(0)}%</p>
-                    <p className="text-[8px] text-n-dim">{k.sampleSize}n</p>
+              {indicatorResult.length > 0 && (
+                <div>
+                  <p className="label mb-2">Top indicatori per {asset}</p>
+                  <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4">
+                    {indicatorResult.sort((a: any, b: any) => b.winRate1d - a.winRate1d).slice(0, 8).map((ind: any, i: number) => (
+                      <div key={i} className="rounded-lg bg-n-bg/50 p-2.5">
+                        <p className="text-[10px] text-n-dim truncate">{ind.condition}</p>
+                        <p className={`font-mono text-sm font-medium ${ind.winRate1d > 0.6 ? 'text-n-green' : ind.winRate1d < 0.4 ? 'text-n-red' : 'text-n-text'}`}>{(ind.winRate1d * 100).toFixed(0)}%</p>
+                        <p className="text-[9px] text-n-dim">{ind.sampleSize}n · avg {(ind.avgReturn1d * 100).toFixed(2)}%</p>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
+
+              {patternResult?.byPattern && Object.keys(patternResult.byPattern).length > 0 && (
+                <div>
+                  <p className="label mb-2">Pattern su {asset}</p>
+                  <div className="space-y-1">
+                    {Object.entries(patternResult.byPattern).sort(([,a]: any, [,b]: any) => b.winRate1d - a.winRate1d).slice(0, 6).map(([name, stats]: [string, any]) => (
+                      <div key={name} className="flex items-center justify-between text-xs">
+                        <span className="text-n-text">{name.replace(/_/g, ' ')}</span>
+                        <span className={`font-mono ${stats.winRate1d > 0.6 ? 'text-n-green' : 'text-n-text'}`}>{(stats.winRate1d * 100).toFixed(0)}% ({stats.occurrences}x)</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {strategyResult.length > 0 && (
+                <div>
+                  <p className="label mb-2">Strategie ranked</p>
+                  {strategyResult.slice(0, 6).map((s: any, i: number) => (
+                    <div key={i} className="flex items-center justify-between rounded-lg bg-n-bg/50 px-3 py-2 mb-1">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-[10px] text-n-dim">{i + 1}.</span>
+                        <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${GRADE_COLORS[s.grade] ?? ''}`}>{s.grade}</span>
+                        <span className="text-xs text-n-text">{s.strategy}</span>
+                      </div>
+                      <span className="font-mono text-[10px] text-n-dim">WR {s.metrics.winRate}% · S {s.metrics.sharpe} · SL {s.bestParams.stopLoss}%</span>
+                    </div>
+                  ))}
+
+                  {strategyResult.filter((s: any) => s.grade === 'A' || s.grade === 'B').length > 0 && (
+                    <div className="mt-3 rounded-xl border border-green-500/20 bg-green-500/5 p-3">
+                      <p className="text-xs text-n-green font-medium mb-1">Consigliate per {asset}:</p>
+                      {strategyResult.filter((s: any) => s.grade === 'A' || s.grade === 'B').slice(0, 2).map((s: any, i: number) => (
+                        <p key={i} className="text-xs text-n-text">→ {s.strategy} — SL {s.bestParams.stopLoss}% · TP {s.bestParams.takeProfit}%</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
+
+          {phase1 === 'idle' && (
+            <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center">
+              <FlaskConical size={28} className="mx-auto text-n-dim mb-2" />
+              <p className="text-sm text-n-dim">Seleziona asset e timeframe, poi clicca "Analisi Completa"</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tab === 'knowledge' && (
+        <div className="space-y-2">
+          {knowledge.length === 0 ? (
+            <p className="text-sm text-n-dim text-center py-8">Esegui un'analisi per popolare la Knowledge Base</p>
+          ) : knowledge.slice(0, 30).map((k: any) => (
+            <div key={k.id} className="flex items-start gap-3 rounded-xl border border-n-border bg-n-card p-3">
+              <div className="flex-1 min-w-0">
+                <span className="font-mono text-[10px] text-n-dim">{k.asset}</span>
+                <p className="text-[11px] text-n-text leading-snug">{k.finding}</p>
+              </div>
+              <span className={`font-mono text-xs font-medium shrink-0 ${k.winRate > 0.6 ? 'text-n-green' : 'text-n-text'}`}>{(k.winRate * 100).toFixed(0)}%</span>
+            </div>
+          ))}
         </div>
       )}
     </div>

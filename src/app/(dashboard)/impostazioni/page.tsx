@@ -56,6 +56,59 @@ function InputField({ label, value, onChange, type = 'text', placeholder }: {
   );
 }
 
+const ALL_TICKER_ASSETS = {
+  crypto: ['BTC', 'ETH', 'SOL', 'LINK', 'ADA', 'DOT', 'AVAX', 'MATIC', 'DOGE', 'XRP'],
+  stocks: ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD'],
+};
+const DEFAULT_TICKER = ['BTC', 'ETH', 'SOL', 'AAPL', 'NVDA', 'SPY', 'QQQ'];
+
+function TickerSettings() {
+  const [selected, setSelected] = useState<Set<string>>(new Set(DEFAULT_TICKER));
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/settings?section=ticker').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.assets && Array.isArray(d.assets)) setSelected(new Set(d.assets));
+    }).catch(() => {});
+  }, []);
+
+  const toggle = (a: string) => {
+    const s = new Set(selected);
+    if (s.has(a)) s.delete(a); else s.add(a);
+    setSelected(s);
+  };
+
+  const save = async () => {
+    setSaving(true);
+    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets: Array.from(selected) }) }).catch(() => {});
+    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+  };
+
+  return (
+    <div className="rounded-xl border border-n-border bg-n-card p-5 space-y-3">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-medium text-n-text">Ticker Wall Street</h3>
+        <button onClick={save} disabled={saving} className="rounded-lg bg-n-text px-3 py-1.5 text-xs font-medium text-n-bg min-h-[36px] disabled:opacity-50">
+          {saved ? '✓ Salvato' : saving ? '...' : 'Salva'}
+        </button>
+      </div>
+      <p className="text-xs text-n-dim">Crypto</p>
+      <div className="flex flex-wrap gap-1.5">
+        {ALL_TICKER_ASSETS.crypto.map(a => (
+          <button key={a} onClick={() => toggle(a)} className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${selected.has(a) ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-n-border text-n-dim'}`}>{a}</button>
+        ))}
+      </div>
+      <p className="text-xs text-n-dim">Stocks</p>
+      <div className="flex flex-wrap gap-1.5">
+        {ALL_TICKER_ASSETS.stocks.map(a => (
+          <button key={a} onClick={() => toggle(a)} className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition-all min-h-[36px] ${selected.has(a) ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-n-border text-n-dim'}`}>{a}</button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function ImpostazioniPage() {
   const router = useRouter();
 
@@ -272,15 +325,7 @@ export default function ImpostazioniPage() {
       </div>
 
       {/* Ticker assets */}
-      <div className="rounded-xl border border-n-border bg-n-card p-5">
-        <h3 className="text-sm font-medium text-n-text mb-3">Ticker Wall Street</h3>
-        <p className="text-xs text-n-dim mb-3">Seleziona gli asset da mostrare nel ticker in alto.</p>
-        <div className="flex flex-wrap gap-2">
-          {['BTC', 'ETH', 'SOL', 'LINK', 'AVAX', 'DOT', 'AAPL', 'NVDA', 'TSLA', 'AMZN', 'MSFT', 'META', 'AMD', 'SPY', 'QQQ'].map(a => (
-            <button key={a} className="rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text hover:border-n-accent transition-all min-h-[36px]">{a}</button>
-          ))}
-        </div>
-      </div>
+      <TickerSettings />
 
       {/* Account section */}
       <div className="rounded-xl border border-red-500/10 bg-red-500/5 p-5 space-y-3">

@@ -51,10 +51,33 @@ export async function generateMasterSignal(asset: string): Promise<MasterSignal>
   if (calendar.blocked) reasoning.push(`BLOCKED: ${calendar.reason}`);
   else if (calendar.reducedSize) reasoning.push(`Caution: ${calendar.reason}`);
 
-  // 4. Composite score with adaptive weights
-  let score = mtf.compositeScore * weights.mtfWeight
-            + newsScore * weights.newsWeight
-            + 50 * weights.calendarWeight;
+  // 4. Composite score — only include components with real data
+  // News and calendar default to 50 (neutral) which drags the score down
+  // Only include them if they have meaningful data
+  let totalWeight = 0;
+  let score = 0;
+
+  // MTF always included
+  score += mtf.compositeScore * weights.mtfWeight;
+  totalWeight += weights.mtfWeight;
+
+  // News only if we have actual articles with sentiment != 0
+  const hasRealNews = news.articles > 0 && Math.abs(news.score) > 5;
+  if (hasRealNews) {
+    score += newsScore * weights.newsWeight;
+    totalWeight += weights.newsWeight;
+  }
+
+  // Calendar only if there's a nearby event
+  const hasCalendarEvent = calendar.nearbyEvents.length > 0;
+  if (hasCalendarEvent) {
+    const calScore = calendar.blocked ? 30 : calendar.reducedSize ? 40 : 50;
+    score += calScore * weights.calendarWeight;
+    totalWeight += weights.calendarWeight;
+  }
+
+  // Normalize to get the actual weighted score
+  score = totalWeight > 0 ? score / totalWeight : 50;
 
   // Timing bonus/penalty from learning
   if (isAdaptive) {

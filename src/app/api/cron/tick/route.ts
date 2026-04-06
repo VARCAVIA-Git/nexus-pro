@@ -127,8 +127,10 @@ export async function GET(request: Request) {
         if (Date.now() - startTime > 50000) break; // Time guard
 
         try {
+          console.log(`[TICK][${config.name}] Fetching ${symbol}...`);
           const candles = await fetchCandles(symbol);
-          if (candles.length < 60) continue;
+          console.log(`[TICK][${config.name}] ${symbol}: ${candles.length} candles, price=$${candles[candles.length-1]?.close?.toFixed(2) ?? '?'}`);
+          if (candles.length < 60) { console.log(`[TICK][${config.name}] ${symbol}: SKIP — insufficient data`); continue; }
           if (candles.every(c => c.volume === 0)) candles.forEach((c, i) => { c.volume = Math.round(1e6 * (0.5 + Math.sin(i / 10) * 0.3 + Math.random() * 0.4)); });
 
           const indicators = computeIndicators(candles);
@@ -272,6 +274,9 @@ export async function GET(request: Request) {
       results.push({ botId: config.id, name: config.name, ticked: false, signals: 0, error: err.message });
     }
   }
+
+  // Save debug info
+  await redisSet('nexus:debug:lastTick', { time: new Date().toISOString(), botsProcessed: results.length, results }, 3600).catch(() => {});
 
   return NextResponse.json({
     processed: results.length,
