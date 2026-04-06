@@ -269,20 +269,21 @@ export default function RnDPage() {
 
       {/* Phase 5: Strategies */}
       {strat.length > 0 && (
-        <div className="rounded-xl border border-n-border bg-n-card p-5">
-          <h3 className="label mb-3 flex items-center gap-2"><Zap size={14} /> Strategie ranked ({strat.length})</h3>
+        <div className="rounded-xl border border-n-border bg-n-card p-5 space-y-4">
+          <h3 className="label flex items-center gap-2"><Zap size={14} /> Strategie ranked per expectancy ({strat.length})</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[750px]">
+            <table className="w-full text-left text-xs min-w-[820px]">
               <thead><tr className="border-b border-n-border">
                 <th className="pb-2 text-[9px] text-n-dim">#</th>
                 <th className="pb-2 text-[9px] text-n-dim">Strategia</th>
                 <th className="pb-2 text-[9px] text-n-dim text-center">Grade</th>
+                <th className="pb-2 text-[9px] text-n-dim text-right">Expectancy</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">Return</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">Trades</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">WR</th>
-                <th className="pb-2 text-[9px] text-n-dim text-right">MaxDD</th>
-                <th className="pb-2 text-[9px] text-n-dim text-right">Sharpe</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">PF</th>
+                <th className="pb-2 text-[9px] text-n-dim text-right">Sharpe</th>
+                <th className="pb-2 text-[9px] text-n-dim text-right">MaxDD</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">SL/TP</th>
               </tr></thead>
               <tbody>{strat.map((s: any, i: number) => (
@@ -290,17 +291,41 @@ export default function RnDPage() {
                   <td className="py-2 text-n-dim">{i + 1}</td>
                   <td className="py-2 text-n-text font-medium">{s.name}</td>
                   <td className="py-2 text-center">{s.grade && <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${GC[s.grade] ?? ''}`}>{s.grade}</span>}</td>
-                  <td className={`py-2 text-right font-mono font-bold ${s.totalReturn > 0 ? 'text-n-green' : 'text-n-red'}`}>{s.totalReturn > 0 ? '+' : ''}{s.totalReturn}%</td>
+                  <td className={`py-2 text-right font-mono font-bold ${s.expectancy > 0.1 ? 'text-n-green' : s.expectancy > 0 ? 'text-n-text' : 'text-n-red'}`}>{s.expectancy > 0 ? '+' : ''}{s.expectancy}%</td>
+                  <td className={`py-2 text-right font-mono ${s.totalReturn > 0 ? 'text-n-green' : 'text-n-red'}`}>{s.totalReturn > 0 ? '+' : ''}{s.totalReturn}%</td>
                   <td className="py-2 text-right font-mono text-n-dim">{s.trades}</td>
                   <td className={`py-2 text-right font-mono ${s.winRate > 55 ? 'text-n-green' : s.winRate > 45 ? 'text-n-text' : 'text-n-red'}`}>{s.winRate}%</td>
-                  <td className="py-2 text-right font-mono text-n-red">{s.maxDD ? `-${s.maxDD}%` : '—'}</td>
+                  <td className={`py-2 text-right font-mono ${s.profitFactor > 1.5 ? 'text-n-green' : s.profitFactor > 1 ? 'text-n-text' : 'text-n-dim'}`}>{s.profitFactor || '—'}</td>
                   <td className={`py-2 text-right font-mono ${s.sharpe > 1 ? 'text-n-green' : 'text-n-dim'}`}>{s.sharpe}</td>
-                  <td className={`py-2 text-right font-mono ${s.profitFactor > 1.5 ? 'text-n-green' : 'text-n-dim'}`}>{s.profitFactor || '—'}</td>
+                  <td className="py-2 text-right font-mono text-n-red">{s.maxDD ? `-${s.maxDD}%` : '—'}</td>
                   <td className="py-2 text-right font-mono text-n-dim">{s.sl > 0 ? `${s.sl}/${s.tp}%` : '—'}</td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
+
+          {/* Per-regime breakdown for top 3 strategies */}
+          {strat.slice(0, 3).filter((s: any) => s.byRegime?.length > 0).map((s: any, i: number) => (
+            <div key={i} className="rounded-lg bg-n-bg/30 p-3">
+              <p className="text-[11px] text-n-text font-medium mb-1.5">Performance per regime — {s.name}</p>
+              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4">
+                {s.byRegime.map((r: any, j: number) => (
+                  <div key={j} className={`rounded p-1.5 ${r.expectancy > 0.1 ? 'bg-green-500/10' : r.expectancy > 0 ? 'bg-n-bg/50' : 'bg-red-500/10'}`}>
+                    <p className="text-[9px] text-n-dim">{r.regime}</p>
+                    <p className={`text-[10px] font-mono font-bold ${r.expectancy > 0 ? 'text-n-green' : 'text-n-red'}`}>{r.winRate}% WR · {r.expectancy > 0 ? '+' : ''}{r.expectancy}%</p>
+                    <p className="text-[8px] text-n-dim">{r.trades} trade</p>
+                  </div>
+                ))}
+              </div>
+              {s.bestRegime && s.worstRegime && s.bestRegime !== s.worstRegime && (
+                <p className="text-[9px] text-n-dim mt-1.5">
+                  <span className="text-n-green">★ Migliore: {s.bestRegime}</span>
+                  {' · '}
+                  <span className="text-n-red">✗ Peggiore: {s.worstRegime}</span>
+                </p>
+              )}
+            </div>
+          ))}
         </div>
       )}
 

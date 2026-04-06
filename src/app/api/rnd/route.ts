@@ -59,38 +59,56 @@ function analyzeIndicators(candles: OHLCV[], tf: string) {
   const lookAhead = tf === '1d' ? 1 : tf === '4h' ? 6 : tf === '1h' ? 24 : 96;
   const results: { name: string; condition: string; signals: number; wins: number; losses: number; accuracy: number; avgReturn: number }[] = [];
 
-  const conditions: [string, string, (i: number) => boolean][] = [
-    ['RSI', 'Oversold (<30)', (i) => ind.rsi[i] < 30],
-    ['RSI', 'Overbought (>70)', (i) => ind.rsi[i] > 70],
-    ['MACD', 'Cross Up', (i) => ind.macd.histogram[i] > 0 && ind.macd.histogram[i - 1] <= 0],
-    ['MACD', 'Cross Down', (i) => ind.macd.histogram[i] < 0 && ind.macd.histogram[i - 1] >= 0],
-    ['Bollinger', 'Lower Touch', (i) => ind.bollinger.lower[i] !== null && candles[i].close <= (ind.bollinger.lower[i] as number) * 1.005],
-    ['Bollinger', 'Upper Touch', (i) => ind.bollinger.upper[i] !== null && candles[i].close >= (ind.bollinger.upper[i] as number) * 0.995],
-    ['Bollinger', 'Squeeze', (i) => ind.bollinger.squeeze[i]],
-    ['ADX', 'Strong Trend (>25)', (i) => ind.adx[i] > 25],
-    ['ADX', 'No Trend (<15)', (i) => ind.adx[i] < 15],
-    ['Stochastic', 'Oversold (<20)', (i) => ind.stochastic.k[i] < 20],
-    ['Stochastic', 'Overbought (>80)', (i) => ind.stochastic.k[i] > 80],
-    ['EMA', 'Bullish Cross (EMA9>EMA21)', (i) => ind.ema9[i] > ind.ema21[i] && ind.ema9[i - 1] <= ind.ema21[i - 1]],
-    ['Volume', 'Spike (>1.5x avg)', (i) => ind.volume.spike[i]],
-    ['Combo', 'RSI<30 + BB Lower', (i) => ind.rsi[i] < 30 && ind.bollinger.lower[i] !== null && candles[i].close <= (ind.bollinger.lower[i] as number) * 1.01],
-    ['Combo', 'MACD Up + ADX>25', (i) => ind.macd.histogram[i] > 0 && ind.macd.histogram[i - 1] <= 0 && ind.adx[i] > 25],
-    ['Combo', 'EMA Bullish + Vol Spike', (i) => ind.ema9[i] > ind.ema21[i] && ind.volume.spike[i]],
+  // direction: 'BUY' | 'SELL' to know which side to check
+  const conditions: { name: string; cond: string; dir: 'BUY' | 'SELL'; check: (i: number) => boolean }[] = [
+    { name: 'RSI', cond: 'Oversold (<30)', dir: 'BUY', check: (i) => ind.rsi[i] < 30 },
+    { name: 'RSI', cond: 'Overbought (>70)', dir: 'SELL', check: (i) => ind.rsi[i] > 70 },
+    { name: 'MACD', cond: 'Cross Up', dir: 'BUY', check: (i) => i > 0 && ind.macd.histogram[i] > 0 && ind.macd.histogram[i - 1] <= 0 },
+    { name: 'MACD', cond: 'Cross Down', dir: 'SELL', check: (i) => i > 0 && ind.macd.histogram[i] < 0 && ind.macd.histogram[i - 1] >= 0 },
+    { name: 'Bollinger', cond: 'Lower Touch', dir: 'BUY', check: (i) => ind.bollinger.lower[i] !== null && candles[i].close <= (ind.bollinger.lower[i] as number) * 1.005 },
+    { name: 'Bollinger', cond: 'Upper Touch', dir: 'SELL', check: (i) => ind.bollinger.upper[i] !== null && candles[i].close >= (ind.bollinger.upper[i] as number) * 0.995 },
+    { name: 'Bollinger', cond: 'Squeeze', dir: 'BUY', check: (i) => ind.bollinger.squeeze[i] },
+    { name: 'ADX', cond: 'Strong Trend (>25)', dir: 'BUY', check: (i) => ind.adx[i] > 25 && ind.ema9[i] > ind.ema21[i] },
+    { name: 'Stochastic', cond: 'Oversold (<20)', dir: 'BUY', check: (i) => ind.stochastic.k[i] < 20 },
+    { name: 'Stochastic', cond: 'Overbought (>80)', dir: 'SELL', check: (i) => ind.stochastic.k[i] > 80 },
+    { name: 'EMA', cond: 'Bullish Cross (EMA9>EMA21)', dir: 'BUY', check: (i) => i > 0 && ind.ema9[i] > ind.ema21[i] && ind.ema9[i - 1] <= ind.ema21[i - 1] },
+    { name: 'Volume', cond: 'Spike (>1.5x avg)', dir: 'BUY', check: (i) => ind.volume.spike[i] && candles[i].close > candles[i].open },
+    // Advanced combos
+    { name: 'Combo', cond: 'Oversold Reversal (RSI<35+BB Lower+Stoch<25)', dir: 'BUY', check: (i) => ind.rsi[i] < 35 && ind.bollinger.lower[i] !== null && candles[i].close <= (ind.bollinger.lower[i] as number) * 1.01 && ind.stochastic.k[i] < 25 },
+    { name: 'Combo', cond: 'Trend Confirmation (EMA9>21+MACD+ADX>25)', dir: 'BUY', check: (i) => ind.ema9[i] > ind.ema21[i] && ind.macd.histogram[i] > 0 && ind.adx[i] > 25 },
+    { name: 'Combo', cond: 'Squeeze Breakout (BB expansion+Close>Upper)', dir: 'BUY', check: (i) => i > 1 && ind.bollinger.squeeze[i - 1] && !ind.bollinger.squeeze[i] && ind.bollinger.upper[i] !== null && candles[i].close > (ind.bollinger.upper[i] as number) * 0.995 },
+    { name: 'Combo', cond: 'Volume Climax Reversal (Vol>2x+RSI<30+Red)', dir: 'BUY', check: (i) => ind.volume.spike[i] && ind.rsi[i] < 30 && candles[i].close < candles[i].open },
+    { name: 'Combo', cond: 'MACD Cross + ADX Strong', dir: 'BUY', check: (i) => i > 0 && ind.macd.histogram[i] > 0 && ind.macd.histogram[i - 1] <= 0 && ind.adx[i] > 25 },
+    { name: 'Combo', cond: 'EMA Bullish + Vol Spike', dir: 'BUY', check: (i) => ind.ema9[i] > ind.ema21[i] && ind.volume.spike[i] },
   ];
 
-  for (const [name, cond, check] of conditions) {
+  for (const { name, cond, dir, check } of conditions) {
     let signals = 0, wins = 0, losses = 0, totalRet = 0;
     for (let i = 50; i < candles.length - lookAhead; i++) {
       try {
-        if (check(i)) {
-          signals++;
-          const futureClose = candles[Math.min(i + lookAhead, candles.length - 1)].close;
-          const ret = (futureClose - candles[i].close) / candles[i].close;
-          totalRet += ret;
-          const isBuySignal = cond.includes('Oversold') || cond.includes('Lower') || cond.includes('Bullish') || cond.includes('Cross Up') || cond.includes('Squeeze') || cond.includes('Spike') || cond.includes('Strong');
-          if (isBuySignal) { if (ret > 0.003) wins++; else if (ret < -0.003) losses++; }
-          else { if (ret < -0.003) wins++; else if (ret > 0.003) losses++; }
+        if (!check(i)) continue;
+        signals++;
+
+        // Adaptive target = 0.5 × ATR (not fixed)
+        const atr = ind.atr[i] ?? 0;
+        const targetPct = atr > 0 ? Math.max(0.003, (atr * 0.5) / candles[i].close) : 0.005;
+
+        // Look ahead for best/worst PnL in the direction
+        let bestPnl = 0, worstPnl = 0;
+        for (let j = 1; j <= lookAhead && i + j < candles.length; j++) {
+          const fwd = candles[i + j].close;
+          const pnl = dir === 'BUY' ? (fwd - candles[i].close) / candles[i].close : (candles[i].close - fwd) / candles[i].close;
+          if (pnl > bestPnl) bestPnl = pnl;
+          if (pnl < worstPnl) worstPnl = pnl;
         }
+
+        // Final return at end of lookAhead window
+        const futureClose = candles[Math.min(i + lookAhead, candles.length - 1)].close;
+        const finalRet = dir === 'BUY' ? (futureClose - candles[i].close) / candles[i].close : (candles[i].close - futureClose) / candles[i].close;
+        totalRet += finalRet;
+
+        if (bestPnl >= targetPct) wins++;
+        else if (worstPnl <= -targetPct) losses++;
       } catch {}
     }
     if (signals >= 3) {
@@ -169,15 +187,35 @@ function testStrategies(candles: OHLCV[], asset: string) {
     console.log(`[RND][DIAG] ${s.name} (${s.type}): ${buys}buy ${sells}sell in ${trimmed.length - 50} bars`);
   }
 
-  // ── Grid search per strategy ──
-  const SL = [0.01, 0.02, 0.03];
-  const TP = [0.02, 0.04, 0.08];
+  // ── Adaptive grid search per strategy type ──
+  function getGrid(name: string): { sl: number[]; tp: number[] } {
+    const lower = name.toLowerCase();
+    if (lower.includes('scalp') || lower.includes('ribbon')) return { sl: [0.005, 0.008, 0.012], tp: [0.012, 0.018, 0.025] };
+    if (lower.includes('turtle') || lower === 'trend') return { sl: [0.02, 0.03, 0.05], tp: [0.04, 0.06, 0.10] };
+    return { sl: [0.01, 0.015, 0.02, 0.03], tp: [0.02, 0.03, 0.04, 0.06] };
+  }
+
+  // ── Expectancy-based grading ──
+  function calcGrade(r: any): string {
+    const exp = r.expectancy;  // % per trade
+    const wr = r.winRate;
+    const pf = r.profitFactor;
+    const trades = r.totalTrades;
+    if (trades < 30) return trades > 10 ? 'C' : trades > 3 ? 'D' : 'F';
+    if (exp > 0.30 && pf > 1.5 && wr > 48) return 'A';
+    if (exp > 0.15 && pf > 1.3 && wr > 45) return 'B';
+    if (exp > 0.05 && pf > 1.1) return 'C';
+    if (exp > 0) return 'D';
+    return 'F';
+  }
+
   const results: any[] = [];
 
   for (const strat of runnable) {
+    const { sl: SL, tp: TP } = getGrid(strat.name);
     let bestResult: any = null;
-    let bestSL = 0.02;
-    let bestTP = 0.04;
+    let bestSL = SL[0];
+    let bestTP = TP[0];
     let bestScore = -Infinity;
     let maxTrades = 0;
 
@@ -188,9 +226,8 @@ function testStrategies(candles: OHLCV[], asset: string) {
           const bt = simpleBacktest(trimmed, strat, sl, tp);
           maxTrades = Math.max(maxTrades, bt.totalTrades);
           if (bt.totalTrades < 1) continue;
-          const score = bt.maxDrawdown !== 0
-            ? (bt.totalReturn / Math.abs(bt.maxDrawdown)) * (bt.winRate / 50)
-            : bt.totalReturn;
+          // Score = expectancy × profit factor × sqrt(trades) — rewards consistent edge over many trades
+          const score = bt.expectancy * Math.min(bt.profitFactor, 5) * Math.sqrt(bt.totalTrades);
           if (score > bestScore) {
             bestScore = score;
             bestResult = bt;
@@ -204,19 +241,20 @@ function testStrategies(candles: OHLCV[], asset: string) {
     }
 
     if (bestResult) {
-      const grade =
-        bestResult.totalReturn > 15 && bestResult.winRate > 55 && bestResult.sharpeRatio > 1 ? 'A' :
-        bestResult.totalReturn > 8 && bestResult.winRate > 50 ? 'B' :
-        bestResult.totalReturn > 3 && bestResult.winRate > 45 ? 'C' :
-        bestResult.totalReturn > 0 ? 'D' : 'F';
+      const grade = calcGrade(bestResult);
+      // Find best regime for this strategy
+      const bestRegime = (bestResult.byRegime ?? []).filter((r: any) => r.trades >= 5).sort((a: any, b: any) => b.expectancy - a.expectancy)[0];
+      const worstRegime = (bestResult.byRegime ?? []).filter((r: any) => r.trades >= 5).sort((a: any, b: any) => a.expectancy - b.expectancy)[0];
 
       results.push({
         name: strat.name,
         type: strat.type,
         grade,
         totalReturn: bestResult.totalReturn,
+        grossReturn: bestResult.grossReturn,
+        expectancy: bestResult.expectancy,
+        avgTradeReturn: bestResult.avgTradeReturn,
         totalTrades: bestResult.totalTrades,
-        // Aliases for legacy display fields
         trades: bestResult.totalTrades,
         winRate: bestResult.winRate,
         maxDrawdown: bestResult.maxDrawdown,
@@ -226,34 +264,35 @@ function testStrategies(candles: OHLCV[], asset: string) {
         profitFactor: bestResult.profitFactor,
         avgWin: bestResult.avgWin,
         avgLoss: bestResult.avgLoss,
-        optimalSL: Math.round(bestSL * 100),
-        optimalTP: Math.round(bestTP * 100),
-        sl: Math.round(bestSL * 100),
-        tp: Math.round(bestTP * 100),
+        optimalSL: Math.round(bestSL * 1000) / 10,
+        optimalTP: Math.round(bestTP * 1000) / 10,
+        sl: Math.round(bestSL * 1000) / 10,
+        tp: Math.round(bestTP * 1000) / 10,
         score: Math.round(bestScore * 100) / 100,
+        byRegime: bestResult.byRegime ?? [],
+        bestRegime: bestRegime?.regime ?? null,
+        worstRegime: worstRegime?.regime ?? null,
         recommendation: grade === 'A' ? 'STRONG_USE' : grade === 'B' ? 'USE' : grade === 'C' ? 'CAUTION' : grade === 'D' ? 'AVOID' : 'NEVER',
       });
-      console.log(`[RND][STRAT] ${strat.name}: trades=${bestResult.totalTrades} return=${bestResult.totalReturn}% wr=${bestResult.winRate}% grade=${grade}`);
+      console.log(`[RND][STRAT] ${strat.name}: trades=${bestResult.totalTrades} exp=${bestResult.expectancy}% pf=${bestResult.profitFactor} wr=${bestResult.winRate}% grade=${grade} bestRegime=${bestRegime?.regime ?? '—'}`);
     } else {
-      // Always include the strategy, even with 0 trades
       results.push({
         name: strat.name,
         type: strat.type,
         grade: 'F',
-        totalReturn: 0, totalTrades: 0, trades: 0,
-        winRate: 0, maxDrawdown: 0, maxDD: 0,
-        sharpeRatio: 0, sharpe: 0, profitFactor: 0,
-        avgWin: 0, avgLoss: 0,
-        optimalSL: 2, optimalTP: 4, sl: 2, tp: 4,
-        score: -999,
+        totalReturn: 0, grossReturn: 0, expectancy: 0, avgTradeReturn: 0,
+        totalTrades: 0, trades: 0, winRate: 0, maxDrawdown: 0, maxDD: 0,
+        sharpeRatio: 0, sharpe: 0, profitFactor: 0, avgWin: 0, avgLoss: 0,
+        optimalSL: 2, optimalTP: 4, sl: 2, tp: 4, score: -999,
+        byRegime: [], bestRegime: null, worstRegime: null,
         recommendation: 'NEVER — nessun trade generato',
       });
-      console.log(`[RND][STRAT] ${strat.name}: NO TRADES (maxAttempted=${maxTrades})`);
+      console.log(`[RND][STRAT] ${strat.name}: NO TRADES`);
     }
   }
 
-  // Sort by totalReturn descending
-  results.sort((a, b) => b.totalReturn - a.totalReturn);
+  // Sort by expectancy descending (true edge per trade)
+  results.sort((a, b) => (b.expectancy ?? -999) - (a.expectancy ?? -999));
   console.log(`[RND][STRAT] === DONE === ${results.length} strategies tested`);
   return results;
 }
@@ -316,7 +355,19 @@ function generateReport(asset: string, tf: string, behavior: any, indicators: an
   if (behavior?.worstHours?.length > 0) insights.push(`Evitare: ${behavior.worstHours.join(', ')} UTC`);
   if (topIndicators.length > 0) insights.push(`Miglior indicatore: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}% accuracy)`);
   if (topPatterns.length > 0) insights.push(`Miglior pattern: ${topPatterns[0].pattern} (${topPatterns[0].winRate}% WR, ${topPatterns[0].occurrences}x)`);
-  if (recommended.length > 0) insights.push(`Strategia raccomandata: ${recommended[0].name} (WR ${recommended[0].winRate}%, Sharpe ${recommended[0].sharpe})`);
+  if (recommended.length > 0) insights.push(`Strategia raccomandata: ${recommended[0].name} (WR ${recommended[0].winRate}%, expectancy +${recommended[0].expectancy ?? 0}% per trade)`);
+
+  // Per-regime suggestions for top strategies
+  for (const s of recommended.slice(0, 3)) {
+    if (s.bestRegime && s.byRegime?.length > 0) {
+      const best = s.byRegime.find((r: any) => r.regime === s.bestRegime);
+      if (best && best.trades >= 5) insights.push(`USARE ${s.name} in regime ${s.bestRegime} (WR ${best.winRate}%, ${best.trades} trade)`);
+    }
+    if (s.worstRegime && s.worstRegime !== s.bestRegime) {
+      const worst = s.byRegime.find((r: any) => r.regime === s.worstRegime);
+      if (worst && worst.expectancy < 0 && worst.trades >= 5) insights.push(`EVITARE ${s.name} in regime ${s.worstRegime} (WR ${worst.winRate}%, exp ${worst.expectancy}%)`);
+    }
+  }
 
   return {
     asset, timeframe: tf, generatedAt: new Date().toISOString(),
