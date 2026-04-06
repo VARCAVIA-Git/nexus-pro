@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ASSETS, STRATEGIES, calculateRiskParams, type AssetConfig, type StrategyConfig } from '@/lib/config/assets';
 import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
+import { useModeStore } from '@/stores/mode-store';
 import type { MultiBotConfig } from '@/types/bot';
 import {
   Bot, Rocket, TrendingUp, Shield, Search, Plus, Play, Square,
@@ -18,6 +19,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function StrategyPage() {
+  const mode = useModeStore((s) => s.mode);
   const [allBots, setAllBots] = useState<MultiBotConfig[]>([]);
   const [accountEquity, setAccountEquity] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
@@ -25,7 +27,7 @@ export default function StrategyPage() {
 
   // Create form state
   const [formName, setFormName] = useState('');
-  const [formEnv, setFormEnv] = useState<'demo' | 'real'>('demo');
+  const [formEnv, setFormEnv] = useState<'demo' | 'real'>(mode);
   const [formCapital, setFormCapital] = useState(20);
   const [formAssets, setFormAssets] = useState<Set<string>>(new Set(['BTC/USD', 'ETH/USD', 'AAPL']));
   const [formStrategies, setFormStrategies] = useState<Set<string>>(new Set(['combined_ai', 'trend']));
@@ -42,7 +44,7 @@ export default function StrategyPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/bot/status');
+      const res = await fetch(`/api/bot/status?mode=${mode}`);
       if (res.ok) {
         const d = await res.json();
         setAllBots(d.bots ?? []);

@@ -25,10 +25,10 @@ export default function DashboardPage() {
 
   const fetchAll = async () => {
     const [bRes, pRes, portRes, trRes] = await Promise.allSettled([
-      fetch('/api/bot/status'),
+      fetch(`/api/bot/status?mode=${mode}`),
       fetch('/api/performance'),
       fetch(`/api/portfolio?env=${mode}`),
-      fetch('/api/trades?env=demo&limit=5'),
+      fetch(`/api/trades?env=${mode}&limit=5`),
     ]);
     if (bRes.status === 'fulfilled' && bRes.value.ok) setBot(await bRes.value.json());
     if (pRes.status === 'fulfilled' && pRes.value.ok) setPerf(await pRes.value.json());
