@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect } from 'react';
-import { usePathname } from 'next/navigation';
-import { getThemeFromPath } from '@/stores/mode-store';
+import { useModeStore } from '@/stores/mode-store';
 
 export function ModeProvider({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const mode = useModeStore((s) => s.mode);
 
   useEffect(() => {
-    const theme = getThemeFromPath(pathname);
-    document.documentElement.setAttribute('data-mode', theme);
-  }, [pathname]);
+    document.documentElement.setAttribute('data-mode', mode);
+  }, [mode]);
 
   return <>{children}</>;
 }

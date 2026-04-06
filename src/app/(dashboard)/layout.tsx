@@ -1,19 +1,22 @@
 import { Sidebar } from '@/components/sidebar';
 import { NotificationBell } from '@/components/notification-bell';
+import { Ticker } from '@/components/ticker';
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen overflow-hidden">
       <Sidebar />
-      <div className="relative flex-1 overflow-y-auto bg-n-bg">
+      <div className="relative flex-1 flex flex-col overflow-hidden">
+        {/* Ticker bar */}
+        <Ticker />
         {/* Mobile topbar */}
-        <div className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-n-border/50 bg-n-bg/95 backdrop-blur px-4 md:justify-end md:border-0 md:h-auto md:pt-4 md:px-6">
-          {/* Hamburger space on mobile */}
+        <div className="flex h-14 shrink-0 items-center justify-between border-b border-n-border/30 bg-n-bg/95 backdrop-blur px-4 md:justify-end md:border-0 md:h-12 md:px-6">
           <div className="w-10 md:hidden" />
-          <span className="text-sm font-bold tracking-tight text-n-text md:hidden">NEXUS PRO</span>
+          <span className="text-sm font-semibold tracking-tight text-n-text md:hidden">NEXUS PRO</span>
           <NotificationBell />
         </div>
-        <main className="px-4 pb-6 pt-2 md:px-6 md:pt-0 md:-mt-2">{children}</main>
+        {/* Content */}
+        <main className="flex-1 overflow-y-auto px-4 pb-6 pt-4 md:px-6 md:pt-5">{children}</main>
       </div>
     </div>
   );

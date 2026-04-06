@@ -3,122 +3,104 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
+import { useModeStore } from '@/stores/mode-store';
 import {
-  LayoutDashboard, Briefcase, ArrowLeftRight, Zap as ZapIcon,
-  FlaskConical, Settings, ChevronDown, Bot, Rocket, Activity, Menu, X, Brain, Microscope,
+  LayoutDashboard, Briefcase, ArrowLeftRight, Zap,
+  Bot, Brain, FlaskConical, Microscope, Activity,
+  Settings, Plug, Menu, X, Rocket, ArrowRightLeft,
 } from 'lucide-react';
 import { useState, useEffect } from 'react';
-import { getBotStatus } from '@/lib/engine/live-runner';
 
-const demoNav = [
-  { href: '/demo/portfolio', label: 'Portfolio', icon: Briefcase },
-  { href: '/demo/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
-  { href: '/demo/segnali', label: 'Segnali', icon: ZapIcon },
+const MAIN_NAV = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/portfolio', label: 'Portfolio', icon: Briefcase },
+  { href: '/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
+  { href: '/segnali', label: 'Segnali', icon: Zap },
 ];
 
-const realNav = [
-  { href: '/real/portfolio', label: 'Portfolio', icon: Briefcase },
-  { href: '/real/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
-  { href: '/real/segnali', label: 'Segnali', icon: ZapIcon },
+const TOOLS_NAV = [
+  { href: '/strategy', label: 'Strategy', icon: Bot },
+  { href: '/intelligence', label: 'Intelligence', icon: Brain },
+  { href: '/backtest', label: 'Backtest', icon: FlaskConical },
+  { href: '/rnd', label: 'R&D Lab', icon: Microscope },
+];
+
+const SYSTEM_NAV = [
+  { href: '/impostazioni', label: 'Impostazioni', icon: Settings },
+  { href: '/connections', label: 'Connessioni', icon: Plug },
+  { href: '/status', label: 'Status', icon: Activity },
 ];
 
 function NavLink({ href, label, icon: Icon, pathname, onClick }: {
   href: string; label: string; icon: React.ElementType; pathname: string; onClick?: () => void;
 }) {
-  const active = pathname === href || pathname.startsWith(href + '/');
+  const active = pathname === href;
   return (
-    <Link href={href} onClick={onClick} className={clsx('flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition-all md:py-1.5 md:text-[12px]', active ? 'bg-n-accent-dim text-accent' : 'text-n-dim hover:bg-n-card hover:text-n-text')}>
-      <Icon size={16} strokeWidth={active ? 2.2 : 1.8} />
+    <Link href={href} onClick={onClick} className={clsx('flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all', active ? 'bg-n-accent-dim text-accent' : 'text-n-dim hover:bg-n-card hover:text-n-text')}>
+      <Icon size={18} strokeWidth={active ? 2 : 1.6} />
       {label}
     </Link>
   );
 }
 
-function NavSection({ title, items, pathname, color, expanded, onToggle, onNavigate }: {
-  title: string; items: typeof demoNav; pathname: string; color: 'amber' | 'blue'; expanded: boolean; onToggle: () => void; onNavigate?: () => void;
-}) {
-  const isActive = items.some((item) => pathname === item.href || pathname.startsWith(item.href + '/'));
-  const dotColor = color === 'amber' ? 'bg-amber-400' : 'bg-blue-400';
-  const textColor = color === 'amber' ? 'text-amber-400' : 'text-blue-400';
-  const borderColor = color === 'amber' ? 'border-amber-500/20' : 'border-blue-500/20';
-
-  return (
-    <div>
-      <button onClick={onToggle} className={clsx('flex w-full items-center justify-between rounded-lg px-3 py-2 text-[11px] font-bold uppercase tracking-wider transition-all', isActive ? textColor : 'text-n-dim hover:text-n-text-s')}>
-        <div className="flex items-center gap-2">
-          <span className={clsx('h-1.5 w-1.5 rounded-full', isActive ? dotColor + ' animate-pulse-dot' : 'bg-n-dim')} />
-          {title}
-        </div>
-        <ChevronDown size={12} className={clsx('transition-transform', expanded ? 'rotate-180' : '')} />
-      </button>
-      {expanded && (
-        <div className={clsx('ml-2 space-y-0.5 border-l pl-2', borderColor)}>
-          {items.map((item) => (<NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
-  const inDemo = pathname.startsWith('/demo');
-  const inReal = pathname.startsWith('/real');
-  const [demoExpanded, setDemoExpanded] = useState(true);
-  const [realExpanded, setRealExpanded] = useState(true);
-  const [botRunning, setBotRunning] = useState(false);
+  const { mode, toggle } = useModeStore();
+  const isDemo = mode === 'demo';
 
+  const [botRunning, setBotRunning] = useState(false);
   useEffect(() => {
-    const check = async () => {
-      try {
-        const res = await fetch('/api/bot/status');
-        if (res.ok) { const d = await res.json(); setBotRunning(d.running); }
-      } catch {}
-    };
-    check();
-    const i = setInterval(check, 10000);
+    fetch('/api/bot/status').then(r => r.ok ? r.json() : null).then(d => { if (d) setBotRunning(d.running); }).catch(() => {});
+    const i = setInterval(() => { fetch('/api/bot/status').then(r => r.ok ? r.json() : null).then(d => { if (d) setBotRunning(d.running); }).catch(() => {}); }, 15000);
     return () => clearInterval(i);
   }, []);
 
-  const borderClass = inDemo ? 'border-l-2 border-l-amber-500' : inReal ? 'border-l-2 border-l-blue-500' : 'border-l-0';
-  const logoSuffix = inDemo ? 'DEMO' : inReal ? 'LIVE' : null;
-  const logoSuffixColor = inDemo ? 'text-amber-400' : inReal ? 'text-blue-400' : '';
-
   return (
-    <aside className={clsx('flex h-full w-[240px] flex-col border-r border-n-border bg-n-bg-s md:w-[220px]', borderClass)}>
-      <div className="flex h-14 items-center gap-2.5 px-5">
-        <div className={clsx('flex h-8 w-8 items-center justify-center rounded-lg', inDemo ? 'bg-amber-500/20' : inReal ? 'bg-blue-500/20' : 'bg-slate-500/20')}>
-          <Rocket size={16} className={inDemo ? 'text-amber-400' : inReal ? 'text-blue-400' : 'text-slate-400'} />
+    <aside className={clsx('flex h-full w-[240px] flex-col bg-n-bg-s', isDemo ? 'border-r-2 border-r-amber-500/50' : 'border-r-2 border-r-blue-500/50')}>
+      {/* Logo */}
+      <div className="flex h-16 items-center gap-3 px-5">
+        <div className={clsx('flex h-9 w-9 items-center justify-center rounded-xl', isDemo ? 'bg-amber-500/15' : 'bg-blue-500/15')}>
+          <Rocket size={18} className={isDemo ? 'text-amber-400' : 'text-blue-400'} />
         </div>
-        <div className="flex items-baseline gap-1.5">
-          <span className="text-[15px] font-bold tracking-tight text-n-text">NEXUS</span>
-          <span className="text-[10px] font-semibold tracking-wider text-n-dim">PRO</span>
-          {logoSuffix && (<><span className="text-[8px] text-n-dim">·</span><span className={clsx('text-[10px] font-bold tracking-wider', logoSuffixColor)}>{logoSuffix}</span></>)}
-        </div>
-      </div>
-
-      <div className="px-2 pb-1"><NavLink href="/dashboard" label="Dashboard" icon={LayoutDashboard} pathname={pathname} onClick={onNavigate} /></div>
-      <div className="mx-4 my-2 border-t border-n-border" />
-      <div className="px-2 space-y-0.5"><NavSection title="Demo" items={demoNav} pathname={pathname} color="amber" expanded={demoExpanded} onToggle={() => setDemoExpanded(!demoExpanded)} onNavigate={onNavigate} /></div>
-      <div className="px-2 mt-1 space-y-0.5"><NavSection title="Real" items={realNav} pathname={pathname} color="blue" expanded={realExpanded} onToggle={() => setRealExpanded(!realExpanded)} onNavigate={onNavigate} /></div>
-      <div className="mx-4 my-2 border-t border-n-border" />
-      <div className="px-2">
-        <p className="mb-1 px-3 text-[9px] font-bold uppercase tracking-widest text-n-dim">Strumenti</p>
-        <div className="space-y-0.5">
-          <NavLink href="/strategy" label="Strategy" icon={Bot} pathname={pathname} onClick={onNavigate} />
-          <NavLink href="/intelligence" label="Intelligence" icon={Brain} pathname={pathname} onClick={onNavigate} />
-          <NavLink href="/backtest" label="Backtest" icon={FlaskConical} pathname={pathname} onClick={onNavigate} />
-          <NavLink href="/rnd" label="R&D Lab" icon={Microscope} pathname={pathname} onClick={onNavigate} />
-          <NavLink href="/status" label="Status" icon={Activity} pathname={pathname} onClick={onNavigate} />
-          <NavLink href="/impostazioni" label="Impostazioni" icon={Settings} pathname={pathname} onClick={onNavigate} />
+        <div>
+          <span className="text-[15px] font-semibold tracking-tight text-n-text">NEXUS PRO</span>
+          {isDemo && <span className="ml-1.5 text-[9px] font-medium text-amber-400">DEMO</span>}
         </div>
       </div>
 
-      <div className="flex-1" />
-      <div className="border-t border-n-border px-4 py-3">
-        <p className="font-mono text-[10px] text-n-dim">Nexus Pro v5.0</p>
-        <p className="font-mono text-[10px] text-n-dim">
-          Engine: <span className={botRunning ? 'text-n-green' : 'text-n-red'}>{botRunning ? 'active' : 'stopped'}</span>
-        </p>
+      {/* Nav sections */}
+      <nav className="flex-1 space-y-6 px-3 pt-2 overflow-y-auto">
+        <div>
+          <p className="label px-3 mb-1.5">Principale</p>
+          <div className="space-y-0.5">
+            {MAIN_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+          </div>
+        </div>
+
+        <div>
+          <p className="label px-3 mb-1.5">Strumenti</p>
+          <div className="space-y-0.5">
+            {TOOLS_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+          </div>
+        </div>
+
+        <div>
+          <p className="label px-3 mb-1.5">Sistema</p>
+          <div className="space-y-0.5">
+            {SYSTEM_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+          </div>
+        </div>
+      </nav>
+
+      {/* Mode switch + engine status */}
+      <div className="border-t border-n-border p-3 space-y-2">
+        <button onClick={() => { toggle(); onNavigate?.(); }} className={clsx('flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all min-h-[44px]', isDemo ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20')}>
+          <ArrowRightLeft size={14} />
+          {isDemo ? 'Passa a REAL' : 'Passa a DEMO'}
+        </button>
+        <div className="flex items-center justify-between px-2">
+          <span className="text-[10px] text-n-dim">Engine</span>
+          <span className={clsx('font-mono text-[10px] font-medium', botRunning ? 'text-n-green' : 'text-n-dim')}>{botRunning ? 'active' : 'idle'}</span>
+        </div>
       </div>
     </aside>
   );
@@ -127,18 +109,16 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
 export function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // Close on route change
   useEffect(() => { setMobileOpen(false); }, [pathname]);
 
   return (
     <>
-      {/* Mobile hamburger button */}
-      <button onClick={() => setMobileOpen(true)} className="fixed left-3 top-3 z-50 flex h-10 w-10 items-center justify-center rounded-lg border border-n-border bg-n-bg-s text-n-dim md:hidden" aria-label="Menu">
+      {/* Mobile hamburger */}
+      <button onClick={() => setMobileOpen(true)} className="fixed left-3 top-3.5 z-50 flex h-10 w-10 items-center justify-center rounded-xl border border-n-border bg-n-bg-s text-n-dim md:hidden" aria-label="Menu">
         <Menu size={20} />
       </button>
 
-      {/* Desktop sidebar — always visible */}
+      {/* Desktop sidebar */}
       <div className="hidden md:block h-screen shrink-0">
         <SidebarContent pathname={pathname} />
       </div>
@@ -149,9 +129,7 @@ export function Sidebar() {
           <div className="absolute inset-0 bg-black/60" onClick={() => setMobileOpen(false)} />
           <div className="relative h-full w-[260px] animate-fade-in">
             <SidebarContent pathname={pathname} onNavigate={() => setMobileOpen(false)} />
-            <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-3 rounded-lg p-1 text-n-dim hover:text-n-text" aria-label="Close">
-              <X size={20} />
-            </button>
+            <button onClick={() => setMobileOpen(false)} className="absolute right-3 top-4 rounded-lg p-1.5 text-n-dim hover:text-n-text"><X size={18} /></button>
           </div>
         </div>
       )}
