@@ -31,7 +31,10 @@ export function runBacktest(
   let cooldown = 0;
   let peakCapital = config.capital;
 
-  const startBar = Math.max(50, 200); // need SMA200 warmup
+  // Start at bar 50 — enough warmup for all indicators used by strategies
+  // (RSI=14, MACD=35, BB=20, ADX=28, Stochastic=17, SMA50=50)
+  // SMA200 is padded with null but strategies don't use it directly
+  const startBar = 50;
   const effectiveStart = Math.min(startBar, candles.length - 10);
 
   for (let i = effectiveStart; i < candles.length; i++) {

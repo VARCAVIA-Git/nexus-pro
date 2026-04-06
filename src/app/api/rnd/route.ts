@@ -3,6 +3,7 @@ import type { OHLCV, StrategyKey, TradingConfig, Indicators } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { detectPatterns, patternScore } from '@/lib/engine/patterns';
 import { runBacktest } from '@/lib/engine/backtest';
+import { getStrategy } from '@/lib/engine/strategies';
 import { generateAssetProfile } from '@/lib/engine/rnd/asset-profile';
 import { analyzeBehavior as deepBehavior } from '@/lib/engine/rnd/behavior-analysis';
 import { downloadHistory } from '@/lib/engine/rnd/history-loader';
@@ -134,30 +135,58 @@ function analyzePatterns(candles: OHLCV[]) {
 function testStrategies(candles: OHLCV[], asset: string) {
   if (candles.length < 100) return [];
 
-  // Limit candles for performance: max 2000 for sub-hourly, 3000 otherwise
-  const maxCandles = candles.length > 3000 ? 3000 : candles.length;
-  const trimmed = candles.length > maxCandles ? candles.slice(-maxCandles) : candles;
+  // Limit candles for performance: max 3000
+  const trimmed = candles.length > 3000 ? candles.slice(-3000) : candles;
 
-  console.log(`[RND] Strategy test: ${trimmed.length} candles (from ${candles.length})`);
+  // ── Data validation ──
+  const sample0 = trimmed[0]; const sampleMid = trimmed[Math.floor(trimmed.length / 2)]; const sampleEnd = trimmed[trimmed.length - 1];
+  console.log(`[RND][STRAT] === START === ${trimmed.length} candles`);
+  console.log(`[RND][STRAT] Data check: first=[o=${sample0.open} h=${sample0.high} l=${sample0.low} c=${sample0.close} v=${sample0.volume}]`);
+  console.log(`[RND][STRAT] Data check: mid=[o=${sampleMid.open} c=${sampleMid.close}] last=[o=${sampleEnd.open} c=${sampleEnd.close}]`);
 
-  // Pre-compute indicators ONCE (the main perf bottleneck)
+  if (sample0.open === 0 || sampleEnd.close === 0 || isNaN(sample0.close) || isNaN(sampleEnd.close)) {
+    console.error('[RND][STRAT] INVALID DATA — candles have 0 or NaN values');
+    return [];
+  }
+
+  // Pre-compute indicators ONCE
   const indicators = computeIndicators(trimmed);
 
-  // Skip 'pattern' (O(n^2) pattern detection per bar) and 'combined_ai' (calls all sub-strategies)
-  const strategies: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
-  // Reduced grid: 3×3 = 9 combos per strategy (not 16)
+  // Log indicator health at bar 200
+  const checkIdx = Math.min(200, trimmed.length - 1);
+  console.log(`[RND][STRAT] Indicators@${checkIdx}: rsi=${indicators.rsi[checkIdx]?.toFixed(1)} adx=${indicators.adx[checkIdx]?.toFixed(1)} atr=${indicators.atr[checkIdx]?.toFixed(2)} macdH=${indicators.macd.histogram[checkIdx]?.toFixed(4)} ema21=${indicators.ema21[checkIdx]?.toFixed(2)} sma50=${indicators.sma50[checkIdx]}`);
+
+  // ── Diagnostic: count raw signals from each strategy ──
+  const diagStrats: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
+  for (const sk of diagStrats) {
+    const strat = getStrategy(sk);
+    let entryCount = 0;
+    // Scan from bar 50 (not 200 — we want to see if the strategy EVER fires)
+    for (let i = 50; i < trimmed.length; i++) {
+      try {
+        const d = strat.shouldEnter(trimmed, indicators, i);
+        if (d.enter) entryCount++;
+      } catch {}
+    }
+    console.log(`[RND][DIAG] ${sk}: shouldEnter fired ${entryCount}x in ${trimmed.length - 50} bars`);
+  }
+
+  // ── Run backtests (custom strategies) ──
+  const strategyKeys: StrategyKey[] = ['trend', 'reversion', 'breakout', 'momentum'];
   const SL = [2, 3, 5]; const TP = [4, 6, 10];
   const results: any[] = [];
 
-  for (const strat of strategies) {
+  for (const strat of strategyKeys) {
     let bestScore = -Infinity; let best: any = null;
+    let maxTrades = 0;
     for (const sl of SL) {
       for (const tp of TP) {
         if (tp <= sl) continue;
         const config: TradingConfig = { capital: 10000, riskPerTrade: 3, maxPositions: 3, stopLossPct: sl, takeProfitPct: tp, trailingStop: true, trailingPct: 2, commissionPct: 0.1, slippagePct: 0.05, cooldownBars: 2, kellyFraction: 0.25, maxDrawdownLimit: 30, dailyLossLimit: 5 };
         try {
           const bt = runBacktest(trimmed, config, strat, asset, indicators);
-          if (bt.totalTrades < 3) continue;
+          maxTrades = Math.max(maxTrades, bt.totalTrades);
+          if (bt.totalTrades < 1) continue; // lowered from 3 to 1
           const score = bt.sharpeRatio * 0.4 + Math.min(bt.profitFactor, 5) * 0.3 + (bt.winRate / 100) * 0.3;
           if (score > bestScore) {
             bestScore = score;
@@ -172,23 +201,24 @@ function testStrategies(candles: OHLCV[], asset: string) {
       best.grade = best.sharpe > 2 && best.winRate > 60 ? 'A' : best.sharpe > 1.5 && best.winRate > 55 ? 'B' : best.sharpe > 1 && best.winRate > 50 ? 'C' : best.sharpe > 0.5 ? 'D' : 'F';
       results.push(best);
     }
-    console.log(`[RND] ${strat}: ${best ? `score=${best.score} grade=${best.grade}` : 'no valid result'}`);
+    console.log(`[RND][STRAT] ${strat}: maxTrades=${maxTrades} best=${best ? `trades=${best.trades} return=${best.totalReturn}% grade=${best.grade}` : 'NO RESULT'}`);
   }
 
-  // Test famous strategies (use trimmed candles)
+  // ── Famous strategies (use their own simpleBacktest) ──
   for (const fs of FAMOUS_STRATEGIES) {
     try {
       const r = fs.test(trimmed);
-      if (r.trades >= 3) {
+      console.log(`[RND][FAMOUS] ${fs.name}: trades=${r.trades} wr=${r.winRate}% return=${r.totalReturn}% sharpe=${r.sharpe}`);
+      if (r.trades >= 1) { // lowered from 3 to 1
         const score = r.sharpe * 0.5 + (r.winRate / 100) * 0.5;
         results.push({ name: `${fs.name} (${fs.author})`, sl: 0, tp: 0, trades: r.trades, winRate: r.winRate, totalReturn: r.totalReturn, sharpe: r.sharpe, maxDD: 0, profitFactor: 0, score: Math.round(score * 100) / 100, grade: r.sharpe > 1.5 && r.winRate > 55 ? 'B' : r.sharpe > 1 ? 'C' : r.totalReturn > 0 ? 'D' : 'F' });
       }
     } catch (e: any) {
-      console.warn(`[RND] Famous strategy ${fs.name} failed:`, e.message);
+      console.error(`[RND][FAMOUS] ${fs.name} CRASHED: ${e.message}`);
     }
   }
 
-  console.log(`[RND] Strategy test complete: ${results.length} strategies ranked`);
+  console.log(`[RND][STRAT] === DONE === ${results.length} strategies with results`);
   return results.sort((a, b) => b.score - a.score);
 }
 
