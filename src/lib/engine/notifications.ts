@@ -123,15 +123,22 @@ export async function notify(type: NotificationType, title: string, message: str
 
 // ── Convenience helpers ───────────────────────────────────
 
-export async function notifyTrade(action: 'BUY' | 'SELL', symbol: string, price: number, confidence: number, strategy: string): Promise<void> {
+export async function notifyTrade(action: 'BUY' | 'SELL', symbol: string, price: number, confidence: number, strategy: string, extra?: { botName?: string; regime?: string; score?: number }): Promise<void> {
   const priceStr = price.toLocaleString('en-US', { minimumFractionDigits: 2 });
-  await notify('trade', `${action} ${symbol} @ $${priceStr}`, `Confidence: ${(confidence * 100).toFixed(0)}% | Strategy: ${strategy}`);
+  const emoji = action === 'BUY' ? '🟢' : '🔴';
+  const title = extra?.botName ? `${emoji} ${extra.botName}: ${action} ${symbol} @ $${priceStr}` : `${emoji} ${action} ${symbol} @ $${priceStr}`;
+  const parts = [`Score: ${extra?.score ?? (confidence * 100).toFixed(0)}%`, `Strategy: ${strategy}`];
+  if (extra?.regime) parts.push(`Regime: ${extra.regime}`);
+  await notify('trade', title, parts.join(' | '));
 }
 
-export async function notifyTradeClose(side: string, symbol: string, price: number, pnl: number, reason: string): Promise<void> {
+export async function notifyTradeClose(side: string, symbol: string, price: number, pnl: number, reason: string, extra?: { botName?: string; pnlPct?: number }): Promise<void> {
   const priceStr = price.toLocaleString('en-US', { minimumFractionDigits: 2 });
   const pnlStr = pnl >= 0 ? `+$${pnl.toFixed(2)}` : `-$${Math.abs(pnl).toFixed(2)}`;
-  await notify('trade', `CLOSE ${side} ${symbol} @ $${priceStr}`, `P&L: ${pnlStr} | Reason: ${reason}`);
+  const pctStr = extra?.pnlPct != null ? ` (${extra.pnlPct >= 0 ? '+' : ''}${extra.pnlPct.toFixed(1)}%)` : '';
+  const emoji = pnl >= 0 ? '✅' : '❌';
+  const title = extra?.botName ? `${emoji} ${extra.botName}: CLOSED ${side} ${symbol}` : `${emoji} CLOSED ${side} ${symbol}`;
+  await notify('trade', title, `P&L: ${pnlStr}${pctStr} | Exit: ${reason}`);
 }
 
 export async function notifyBot(action: 'started' | 'stopped' | 'circuit_breaker', details?: string): Promise<void> {

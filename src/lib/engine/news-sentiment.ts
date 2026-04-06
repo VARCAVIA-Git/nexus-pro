@@ -1,6 +1,5 @@
 // ═══════════════════════════════════════════════════════════════
-// News Sentiment Engine — keyword-based scoring
-// Sources: Alpaca News API (free), CoinGecko status updates
+// News Sentiment Engine — enhanced keyword analysis via Alpaca News API
 // ═══════════════════════════════════════════════════════════════
 
 import type { NewsSentiment } from '@/types/intelligence';
@@ -8,44 +7,62 @@ import { redisGet, redisSet } from '@/lib/db/redis';
 
 const ALPACA_NEWS_URL = 'https://data.alpaca.markets/v1beta1/news';
 
-const POSITIVE = ['surge', 'rally', 'bullish', 'partnership', 'approval', 'record high', 'upgrade', 'beat expectations', 'all-time high', 'growth', 'profit', 'revenue beat', 'breakout', 'adoption', 'launch', 'expansion'];
-const NEGATIVE = ['crash', 'bearish', 'hack', 'lawsuit', 'ban', 'downgrade', 'miss expectations', 'bankruptcy', 'layoff', 'investigation', 'fine', 'recall', 'decline', 'selloff', 'warning', 'fraud'];
-const HIGH_IMPACT = ['fed', 'interest rate', 'cpi', 'inflation', 'regulation', 'sec', 'earnings', 'fomc', 'gdp', 'jobs report', 'tariff', 'sanctions'];
+const BULLISH = [
+  'surge', 'soar', 'rally', 'breakout', 'bullish', 'upgrade', 'beat', 'record high',
+  'strong earnings', 'revenue growth', 'buy rating', 'outperform', 'expansion',
+  'partnership', 'approval', 'launch', 'innovation', 'adoption', 'institutional',
+  'all-time high', 'profit', 'revenue beat', 'growth', 'positive', 'upside',
+];
 
-function scoreSentiment(text: string): { score: number; isHighImpact: boolean } {
+const BEARISH = [
+  'crash', 'plunge', 'selloff', 'bearish', 'downgrade', 'miss', 'record low',
+  'weak earnings', 'revenue decline', 'sell rating', 'underperform', 'contraction',
+  'lawsuit', 'rejection', 'delay', 'hack', 'exploit', 'regulation', 'ban', 'sec',
+  'bankruptcy', 'layoff', 'investigation', 'fine', 'recall', 'decline', 'warning', 'fraud',
+];
+
+const HIGH_IMPACT = [
+  'fed', 'fomc', 'interest rate', 'inflation', 'cpi', 'nfp', 'unemployment',
+  'gdp', 'recession', 'tariff', 'sanctions', 'war', 'default', 'bankruptcy',
+  'jobs report', 'earnings', 'regulation',
+];
+
+function scoreArticle(text: string): { bull: number; bear: number; highImpact: boolean } {
   const lower = text.toLowerCase();
-  let score = 0;
-  let isHighImpact = false;
+  let bull = 0, bear = 0, highImpact = false;
 
-  for (const word of POSITIVE) { if (lower.includes(word)) score += 15; }
-  for (const word of NEGATIVE) { if (lower.includes(word)) score -= 15; }
-  for (const word of HIGH_IMPACT) { if (lower.includes(word)) isHighImpact = true; }
+  for (const kw of BULLISH) { if (lower.includes(kw)) bull++; }
+  for (const kw of BEARISH) { if (lower.includes(kw)) bear++; }
+  for (const kw of HIGH_IMPACT) { if (lower.includes(kw)) highImpact = true; }
 
-  return { score: Math.max(-100, Math.min(100, score)), isHighImpact };
+  return { bull, bear, highImpact };
 }
 
-/** Fetch news from Alpaca News API (free with paper account) */
-async function fetchAlpacaNews(symbol: string): Promise<Array<{ title: string; source: string; time: string }>> {
+async function fetchAlpacaNews(asset: string, limit = 20): Promise<Array<{ headline: string; summary: string; source: string; time: string; symbols: string[] }>> {
   const key = process.env.ALPACA_API_KEY;
   const secret = process.env.ALPACA_API_SECRET;
   if (!key || !secret) return [];
 
-  const alpacaSymbol = symbol.includes('/') ? symbol.replace('/', '') : symbol;
+  // For crypto: BTCUSD format; for stocks: AAPL
+  const alpacaSymbol = asset.includes('/') ? asset.replace('/', '') : asset;
+
   try {
-    const res = await fetch(`${ALPACA_NEWS_URL}?symbols=${alpacaSymbol}&limit=10&sort=desc`, {
+    const res = await fetch(`${ALPACA_NEWS_URL}?symbols=${alpacaSymbol}&limit=${limit}&sort=desc`, {
       headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret },
     });
     if (!res.ok) return [];
     const data = await res.json();
     return (data.news ?? []).map((n: any) => ({
-      title: n.headline ?? n.summary ?? '',
-      source: n.source ?? 'alpaca',
+      headline: n.headline ?? '',
+      summary: n.summary ?? '',
+      source: n.source ?? 'unknown',
       time: n.created_at ?? new Date().toISOString(),
+      symbols: n.symbols ?? [],
     }));
   } catch { return []; }
 }
 
-/** Get news sentiment for an asset (cached 15 minutes) */
+/** Get news sentiment for an asset (cached 10 minutes) */
 export async function getNewsSentiment(asset: string): Promise<NewsSentiment> {
   const cacheKey = `nexus:news:${asset}`;
   try {
@@ -53,35 +70,44 @@ export async function getNewsSentiment(asset: string): Promise<NewsSentiment> {
     if (cached) return cached;
   } catch {}
 
-  const articles = await fetchAlpacaNews(asset);
+  const articles = await fetchAlpacaNews(asset, 20);
 
-  let totalScore = 0;
+  let bullCount = 0;
+  let bearCount = 0;
   let highImpact = false;
   const headlines: NewsSentiment['latestHeadlines'] = [];
 
-  for (const article of articles.slice(0, 10)) {
-    const { score, isHighImpact } = scoreSentiment(article.title);
-    totalScore += score;
-    if (isHighImpact) highImpact = true;
+  for (const article of articles) {
+    const text = article.headline + ' ' + article.summary;
+    const { bull, bear, highImpact: hi } = scoreArticle(text);
+    if (hi) highImpact = true;
 
+    if (bull > bear) bullCount++;
+    else if (bear > bull) bearCount++;
+
+    const sentiment = bull > bear ? 'positive' : bear > bull ? 'negative' : 'neutral';
     headlines.push({
-      title: article.title.slice(0, 120),
-      sentiment: score > 5 ? 'positive' : score < -5 ? 'negative' : 'neutral',
+      title: article.headline.slice(0, 120),
+      sentiment,
       source: article.source,
       time: article.time,
     });
   }
 
-  const avgScore = articles.length > 0 ? Math.round(totalScore / articles.length) : 0;
+  // Score: 50 = neutral, >50 = bullish, <50 = bearish
+  // Range: ~10 to ~90 based on bull/bear ratio
+  const total = bullCount + bearCount;
+  const rawScore = total > 0 ? 50 + ((bullCount - bearCount) / total) * 40 : 0;
+  const score = total > 0 ? Math.max(-100, Math.min(100, Math.round((rawScore - 50) * 2.5))) : 0;
 
   const result: NewsSentiment = {
     asset,
-    score: Math.max(-100, Math.min(100, avgScore)),
+    score,
     articles: articles.length,
     latestHeadlines: headlines.slice(0, 5),
-    impactLevel: highImpact ? 'high' : Math.abs(avgScore) > 30 ? 'medium' : 'low',
+    impactLevel: highImpact ? 'high' : Math.abs(score) > 30 ? 'medium' : 'low',
   };
 
-  redisSet(cacheKey, result, 900).catch(() => {}); // 15 min cache
+  redisSet(cacheKey, result, 600).catch(() => {}); // 10 min cache
   return result;
 }

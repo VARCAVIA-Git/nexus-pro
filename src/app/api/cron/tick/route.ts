@@ -290,7 +290,7 @@ export async function GET(request: Request) {
                 state.positions = state.positions.filter(p => p.symbol !== symbol);
                 redisLpush(KEYS.trades, trade, 500).catch(() => {});
                 saveOutcome(buildOutcome({ tradeId: trade.id, asset: symbol, side: existingPos.side, entryPrice: existingPos.entryPrice, exitPrice: price, pnl, entryTime: existingPos.entryTime, exitTime: now, strategy: existingPos.strategy, confidence: existingPos.confidence, regime: 'NORMAL' })).catch(() => {});
-                await notifyTradeClose(existingPos.side, symbol, price, pnl, exitReason);
+                await notifyTradeClose(existingPos.side, symbol, price, pnl, exitReason, { botName: config.name, pnlPct: existingPos.entryPrice > 0 ? (pnl / (existingPos.quantity * existingPos.entryPrice)) * 100 : 0 });
                 logEntry.acted = true;
               } catch {}
             }
@@ -368,7 +368,7 @@ export async function GET(request: Request) {
                     entryTime: now.toISOString(),
                   });
                   logEntry.acted = true;
-                  await notifyTrade(bestSignal.signal as 'BUY' | 'SELL', symbol, price, bestSignal.confidence, bestSignal.strategy);
+                  await notifyTrade(bestSignal.signal as 'BUY' | 'SELL', symbol, price, bestSignal.confidence, bestSignal.strategy, { botName: config.name, regime: regime.regime, score: Math.round(adjustedConf * 100) });
                 } catch {}
               }
             }
