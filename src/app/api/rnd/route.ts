@@ -196,16 +196,62 @@ function generateReport(asset: string, tf: string, behavior: any, indicators: an
   const recommended = strategies.filter((s: any) => s.grade === 'A' || s.grade === 'B').slice(0, 3);
   const avoid = strategies.filter((s: any) => s.grade === 'D' || s.grade === 'F');
   const topIndicators = indicators.filter((i: any) => i.accuracy > 55).slice(0, 5);
-  const topPatterns = patterns.filter((p: any) => p.winRate > 55).slice(0, 5);
+  const topPatterns = patterns.filter((p: any) => p.winRate > 55 && p.occurrences >= 3).slice(0, 5);
 
+  // Summary with outlook
+  let outlook: 'BULLISH' | 'BEARISH' | 'NEUTRAL' = 'NEUTRAL';
+  let confidence = 50;
+  if (behavior?.summary?.overallTrend === 'BULLISH') { outlook = 'BULLISH'; confidence += 10; }
+  if (behavior?.summary?.overallTrend === 'BEARISH') { outlook = 'BEARISH'; confidence -= 10; }
+  if (strategies[0]?.grade === 'A') confidence += 15;
+  else if (strategies[0]?.grade === 'B') confidence += 8;
+  else if (strategies[0]?.grade === 'F') confidence -= 10;
+  confidence = Math.max(20, Math.min(90, confidence));
+
+  let keyInsight = '';
+  if (strategies[0] && topIndicators[0]) {
+    keyInsight = `Migliore strategia: ${strategies[0].name} (${strategies[0].totalReturn}% return, ${strategies[0].winRate}% WR). Indicatore più affidabile: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}% accuracy).`;
+  } else if (strategies[0]) {
+    keyInsight = `Migliore strategia: ${strategies[0].name} con ${strategies[0].totalReturn}% return.`;
+  } else if (topIndicators[0]) {
+    keyInsight = `Nessuna strategia testata. Indicatore più affidabile: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}%).`;
+  } else {
+    keyInsight = 'Analisi incompleta — eseguire tutte le fasi per un rapporto completo.';
+  }
+
+  // Trading schedule from behavior
+  const tradingSchedule = behavior?.bestTradingWindows || behavior?.worstTradingWindows ? {
+    bestHours: behavior.bestTradingWindows?.slice(0, 3).map((w: any) => w.description).join(', ') || 'N/A',
+    avoidHours: behavior.worstTradingWindows?.slice(0, 2).map((w: any) => w.description).join(', ') || 'N/A',
+    bestDays: (behavior.daily ?? []).filter((d: any) => d.winRate > 55 || d.rating === 'EXCELLENT' || d.rating === 'GOOD').map((d: any) => d.dayName ?? ['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.day]).join(', ') || 'N/A',
+    overallTrend: behavior.summary?.overallTrend ?? 'N/A',
+  } : null;
+
+  // Warnings
+  const warnings: string[] = [];
+  if (!strategies.length) warnings.push('Nessuna strategia testata — il rapporto è parziale');
+  if (strategies.length > 0 && strategies.every((s: any) => s.grade === 'F')) warnings.push('TUTTE le strategie hanno grade F — questo asset/timeframe potrebbe non essere adatto al trading automatico');
+  if (behavior?.summary?.avgDailyVolatility > 5) warnings.push('Volatilità molto alta (>5%) — usare size ridotto');
+  if (indicators.length > 0 && indicators.every((i: any) => i.accuracy < 55)) warnings.push('Nessun indicatore supera il 55% di accuracy — segnali poco affidabili');
+  if (!behavior) warnings.push('Analisi comportamentale non disponibile');
+
+  // Insights
   const insights: string[] = [];
-  if (behavior.bestHours?.length > 0) insights.push(`Migliori ore: ${behavior.bestHours.join(', ')} UTC`);
-  if (behavior.worstHours?.length > 0) insights.push(`Evitare: ${behavior.worstHours.join(', ')} UTC`);
+  if (behavior?.bestHours?.length > 0) insights.push(`Migliori ore: ${behavior.bestHours.join(', ')} UTC`);
+  if (behavior?.worstHours?.length > 0) insights.push(`Evitare: ${behavior.worstHours.join(', ')} UTC`);
   if (topIndicators.length > 0) insights.push(`Miglior indicatore: ${topIndicators[0].name} ${topIndicators[0].condition} (${topIndicators[0].accuracy}% accuracy)`);
   if (topPatterns.length > 0) insights.push(`Miglior pattern: ${topPatterns[0].pattern} (${topPatterns[0].winRate}% WR, ${topPatterns[0].occurrences}x)`);
   if (recommended.length > 0) insights.push(`Strategia raccomandata: ${recommended[0].name} (WR ${recommended[0].winRate}%, Sharpe ${recommended[0].sharpe})`);
 
-  return { asset, timeframe: tf, generatedAt: new Date().toISOString(), recommended, avoid, topIndicators, topPatterns, insights, totalStrategiesTested: strategies.length, candlesAnalyzed: behavior.totalCandles ?? 0 };
+  return {
+    asset, timeframe: tf, generatedAt: new Date().toISOString(),
+    dataAvailable: { behavior: !!behavior, indicators: indicators.length, patterns: patterns.length, strategies: strategies.length },
+    summary: { outlook, confidence, keyInsight },
+    recommended, avoid, topIndicators, topPatterns,
+    tradingSchedule, warnings, insights,
+    totalStrategiesTested: strategies.length,
+    candlesAnalyzed: behavior?.totalCandles ?? behavior?.summary?.totalCandles ?? 0,
+  };
 }
 
 // ── Routes ────────────────────────────────────────────────

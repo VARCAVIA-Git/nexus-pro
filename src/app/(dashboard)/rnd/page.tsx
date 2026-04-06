@@ -224,7 +224,7 @@ export default function RnDPage() {
         <div className="rounded-xl border border-n-border bg-n-card p-5">
           <h3 className="label mb-3 flex items-center gap-2"><Zap size={14} /> Strategie ranked ({strat.length})</h3>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs min-w-[700px]">
+            <table className="w-full text-left text-xs min-w-[750px]">
               <thead><tr className="border-b border-n-border">
                 <th className="pb-2 text-[9px] text-n-dim">#</th>
                 <th className="pb-2 text-[9px] text-n-dim">Strategia</th>
@@ -234,21 +234,21 @@ export default function RnDPage() {
                 <th className="pb-2 text-[9px] text-n-dim text-right">WR</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">MaxDD</th>
                 <th className="pb-2 text-[9px] text-n-dim text-right">Sharpe</th>
-                <th className="pb-2 text-[9px] text-n-dim text-right">SL</th>
-                <th className="pb-2 text-[9px] text-n-dim text-right">TP</th>
+                <th className="pb-2 text-[9px] text-n-dim text-right">PF</th>
+                <th className="pb-2 text-[9px] text-n-dim text-right">SL/TP</th>
               </tr></thead>
               <tbody>{strat.map((s: any, i: number) => (
-                <tr key={i} className={`border-b border-n-border/30 ${i < 3 ? 'bg-n-bg/30' : ''}`}>
-                  <td className="py-1.5 text-n-dim">{i + 1}</td>
-                  <td className="py-1.5 text-n-text font-medium">{s.name}</td>
-                  <td className="py-1.5 text-center">{s.grade && <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${GC[s.grade] ?? ''}`}>{s.grade}</span>}</td>
-                  <td className={`py-1.5 text-right font-mono ${s.totalReturn > 0 ? 'text-n-green' : 'text-n-red'}`}>{s.totalReturn > 0 ? '+' : ''}{s.totalReturn}%</td>
-                  <td className="py-1.5 text-right font-mono text-n-dim">{s.trades}</td>
-                  <td className="py-1.5 text-right font-mono text-n-text">{s.winRate}%</td>
-                  <td className="py-1.5 text-right font-mono text-n-red">{s.maxDD ? `-${s.maxDD}%` : '—'}</td>
-                  <td className="py-1.5 text-right font-mono text-n-text">{s.sharpe}</td>
-                  <td className="py-1.5 text-right font-mono text-n-dim">{s.sl > 0 ? `${s.sl}%` : '—'}</td>
-                  <td className="py-1.5 text-right font-mono text-n-dim">{s.tp > 0 ? `${s.tp}%` : '—'}</td>
+                <tr key={i} className={`border-b border-n-border/30 ${s.grade === 'A' ? 'bg-green-500/5' : s.grade === 'B' ? 'bg-blue-500/5' : s.grade === 'F' ? 'bg-red-500/5' : ''}`}>
+                  <td className="py-2 text-n-dim">{i + 1}</td>
+                  <td className="py-2 text-n-text font-medium">{s.name}</td>
+                  <td className="py-2 text-center">{s.grade && <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${GC[s.grade] ?? ''}`}>{s.grade}</span>}</td>
+                  <td className={`py-2 text-right font-mono font-bold ${s.totalReturn > 0 ? 'text-n-green' : 'text-n-red'}`}>{s.totalReturn > 0 ? '+' : ''}{s.totalReturn}%</td>
+                  <td className="py-2 text-right font-mono text-n-dim">{s.trades}</td>
+                  <td className={`py-2 text-right font-mono ${s.winRate > 55 ? 'text-n-green' : s.winRate > 45 ? 'text-n-text' : 'text-n-red'}`}>{s.winRate}%</td>
+                  <td className="py-2 text-right font-mono text-n-red">{s.maxDD ? `-${s.maxDD}%` : '—'}</td>
+                  <td className={`py-2 text-right font-mono ${s.sharpe > 1 ? 'text-n-green' : 'text-n-dim'}`}>{s.sharpe}</td>
+                  <td className={`py-2 text-right font-mono ${s.profitFactor > 1.5 ? 'text-n-green' : 'text-n-dim'}`}>{s.profitFactor || '—'}</td>
+                  <td className="py-2 text-right font-mono text-n-dim">{s.sl > 0 ? `${s.sl}/${s.tp}%` : '—'}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -258,49 +258,124 @@ export default function RnDPage() {
 
       {/* Phase 6: Final Report */}
       {rep && (
-        <div className="rounded-xl border-2 border-green-500/20 bg-green-500/5 p-5 space-y-4">
+        <div className="rounded-xl border-2 border-n-border bg-n-card p-5 space-y-5">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <h3 className="text-sm font-medium text-n-text flex items-center gap-2"><BookOpen size={14} /> Rapporto: {rep.asset} — {rep.timeframe}</h3>
-            <span className="text-[10px] text-n-dim">{rep.candlesAnalyzed} candele · {rep.totalStrategiesTested} strategie</span>
+            <span className="text-[10px] text-n-dim">{rep.candlesAnalyzed} candele · {rep.totalStrategiesTested} strategie · {new Date(rep.generatedAt).toLocaleString('it-IT')}</span>
           </div>
 
+          {/* Summary outlook */}
+          {rep.summary && (
+            <div className={`rounded-lg p-4 ${rep.summary.outlook === 'BULLISH' ? 'bg-green-500/10 border border-green-500/20' : rep.summary.outlook === 'BEARISH' ? 'bg-red-500/10 border border-red-500/20' : 'bg-n-bg/50 border border-n-border'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="text-sm font-bold text-n-text">{rep.summary.outlook === 'BULLISH' ? '▲' : rep.summary.outlook === 'BEARISH' ? '▼' : '▸'} Outlook: {rep.summary.outlook}</span>
+                <span className="font-mono text-xs text-n-dim">(confidence {rep.summary.confidence}%)</span>
+              </div>
+              <p className="text-xs text-n-dim">{rep.summary.keyInsight}</p>
+            </div>
+          )}
+
+          {/* Warnings */}
+          {rep.warnings?.length > 0 && (
+            <div className="space-y-1">
+              {rep.warnings.map((w: string, i: number) => (
+                <div key={i} className="rounded-lg bg-yellow-500/10 border border-yellow-500/15 px-3 py-1.5 text-[10px] text-yellow-400 flex items-center gap-1.5"><AlertTriangle size={10} />{w}</div>
+              ))}
+            </div>
+          )}
+
+          {/* Recommended strategies */}
           {rep.recommended?.length > 0 && (
             <div>
-              <p className="text-xs text-n-green font-medium mb-1.5 flex items-center gap-1"><TrendingUp size={12} /> Strategie consigliate</p>
+              <p className="text-xs text-n-green font-medium mb-2 flex items-center gap-1"><TrendingUp size={12} /> Strategie consigliate</p>
               {rep.recommended.map((s: any, i: number) => (
-                <div key={i} className="rounded-lg bg-n-bg/30 px-3 py-2 mb-1 flex items-center justify-between">
-                  <div><span className="text-xs text-n-text font-medium">{i + 1}. {s.name}</span>{s.grade && <span className={`ml-2 rounded px-1 py-0.5 text-[8px] font-bold ${GC[s.grade]}`}>{s.grade}</span>}</div>
-                  <span className="font-mono text-[10px] text-n-dim">SL {s.sl}% · TP {s.tp}% · WR {s.winRate}% · S {s.sharpe}</span>
+                <div key={i} className="rounded-lg bg-green-500/5 border border-green-500/10 px-3 py-2.5 mb-1.5">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs text-n-text font-bold">{i + 1}. {s.name}</span>
+                    {s.grade && <span className={`rounded px-1.5 py-0.5 text-[8px] font-bold ${GC[s.grade]}`}>{s.grade}</span>}
+                  </div>
+                  <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-[10px]">
+                    <span className="text-n-green font-mono">Return: {s.totalReturn > 0 ? '+' : ''}{s.totalReturn}%</span>
+                    <span className="text-n-text font-mono">WR: {s.winRate}%</span>
+                    <span className="text-n-dim font-mono">Sharpe: {s.sharpe}</span>
+                    {s.sl > 0 && <span className="text-n-dim font-mono">SL: {s.sl}% · TP: {s.tp}%</span>}
+                    <span className="text-n-dim font-mono">{s.trades} trade</span>
+                    {s.maxDD > 0 && <span className="text-n-red font-mono">MaxDD: -{s.maxDD}%</span>}
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
+          {/* Avoid strategies */}
           {rep.avoid?.length > 0 && (
             <div>
-              <p className="text-xs text-n-red font-medium mb-1 flex items-center gap-1"><AlertTriangle size={12} /> Da evitare</p>
-              {rep.avoid.slice(0, 3).map((s: any, i: number) => <p key={i} className="text-[10px] text-n-dim">✗ {s.name} — WR {s.winRate}% · Return {s.totalReturn}%</p>)}
+              <p className="text-xs text-n-red font-medium mb-1.5 flex items-center gap-1"><AlertTriangle size={12} /> Da evitare</p>
+              {rep.avoid.slice(0, 3).map((s: any, i: number) => (
+                <div key={i} className="rounded-lg bg-red-500/5 border border-red-500/10 px-3 py-1.5 mb-1 flex items-center justify-between">
+                  <span className="text-[10px] text-n-text font-medium">{s.name} <span className={`ml-1 rounded px-1 py-0.5 text-[8px] font-bold ${GC[s.grade]}`}>{s.grade}</span></span>
+                  <span className="font-mono text-[10px] text-n-dim">WR {s.winRate}% · {s.totalReturn}%</span>
+                </div>
+              ))}
             </div>
           )}
 
-          {rep.topIndicators?.length > 0 && (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Best indicators */}
+            {rep.topIndicators?.length > 0 && (
+              <div>
+                <p className="text-xs text-n-text font-medium mb-2 flex items-center gap-1"><Target size={12} /> Indicatori migliori</p>
+                {rep.topIndicators.slice(0, 5).map((r: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-1 border-b border-n-border/20">
+                    <span className="text-[10px] text-n-text">{r.name} <span className="text-n-dim">{r.condition}</span></span>
+                    <span className="text-[10px] text-n-green font-mono">{r.accuracy}% ({r.signals}sig)</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Best patterns */}
+            {rep.topPatterns?.length > 0 && (
+              <div>
+                <p className="text-xs text-n-text font-medium mb-2">Pattern migliori</p>
+                {rep.topPatterns.slice(0, 5).map((p: any, i: number) => (
+                  <div key={i} className="flex items-center justify-between py-1 border-b border-n-border/20">
+                    <span className="text-[10px] text-n-text">{p.pattern}</span>
+                    <span className="font-mono text-[10px]"><span className="text-n-green">{p.winRate}% WR</span> <span className="text-n-dim">({p.occurrences}x)</span></span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Trading schedule */}
+          {rep.tradingSchedule && (
             <div>
-              <p className="text-xs text-n-text font-medium mb-1 flex items-center gap-1"><Target size={12} /> Indicatori migliori</p>
-              {rep.topIndicators.slice(0, 3).map((ind: any, i: number) => <p key={i} className="text-[10px] text-n-text">{ind.name} {ind.condition} — {ind.accuracy}% accuracy</p>)}
+              <p className="text-xs text-n-text font-medium mb-2 flex items-center gap-1"><Clock size={12} /> Orario consigliato</p>
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div className="rounded-lg bg-n-bg/50 p-2"><span className="text-n-dim">Ore migliori:</span> <span className="text-n-green">{rep.tradingSchedule.bestHours}</span></div>
+                <div className="rounded-lg bg-n-bg/50 p-2"><span className="text-n-dim">Da evitare:</span> <span className="text-n-red">{rep.tradingSchedule.avoidHours}</span></div>
+                <div className="rounded-lg bg-n-bg/50 p-2"><span className="text-n-dim">Giorni migliori:</span> <span className="text-n-green">{rep.tradingSchedule.bestDays}</span></div>
+                <div className="rounded-lg bg-n-bg/50 p-2"><span className="text-n-dim">Trend:</span> <span className={rep.tradingSchedule.overallTrend === 'BULLISH' ? 'text-n-green' : rep.tradingSchedule.overallTrend === 'BEARISH' ? 'text-n-red' : 'text-n-text'}>{rep.tradingSchedule.overallTrend}</span></div>
+              </div>
             </div>
           )}
 
-          {rep.topPatterns?.length > 0 && (
-            <div>
-              <p className="text-xs text-n-text font-medium mb-1">Pattern migliori</p>
-              {rep.topPatterns.slice(0, 3).map((p: any, i: number) => <p key={i} className="text-[10px] text-n-text">{p.pattern} — {p.winRate}% WR ({p.occurrences}x)</p>)}
-            </div>
-          )}
-
+          {/* Insights */}
           {rep.insights?.length > 0 && (
             <div className="border-t border-n-border/50 pt-3">
-              <p className="text-xs text-n-text font-medium mb-1 flex items-center gap-1"><Shield size={12} /> Insights</p>
+              <p className="text-xs text-n-text font-medium mb-1.5 flex items-center gap-1"><Shield size={12} /> Insights</p>
               {rep.insights.map((ins: string, i: number) => <p key={i} className="text-[10px] text-n-dim">• {ins}</p>)}
+            </div>
+          )}
+
+          {/* Data availability indicator */}
+          {rep.dataAvailable && (
+            <div className="flex flex-wrap gap-2 text-[9px] text-n-dim pt-1">
+              <span className={rep.dataAvailable.behavior ? 'text-n-green' : 'text-n-red'}>Behavior: {rep.dataAvailable.behavior ? 'OK' : 'NO'}</span>
+              <span className={rep.dataAvailable.indicators > 0 ? 'text-n-green' : 'text-n-red'}>Indicatori: {rep.dataAvailable.indicators}</span>
+              <span className={rep.dataAvailable.patterns > 0 ? 'text-n-green' : 'text-n-red'}>Pattern: {rep.dataAvailable.patterns}</span>
+              <span className={rep.dataAvailable.strategies > 0 ? 'text-n-green' : 'text-n-red'}>Strategie: {rep.dataAvailable.strategies}</span>
             </div>
           )}
         </div>
