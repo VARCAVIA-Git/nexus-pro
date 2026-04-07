@@ -9,11 +9,14 @@ export interface MinedRule {
   id: string;
   conditions: string[];
   occurrences: number;
-  winRate: number;       // raw % of times direction was correct (24h)
-  wilsonLB: number;      // Wilson 95% lower bound — honest WR estimate
+  winRate: number;       // raw % of times the next 24h return was positive
+  wilsonLB: number;      // Wilson 95% LB on wins (raw, for backward compat)
+  wilson: number;        // Direction-aware Wilson confidence (high = strong signal)
+                         // BUY: Wilson LB on wins
+                         // SELL: Wilson LB on losses (= confidence price will go DOWN)
   avgReturn: number;     // % avg return at 24h
   direction: 'BUY' | 'SELL';
-  edgeScore: number;     // wilsonLB × |avgReturn| × sqrt(occurrences)
+  edgeScore: number;     // wilson × |avgReturn| × sqrt(occurrences)
 }
 
 /**
@@ -107,30 +110,29 @@ export function minePatterns(contexts: CandleContext[]): MinedRule[] {
   const minOccurrences2 = 25;
   const minOccurrences3 = 20;
   const minEdge = 0.002; // |avg return| > 0.2% (above noise)
-  const minWilsonBuy = 0.50;  // Wilson LB ≥ 50% — statistically above random
-  const maxWilsonSell = 0.50; // Wilson UB on wins ≤ 50% for SELL (confidently losing)
+  const minWilsonBuy = 0.50;  // Direction-aware Wilson LB ≥ 50% (statistically above random)
 
   function buildRule(conds: Condition[], r: { count: number; wins: number; sumRet: number }): MinedRule | null {
     const wr = (r.wins / r.count) * 100;
     const avgRet = r.sumRet / r.count;
     if (Math.abs(avgRet) < minEdge) return null;
-    const wlb = wilsonLowerBound(r.wins, r.count);
-    const wub = 1 - wilsonLowerBound(r.count - r.wins, r.count); // upper bound
+    // Wilson LB on wins (for BUY) and on losses (for SELL)
+    const wlbWins = wilsonLowerBound(r.wins, r.count);
+    const wlbLosses = wilsonLowerBound(r.count - r.wins, r.count);
     const dir: 'BUY' | 'SELL' = avgRet > 0 ? 'BUY' : 'SELL';
-    // Apply Wilson filter
-    if (dir === 'BUY' && wlb < minWilsonBuy) return null;
-    if (dir === 'SELL' && wub > maxWilsonSell) return null;
-    // Use Wilson LB for ranking — it's the honest probability of being right
-    const honestWR = dir === 'BUY' ? wlb : (1 - wub);
+    // Direction-aware confidence — high = strong signal in the chosen direction
+    const wilson = dir === 'BUY' ? wlbWins : wlbLosses;
+    if (wilson < minWilsonBuy) return null; // unified threshold (50%)
     return {
       id: conds.map(c => c.id).join('+'),
       conditions: conds.map(c => c.id),
       occurrences: r.count,
       winRate: Math.round(wr),
-      wilsonLB: Math.round(wlb * 1000) / 10,
+      wilsonLB: Math.round(wlbWins * 1000) / 10,    // raw (backward compat)
+      wilson: Math.round(wilson * 1000) / 10,       // direction-aware
       avgReturn: Math.round(avgRet * 10000) / 100,
       direction: dir,
-      edgeScore: honestWR * Math.abs(avgRet) * Math.sqrt(r.count),
+      edgeScore: wilson * Math.abs(avgRet) * Math.sqrt(r.count),
     };
   }
 

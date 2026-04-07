@@ -191,7 +191,7 @@ export default function DeepMappingPage() {
                   <thead><tr className="border-b border-n-border">
                     <th className="pb-2 text-[9px] text-n-dim">#</th>
                     <th className="pb-2 text-[9px] text-n-dim">Condizioni</th>
-                    <th className="pb-2 text-[9px] text-n-dim text-right">Wilson</th>
+                    <th className="pb-2 text-[9px] text-n-dim text-right" title="Direction-aware Wilson lower bound (95% confidence)">Conf%</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">WR raw</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">AvgRet</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">Occorr.</th>
@@ -201,7 +201,7 @@ export default function DeepMappingPage() {
                     <tr key={i} className="border-b border-n-border/30">
                       <td className="py-1.5 text-n-dim">{i + 1}</td>
                       <td className="py-1.5 text-n-text font-mono text-[10px]">{r.conditions.join(' + ')}</td>
-                      <td className="py-1.5 text-right font-mono text-n-green font-bold">{r.wilsonLB ?? '—'}%</td>
+                      <td className="py-1.5 text-right font-mono text-n-green font-bold">{r.wilson ?? r.wilsonLB ?? '—'}%</td>
                       <td className="py-1.5 text-right font-mono text-n-dim">{r.winRate}%</td>
                       <td className="py-1.5 text-right font-mono text-n-green">+{r.avgReturn}%</td>
                       <td className="py-1.5 text-right font-mono text-n-dim">{r.occurrences}</td>
@@ -222,7 +222,7 @@ export default function DeepMappingPage() {
                   <thead><tr className="border-b border-n-border">
                     <th className="pb-2 text-[9px] text-n-dim">#</th>
                     <th className="pb-2 text-[9px] text-n-dim">Condizioni</th>
-                    <th className="pb-2 text-[9px] text-n-dim text-right">Wilson</th>
+                    <th className="pb-2 text-[9px] text-n-dim text-right" title="Direction-aware Wilson lower bound (95% confidence)">Conf%</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">WR raw</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">AvgRet</th>
                     <th className="pb-2 text-[9px] text-n-dim text-right">Occorr.</th>
@@ -232,7 +232,7 @@ export default function DeepMappingPage() {
                     <tr key={i} className="border-b border-n-border/30">
                       <td className="py-1.5 text-n-dim">{i + 1}</td>
                       <td className="py-1.5 text-n-text font-mono text-[10px]">{r.conditions.join(' + ')}</td>
-                      <td className="py-1.5 text-right font-mono text-n-red font-bold">{r.wilsonLB ?? '—'}%</td>
+                      <td className="py-1.5 text-right font-mono text-n-red font-bold">{r.wilson ?? (100 - (r.wilsonLB ?? 50))}%</td>
                       <td className="py-1.5 text-right font-mono text-n-dim">{r.winRate}%</td>
                       <td className="py-1.5 text-right font-mono text-n-red">{r.avgReturn}%</td>
                       <td className="py-1.5 text-right font-mono text-n-dim">{r.occurrences}</td>
