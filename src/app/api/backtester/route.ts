@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   if (action === 'start') {
     const preset: string = body.preset ?? 'crypto_diverse';
     const assets: string[] = body.assets ?? PRESETS[preset] ?? PRESETS['crypto_diverse'];
-    const validSources = ['strategies', 'deepmap', 'both'];
+    const validSources = ['strategies', 'deepmap', 'bollinger', 'both'];
     const signalSource = validSources.includes(body.signalSource) ? body.signalSource : 'strategies';
     const config: BacktesterConfig = {
       ...DEFAULT_BT_CONFIG,

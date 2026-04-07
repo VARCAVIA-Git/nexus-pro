@@ -18,7 +18,7 @@ export default function BacktesterPage() {
   const [risk, setRisk] = useState(1.5);
   const [tpMult, setTpMult] = useState(3);
   const [slMult, setSlMult] = useState(1.5);
-  const [signalSource, setSignalSource] = useState<'strategies' | 'deepmap' | 'both'>('strategies');
+  const [signalSource, setSignalSource] = useState<'strategies' | 'deepmap' | 'bollinger' | 'both'>('strategies');
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<any>(null);
@@ -122,13 +122,14 @@ export default function BacktesterPage() {
           </div>
           <div className="sm:col-span-2">
             <p className="label mb-1">Signal source</p>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
               {[
-                { v: 'strategies', l: 'Strategie hard-coded' },
-                { v: 'deepmap', l: 'Deep Map rules' },
-                { v: 'both', l: 'Entrambe' },
+                { v: 'strategies', l: 'Strategie HC' },
+                { v: 'deepmap', l: 'Deep Map' },
+                { v: 'bollinger', l: 'Bollinger Expert' },
+                { v: 'both', l: 'Tutto' },
               ].map(o => (
-                <button key={o.v} onClick={() => setSignalSource(o.v as any)} className={`flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] ${signalSource === o.v ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-n-border text-n-dim hover:text-n-text'}`}>
+                <button key={o.v} onClick={() => setSignalSource(o.v as any)} className={`flex-1 min-w-[100px] rounded-xl border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] ${signalSource === o.v ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-n-border text-n-dim hover:text-n-text'}`}>
                   {o.l}
                 </button>
               ))}

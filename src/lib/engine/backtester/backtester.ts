@@ -8,11 +8,12 @@ import type { OHLCV, Indicators } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { getAllRunnableStrategies, type RunnableStrategy } from '@/lib/engine/rnd/strategy-runner';
 import { createDeepMapStrategy } from './deepmap-source';
+import { createBollingerStrategy } from './bollinger-source';
 import {
   sizePosition, type MMConfig, DEFAULT_MM, type OpenPosition, getGroup,
 } from './money-management';
 
-export type SignalSource = 'strategies' | 'deepmap' | 'both';
+export type SignalSource = 'strategies' | 'deepmap' | 'bollinger' | 'both';
 
 export interface BacktesterConfig {
   assets: string[];
@@ -209,6 +210,15 @@ async function prepareAssets(
       } else {
         dmSkipped++;
         onProgress?.(`${asset}: no Deep Map rules`);
+      }
+    }
+    if (signalSource === 'bollinger' || signalSource === 'both') {
+      const bb = await createBollingerStrategy(asset, candles, indicators);
+      if (bb) {
+        strategies.push(bb);
+        onProgress?.(`${asset}: Bollinger profile loaded`);
+      } else {
+        onProgress?.(`${asset}: no Bollinger profile (train it first)`);
       }
     }
 

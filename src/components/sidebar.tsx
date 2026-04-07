@@ -25,6 +25,7 @@ const TOOLS_NAV = [
   { href: '/intelligence', label: 'Intelligence', icon: Brain },
   { href: '/rnd', label: 'R&D Lab', icon: Microscope },
   { href: '/deep-mapping', label: 'Deep Mapping', icon: Dna },
+  { href: '/bollinger-bot', label: 'Bollinger Bot', icon: Sparkles },
   { href: '/backtester', label: 'Backtester', icon: FlaskConical },
 ];
 
