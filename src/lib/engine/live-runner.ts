@@ -7,6 +7,7 @@ import type { OHLCV, StrategyKey, TradeRecord, Side, Regime } from '@/types';
 import type { MultiBotConfig, MultiBotCreateInput } from '@/types/bot';
 import { computeIndicators } from './indicators';
 import { generateSignal, getStrategy } from './strategies';
+import { consultDeepMapRules } from './deep-mapping/bot-integration';
 import { checkCircuitBreaker, trailingStopATR, atrPositionSize, getCapitalRules, timeframePositionSize, preTradeChecks, checkProfitLock } from './risk';
 import { AlpacaBroker } from '@/lib/broker/alpaca';
 import { notifyTrade, notifyTradeClose, notifyBot } from './notifications';
@@ -156,6 +157,64 @@ async function tickBot(botId: string) {
           if (sig.confidence > bestConf) { bestConf = sig.confidence; bestSignal = sig; }
         }
         if (!bestSignal) continue;
+
+        // ── Deep Mapping consultation ──
+        // Build current context from already-computed indicators (no recompute)
+        try {
+          const macdH = indicators.macd.histogram[lastIdx] ?? 0;
+          const macdHPrev = indicators.macd.histogram[lastIdx - 1] ?? 0;
+          const macdSignal = macdH > 0 && macdHPrev <= 0 ? 'CROSS_UP'
+            : macdH < 0 && macdHPrev >= 0 ? 'CROSS_DOWN'
+            : macdH > 0 ? 'ABOVE' : 'BELOW';
+          const lower = indicators.bollinger.lower[lastIdx];
+          const mid = indicators.bollinger.mid[lastIdx];
+          const upper = indicators.bollinger.upper[lastIdx];
+          let bbPosition = 'AT_MID';
+          if (lower !== null && mid !== null && upper !== null) {
+            if (price < lower * 0.998) bbPosition = 'BELOW_LOWER';
+            else if (price < lower * 1.005) bbPosition = 'AT_LOWER';
+            else if (price < mid * 0.998) bbPosition = 'LOWER_HALF';
+            else if (price < mid * 1.002) bbPosition = 'AT_MID';
+            else if (price < upper * 0.995) bbPosition = 'UPPER_HALF';
+            else if (price < upper * 1.002) bbPosition = 'AT_UPPER';
+            else bbPosition = 'ABOVE_UPPER';
+          }
+          const slope5 = lastIdx >= 5 && candles[lastIdx - 5].close > 0 ? (price - candles[lastIdx - 5].close) / candles[lastIdx - 5].close : 0;
+          const slope20 = lastIdx >= 20 && candles[lastIdx - 20].close > 0 ? (price - candles[lastIdx - 20].close) / candles[lastIdx - 20].close : 0;
+          const slope50 = lastIdx >= 50 && candles[lastIdx - 50].close > 0 ? (price - candles[lastIdx - 50].close) / candles[lastIdx - 50].close : 0;
+          const trendOf = (s: number) => s > 0.015 ? 'STRONG_UP' : s > 0.003 ? 'UP' : s < -0.015 ? 'STRONG_DOWN' : s < -0.003 ? 'DOWN' : 'FLAT';
+          const avgVol = indicators.volume.avg20[lastIdx] ?? 0;
+          const volRatio = avgVol > 0 ? candles[lastIdx].volume / avgVol : 1;
+          const volumeProfile = volRatio > 2.5 ? 'CLIMAX' : volRatio > 1.5 ? 'HIGH' : volRatio < 0.5 ? 'DRY' : volRatio < 0.8 ? 'LOW' : 'NORMAL';
+          const adx = indicators.adx[lastIdx] ?? 0;
+          const atrPct = price > 0 ? (indicators.atr[lastIdx] ?? 0) / price : 0;
+          const dmRegime = atrPct > 0.025 ? 'VOLATILE' : adx > 25 && slope20 > 0.005 ? 'TRENDING_UP' : adx > 25 && slope20 < -0.005 ? 'TRENDING_DOWN' : 'RANGING';
+
+          const adjustment = await consultDeepMapRules(symbol, {
+            rsi14: indicators.rsi[lastIdx] ?? 50,
+            macdHistogram: macdH,
+            macdSignal,
+            bbPosition,
+            bbWidth: indicators.bollinger.width[lastIdx] ?? 0,
+            adx14: adx,
+            stochK: indicators.stochastic.k[lastIdx] ?? 50,
+            trendShort: trendOf(slope5),
+            trendMedium: trendOf(slope20),
+            trendLong: trendOf(slope50),
+            volumeProfile,
+            regime: dmRegime,
+          }, rt.config.name);
+
+          if (adjustment !== 0) {
+            // Apply adjustment to confidence (scaled to 0-1 range)
+            const newConf = Math.max(0, Math.min(1, bestSignal.confidence + adjustment / 100));
+            console.log(`[TICK][${rt.config.name}] Deep Map adjustment: ${adjustment > 0 ? '+' : ''}${adjustment} → confidence ${(bestSignal.confidence * 100).toFixed(0)}% → ${(newConf * 100).toFixed(0)}%`);
+            bestSignal = { ...bestSignal, confidence: newConf };
+          }
+        } catch (e: any) {
+          // Deep map is optional — never block trading on failures
+          console.warn(`[TICK][${rt.config.name}] Deep Map consult failed: ${e.message}`);
+        }
 
         const logEntry: BotSignalLog = { botId, symbol, signal: bestSignal.signal, confidence: bestSignal.confidence, strategy: bestSignal.strategy, price, regime: bestSignal.regime, time: now.toISOString(), acted: false };
 
