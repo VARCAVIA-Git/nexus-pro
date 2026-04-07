@@ -6,7 +6,6 @@
 
 import type { OHLCV, Indicators } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
-import { fetchAlpacaBars } from '@/lib/data/providers/alpaca-data';
 import { getAllRunnableStrategies, type RunnableStrategy } from '@/lib/engine/rnd/strategy-runner';
 import {
   sizePosition, type MMConfig, DEFAULT_MM, type OpenPosition, getGroup,
@@ -95,20 +94,91 @@ interface AssetState {
 
 // ── Fetch + prepare assets ──
 
-async function fetchAssetData(asset: string, months: number): Promise<OHLCV[]> {
-  // Use 1h timeframe — Alpaca limit is 10000/page so we need multiple pages for >6 months
-  const limit = Math.min(10000, months * 30 * 24 + 100);
-  const candles = await fetchAlpacaBars(asset, '1h', limit);
-  return candles;
+// ── Robust Alpaca fetcher: explicit date range + pagination + IEX feed for stocks ──
+const ALPACA_DATA = 'https://data.alpaca.markets';
+
+function alpacaHeaders(): Record<string, string> {
+  return {
+    'APCA-API-KEY-ID': process.env.ALPACA_API_KEY ?? '',
+    'APCA-API-SECRET-KEY': process.env.ALPACA_API_SECRET ?? process.env.ALPACA_SECRET_KEY ?? '',
+  };
 }
 
-async function prepareAssets(assets: string[], months: number, onProgress?: (msg: string) => void): Promise<AssetState[]> {
+async function fetchAssetData(asset: string, months: number): Promise<OHLCV[]> {
+  const headers = alpacaHeaders();
+  if (!headers['APCA-API-KEY-ID']) {
+    console.log('[BACKTESTER] No Alpaca API key configured');
+    return [];
+  }
+
+  const crypto = asset.includes('/');
+  const end = new Date(Date.now() - 16 * 60000); // 16 min ago — free tier SIP restriction
+  const start = new Date(end.getTime() - months * 30 * 86400000);
+
+  const all: OHLCV[] = [];
+  let pageToken: string | null = null;
+  let pages = 0;
+  const MAX_PAGES = 10;
+
+  do {
+    const params = new URLSearchParams({
+      timeframe: '1Hour',
+      start: start.toISOString(),
+      end: end.toISOString(),
+      limit: '10000',
+    });
+    if (crypto) {
+      params.set('symbols', asset);
+    } else {
+      params.set('feed', 'iex'); // free tier requires IEX feed for recent stock data
+      params.set('adjustment', 'split');
+    }
+    if (pageToken) params.set('page_token', pageToken);
+
+    const baseUrl = crypto
+      ? `${ALPACA_DATA}/v1beta3/crypto/us/bars`
+      : `${ALPACA_DATA}/v2/stocks/${asset}/bars`;
+
+    try {
+      const res = await fetch(`${baseUrl}?${params}`, { headers });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => '');
+        console.log(`[BACKTESTER] ${asset}: HTTP ${res.status} ${txt.slice(0, 200)}`);
+        break;
+      }
+      const data = await res.json();
+      const bars = crypto ? (data.bars?.[asset] ?? []) : (data.bars ?? []);
+      for (const b of bars) {
+        all.push({
+          date: new Date(b.t).toISOString(),
+          open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
+        });
+      }
+      pageToken = data.next_page_token ?? null;
+      pages++;
+      if (pages >= MAX_PAGES) break;
+      if (pageToken) await new Promise(r => setTimeout(r, 200));
+    } catch (err: any) {
+      console.log(`[BACKTESTER] ${asset} fetch error: ${err.message}`);
+      break;
+    }
+  } while (pageToken);
+
+  const sorted = all.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  console.log(`[BACKTESTER] ${asset}: ${sorted.length} bars (${pages} pages, ${start.toISOString().slice(0, 10)} → ${end.toISOString().slice(0, 10)})`);
+  return sorted;
+}
+
+async function prepareAssets(assets: string[], months: number, onProgress?: (msg: string) => void): Promise<{ states: AssetState[]; failures: string[] }> {
   const states: AssetState[] = [];
+  const failures: string[] = [];
   for (const asset of assets) {
     onProgress?.(`Fetching ${asset}...`);
     const candles = await fetchAssetData(asset, months);
     if (candles.length < 100) {
-      onProgress?.(`Skipping ${asset}: only ${candles.length} candles`);
+      const msg = `${asset}: ${candles.length} bars (need 100+)`;
+      failures.push(msg);
+      onProgress?.(`Skipping ${msg}`);
       continue;
     }
     const indicators = computeIndicators(candles);
@@ -116,7 +186,7 @@ async function prepareAssets(assets: string[], months: number, onProgress?: (msg
     states.push({ asset, candles, indicators, strategies });
     onProgress?.(`Loaded ${asset}: ${candles.length} bars`);
   }
-  return states;
+  return { states, failures };
 }
 
 // ── Build unified timeline ──
@@ -250,11 +320,15 @@ export async function runMultiAssetBacktest(
 
   // 1. Fetch + prepare all assets
   onProgress?.('fetching', 5, 'Fetching market data...');
-  const states = await prepareAssets(config.assets, config.months, msg => {
+  const { states, failures } = await prepareAssets(config.assets, config.months, msg => {
     onProgress?.('fetching', 10, msg);
   });
   if (states.length === 0) {
-    throw new Error('No valid asset data fetched');
+    const reason = failures.length > 0 ? failures.join('; ') : 'all assets returned 0 bars';
+    throw new Error(`No valid asset data fetched: ${reason}. Check Alpaca API keys and asset symbols.`);
+  }
+  if (failures.length > 0) {
+    console.log(`[BACKTESTER] Skipped ${failures.length} assets: ${failures.join(', ')}`);
   }
 
   // 2. Build unified timeline
