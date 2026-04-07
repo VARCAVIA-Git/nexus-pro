@@ -7,7 +7,7 @@ import { useModeStore } from '@/stores/mode-store';
 import {
   LayoutDashboard, Briefcase, ArrowLeftRight, Zap, BarChart3,
   Bot, Brain, FlaskConical, Microscope, Activity, Dna,
-  Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut,
+  Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut, Sparkles,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -23,10 +23,9 @@ const MAIN_NAV = [
 const TOOLS_NAV = [
   { href: '/strategy', label: 'Strategy', icon: Bot },
   { href: '/intelligence', label: 'Intelligence', icon: Brain },
-  { href: '/backtest', label: 'Backtest', icon: FlaskConical },
   { href: '/rnd', label: 'R&D Lab', icon: Microscope },
   { href: '/deep-mapping', label: 'Deep Mapping', icon: Dna },
-  { href: '/backtester', label: 'Backtester', icon: BarChart3 },
+  { href: '/backtester', label: 'Backtester', icon: FlaskConical },
 ];
 
 const SYSTEM_NAV = [

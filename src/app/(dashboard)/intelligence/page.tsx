@@ -1,11 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useState, useEffect } from 'react';
 import { fmtDollar, fmtPnl } from '@/lib/utils/format';
 import type { MasterSignal, EconomicEvent } from '@/types/intelligence';
 import {
   TrendingUp, TrendingDown, Minus, RefreshCw, Calendar, Newspaper,
-  BarChart3, ChevronDown, AlertTriangle, Zap, Target, Shield,
+  BarChart3, ChevronDown, AlertTriangle, Zap, Target, Shield, Brain,
 } from 'lucide-react';
 
 const REC_COLORS: Record<string, string> = {
@@ -70,9 +71,14 @@ export default function IntelligencePage() {
           <h1 className="text-xl font-bold text-n-text">Intelligence</h1>
           <p className="text-xs text-n-dim">Multi-timeframe analysis + News + Calendario economico</p>
         </div>
-        <button onClick={fetchData} disabled={loading} className="flex items-center gap-1.5 rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text transition-colors disabled:opacity-50 self-start">
-          <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Aggiorna
-        </button>
+        <div className="flex items-center gap-2 self-start">
+          <Link href="/intelligence/learning" className="flex items-center gap-1.5 rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text transition-colors">
+            <Brain size={13} /> Adaptive Learning
+          </Link>
+          <button onClick={fetchData} disabled={loading} className="flex items-center gap-1.5 rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text transition-colors disabled:opacity-50">
+            <RefreshCw size={13} className={loading ? 'animate-spin' : ''} /> Aggiorna
+          </button>
+        </div>
       </div>
 
       {loading ? (

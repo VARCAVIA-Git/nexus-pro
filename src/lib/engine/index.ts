@@ -3,8 +3,9 @@ export { detectPatterns, patternScore } from './patterns';
 export { generateSignal, getStrategy, strategyMap } from './strategies';
 export type { Strategy } from './strategies';
 export { runBacktest, runMonteCarlo, runWalkForward, runFullBacktest } from './backtest';
-export { generateOHLCV, generateAssetOHLCV, assetPresets } from './data-generator';
-export { generateSignalsForAssets, generateSignalSummary } from './signals';
+// data-generator and signals.ts removed from re-exports — they used synthetic GBM data.
+// Real backtesting now lives in src/lib/engine/backtester/ (uses Alpaca real data).
+// Real signals are computed inline in /api/signals/route.ts via fetchAlpacaBars.
 export { kellySize, atrPositionSize, pearsonCorrelation, correlationRisk, checkCircuitBreaker, trailingStopATR, assessRisk, TIMEFRAME_CAPITAL_RULES, getCapitalRules, timeframePositionSize, preTradeChecks, checkProfitLock } from './risk';
 export type { PreTradeResult, ProfitLockAction } from './risk';
 export { startBot, stopBot, getBotStatus, loadSavedConfig, wasBotRunning, createBot, deleteBot, getAllBots, getBotRuntime, startBotLegacy, loadSavedBots } from './live-runner';
