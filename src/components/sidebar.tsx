@@ -6,7 +6,7 @@ import { clsx } from 'clsx';
 import { useModeStore } from '@/stores/mode-store';
 import {
   LayoutDashboard, Briefcase, ArrowLeftRight, Zap, BarChart3,
-  Bot, Brain, FlaskConical, Microscope, Activity, Dna,
+  Bot, Brain, FlaskConical, Microscope, Activity, Dna, Boxes,
   Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut, Sparkles,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -18,6 +18,7 @@ const MAIN_NAV = [
   { href: '/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
   { href: '/segnali', label: 'Segnali', icon: Zap },
   { href: '/analysis', label: 'Analisi', icon: BarChart3 },
+  { href: '/assets', label: 'Assets', icon: Boxes },
 ];
 
 const TOOLS_NAV = [

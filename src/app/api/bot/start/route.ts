@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { startBot, startBotLegacy, createBot } from '@/lib/engine/live-runner';
+import { startBot, startBotLegacy, createBot } from '@/lib/analytics/action/live-runner';
 
 export const dynamic = 'force-dynamic';
 

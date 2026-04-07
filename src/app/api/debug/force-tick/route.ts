@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import type { OHLCV, StrategyKey } from '@/types';
 import type { MultiBotConfig } from '@/types/bot';
-import { computeIndicators } from '@/lib/engine/indicators';
-import { generateSignal } from '@/lib/engine/strategies';
-import { checkCircuitBreaker, preTradeChecks, getCapitalRules, timeframePositionSize } from '@/lib/engine/risk';
-import { classifyRegime } from '@/lib/engine/regime-classifier';
-import { evaluateEntryTiming } from '@/lib/engine/smart-timing';
-import { detectTrap } from '@/lib/engine/trap-detector';
+import { computeIndicators } from '@/lib/core/indicators';
+import { generateSignal } from '@/lib/analytics/cognition/strategies';
+import { checkCircuitBreaker, preTradeChecks, getCapitalRules, timeframePositionSize } from '@/lib/analytics/action/risk';
+import { classifyRegime } from '@/lib/analytics/perception/regime-classifier';
+import { evaluateEntryTiming } from '@/lib/analytics/cognition/smart-timing';
+import { detectTrap } from '@/lib/analytics/cognition/trap-detector';
 import { redisGet, KEYS } from '@/lib/db/redis';
 import { fetchAlpacaBars } from '@/lib/data/providers/alpaca-data';
 

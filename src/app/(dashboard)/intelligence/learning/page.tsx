@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { fmtPercent } from '@/lib/utils/format';
-import type { AssetInsights, AdaptiveWeights, OptimizedParams } from '@/lib/engine/learning/types';
+import type { AssetInsights, AdaptiveWeights, OptimizedParams } from '@/lib/analytics/learning/types';
 import {
   Brain, RefreshCw, TrendingUp, Clock, BarChart3, Target, Zap, AlertTriangle,
 } from 'lucide-react';

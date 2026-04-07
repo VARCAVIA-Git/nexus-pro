@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { OHLCV } from '@/types';
-import { computeIndicators } from '@/lib/engine/indicators';
-import { detectPatterns } from '@/lib/engine/patterns';
-import { getAllRunnableStrategies, simpleBacktest } from '@/lib/engine/rnd/strategy-runner';
-import { generateAssetProfile } from '@/lib/engine/rnd/asset-profile';
-import { analyzeBehavior as deepBehavior } from '@/lib/engine/rnd/behavior-analysis';
-import { downloadHistory } from '@/lib/engine/rnd/history-loader';
+import { computeIndicators } from '@/lib/core/indicators';
+import { detectPatterns } from '@/lib/core/patterns';
+import { getAllRunnableStrategies, simpleBacktest } from '@/lib/research/rnd/strategy-runner';
+import { generateAssetProfile } from '@/lib/research/rnd/asset-profile';
+import { analyzeBehavior as deepBehavior } from '@/lib/research/rnd/behavior-analysis';
+import { downloadHistory } from '@/lib/research/rnd/history-loader';
 import { redisGet, redisSet } from '@/lib/db/redis';
 
 export const dynamic = 'force-dynamic';

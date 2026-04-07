@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { getStrategy, generateSignal, strategyMap } from '@/lib/engine/strategies';
-import { computeIndicators } from '@/lib/engine/indicators';
-import { generateOHLCV } from '@/lib/engine/data-generator';
+import { getStrategy, generateSignal, strategyMap } from '@/lib/analytics/cognition/strategies';
+import { computeIndicators } from '@/lib/core/indicators';
+import { generateOHLCV } from '@/lib/core/data-generator';
 import type { StrategyKey, Position } from '@/types';
 
 const candles = generateOHLCV({ startPrice: 100, days: 300, seed: 123 });

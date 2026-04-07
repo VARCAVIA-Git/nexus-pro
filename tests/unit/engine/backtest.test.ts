@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { runBacktest, runMonteCarlo, runWalkForward, runFullBacktest } from '@/lib/engine/backtest';
-import { generateOHLCV } from '@/lib/engine/data-generator';
+import { runBacktest, runMonteCarlo, runWalkForward, runFullBacktest } from '@/lib/research/backtest';
+import { generateOHLCV } from '@/lib/core/data-generator';
 import type { TradingConfig } from '@/types';
 
 const candles = generateOHLCV({ startPrice: 100, days: 500, seed: 77 });

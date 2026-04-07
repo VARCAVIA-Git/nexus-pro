@@ -6,7 +6,7 @@
 
 import { NextResponse } from 'next/server';
 import { redisGet, redisSet } from '@/lib/db/redis';
-import { runMultiAssetBacktest, type BacktesterConfig, DEFAULT_BT_CONFIG } from '@/lib/engine/backtester';
+import { runMultiAssetBacktest, type BacktesterConfig, DEFAULT_BT_CONFIG } from '@/lib/research/backtester';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — long-running

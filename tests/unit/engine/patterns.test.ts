@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { detectPatterns, patternScore } from '@/lib/engine/patterns';
+import { detectPatterns, patternScore } from '@/lib/core/patterns';
 import type { OHLCV } from '@/types';
 
 // Helper to create candles

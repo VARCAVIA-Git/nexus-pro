@@ -3,8 +3,8 @@ import {
   computeRSI, computeMACD, computeBollinger, computeATR,
   computeADX, computeStochastic, computeEMA, computeSMA,
   computeVolumeAnalysis, computeOBV, computeIndicators, detectRegime,
-} from '@/lib/engine/indicators';
-import { generateOHLCV } from '@/lib/engine/data-generator';
+} from '@/lib/core/indicators';
+import { generateOHLCV } from '@/lib/core/data-generator';
 import type { OHLCV } from '@/types';
 
 // Generate test data with a known seed

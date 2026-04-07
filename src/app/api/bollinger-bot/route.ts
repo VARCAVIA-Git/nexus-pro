@@ -9,8 +9,8 @@
 
 import { NextResponse } from 'next/server';
 import { redisGet, redisSet } from '@/lib/db/redis';
-import { calibrateAsset } from '@/lib/engine/bollinger-bot';
-import type { BollingerProfile, TrainingJob } from '@/lib/engine/bollinger-bot/types';
+import { calibrateAsset } from '@/lib/research/bollinger-bot';
+import type { BollingerProfile, TrainingJob } from '@/lib/research/bollinger-bot/types';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
