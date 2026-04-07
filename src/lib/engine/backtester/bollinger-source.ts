@@ -56,9 +56,15 @@ export async function createBollingerStrategy(
   const longEnabled = profile.long.expectedValue > 0 && profile.long.samples >= 30;
   const shortEnabled = profile.short.expectedValue > 0 && profile.short.samples >= 30;
 
-  // Build a confidence based on the profile's expected value (higher EV = higher conf)
-  const longConf = Math.min(95, 50 + Math.round(profile.long.expectedValue * 10));
-  const shortConf = Math.min(95, 50 + Math.round(profile.short.expectedValue * 10));
+  // Confidence by recommendation tier (the profile already passed filters)
+  // STRONG: high confidence, GOOD: medium-high, CAUTION: medium (still above 55 threshold)
+  const baseConf =
+    profile.recommendation === 'STRONG' ? 80 :
+    profile.recommendation === 'GOOD' ? 70 :
+    profile.recommendation === 'CAUTION' ? 58 : 50;
+  // Bonus for higher EV: each 0.5% adds +5, capped
+  const longConf = Math.min(95, baseConf + Math.round(profile.long.expectedValue * 10));
+  const shortConf = Math.min(95, baseConf + Math.round(profile.short.expectedValue * 10));
 
   return {
     name: `Bollinger[${asset}]`,

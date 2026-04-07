@@ -76,6 +76,59 @@ function scanSignals(
   return out;
 }
 
+// ── Pre-compute per-signal forward trajectories (O(N×L) once) ──
+interface PreSignal {
+  index: number;
+  entryPrice: number;
+  favPath: number[];   // intracandle favorable %  (positive)
+  advPath: number[];   // intracandle adverse %    (positive — abs value)
+}
+
+function buildPreSignals(
+  snapshots: SignalSnapshot[],
+  candles: OHLCV[],
+  side: 'long' | 'short',
+): PreSignal[] {
+  return snapshots.map(s => {
+    const favPath: number[] = [];
+    const advPath: number[] = [];
+    const entry = s.entryPrice;
+    for (let j = 1; j <= LOOKAHEAD && s.index + j < candles.length; j++) {
+      const bar = candles[s.index + j];
+      if (side === 'long') {
+        favPath.push((bar.high - entry) / entry);
+        advPath.push(Math.max(0, (entry - bar.low) / entry));
+      } else {
+        favPath.push((entry - bar.low) / entry);
+        advPath.push(Math.max(0, (bar.high - entry) / entry));
+      }
+    }
+    return { index: s.index, entryPrice: entry, favPath, advPath };
+  });
+}
+
+// Fast WR simulation for a given (TP, SL) — O(N×L) but cache-friendly
+function simulateWR(preSignals: PreSignal[], tp: number, sl: number): { wins: number; losses: number; wr: number } {
+  let wins = 0;
+  let losses = 0;
+  for (const ps of preSignals) {
+    let hit: 'tp' | 'sl' | null = null;
+    for (let j = 0; j < ps.favPath.length; j++) {
+      // Adverse path is checked first (assume worst case ordering inside bar)
+      if (ps.advPath[j] >= sl) { hit = 'sl'; break; }
+      if (ps.favPath[j] >= tp) { hit = 'tp'; break; }
+    }
+    if (hit === 'tp') wins++;
+    else if (hit === 'sl') losses++;
+  }
+  const decided = wins + losses;
+  return { wins, losses, wr: decided > 0 ? wins / decided : 0 };
+}
+
+// TP/SL candidate grids (in fractions of price)
+const TP_GRID = [0.005, 0.0075, 0.01, 0.0125, 0.015, 0.02, 0.025, 0.03, 0.04];
+const SL_GRID = [0.005, 0.0075, 0.01, 0.0125, 0.015, 0.02, 0.025, 0.03];
+
 function computeStats(
   snapshots: SignalSnapshot[],
   candles: OHLCV[],
@@ -94,59 +147,55 @@ function computeStats(
 
   const favs = snapshots.map(s => s.maxFavorable).sort((a, b) => a - b);
   const advs = snapshots.map(s => s.maxAdverse).sort((a, b) => a - b);
-
   const avgFav = avg(favs);
   const avgAdv = avg(advs);
-  // p40 of favorable moves = level that 60% of signals reach or exceed
-  // (this is the user's "60% of the range" intent)
   const p40 = percentile(favs, 0.40);
   const p80 = percentile(favs, 0.80);
   const avgTime = avg(snapshots.map(s => s.barsToMaxFav));
 
-  // TP = level that 60% of signals reach historically (= 40th percentile)
-  // SL = avg adverse + 20% buffer
-  const recTP = Math.max(0.005, p40); // min 0.5% to avoid noise
-  const recSL = Math.max(0.005, Math.abs(avgAdv) * 1.2);
+  // ── Pre-compute trajectories (one walk through bars per signal) ──
+  const preSignals = buildPreSignals(snapshots, candles, side);
 
-  // Sequential walk: for each signal, walk forward and check which is hit FIRST
-  let wins = 0;
-  let losses = 0;
-  for (const s of snapshots) {
-    const entry = s.entryPrice;
-    const tpPrice = side === 'long' ? entry * (1 + recTP) : entry * (1 - recTP);
-    const slPrice = side === 'long' ? entry * (1 - recSL) : entry * (1 + recSL);
-    let hit: 'tp' | 'sl' | null = null;
-    for (let j = 1; j <= LOOKAHEAD && s.index + j < candles.length; j++) {
-      const bar = candles[s.index + j];
-      if (side === 'long') {
-        // SL hit first if low touches it before high touches TP (use both intracandle)
-        if (bar.low <= slPrice) { hit = 'sl'; break; }
-        if (bar.high >= tpPrice) { hit = 'tp'; break; }
-      } else {
-        if (bar.high >= slPrice) { hit = 'sl'; break; }
-        if (bar.low <= tpPrice) { hit = 'tp'; break; }
+  // ── Grid search over (TP, SL) to maximize Expected Value ──
+  let bestTP = 0.015;
+  let bestSL = 0.015;
+  let bestEV = -Infinity;
+  let bestWR = 0;
+  let bestDecided = 0;
+
+  for (const tp of TP_GRID) {
+    for (const sl of SL_GRID) {
+      const { wins, losses, wr } = simulateWR(preSignals, tp, sl);
+      const decided = wins + losses;
+      if (decided < 10) continue; // need enough decided trades
+      const ev = wr * tp - (1 - wr) * sl;
+      // Prefer higher EV, with mild preference for more decided trades
+      const score = ev * Math.sqrt(decided);
+      if (score > bestEV * Math.sqrt(Math.max(1, bestDecided)) || bestEV === -Infinity) {
+        if (ev > bestEV) {
+          bestEV = ev;
+          bestTP = tp;
+          bestSL = sl;
+          bestWR = wr;
+          bestDecided = decided;
+        }
       }
     }
-    if (hit === 'tp') wins++;
-    else if (hit === 'sl') losses++;
-    // neither hit = neutral, ignored
   }
-  const decided = wins + losses;
-  const wr = decided > 0 ? wins / decided : 0;
-  const ev = wr * recTP - (1 - wr) * recSL;
-  const edgeScore = ev * Math.sqrt(decided);
+
+  const edgeScore = bestEV * Math.sqrt(bestDecided);
 
   return {
     samples: snapshots.length,
     avgFavorable: Math.round(avgFav * 10000) / 100,
     avgAdverse: Math.round(avgAdv * 10000) / 100,
-    p60Favorable: Math.round(p40 * 10000) / 100, // stored as p60 for backward field name
+    p60Favorable: Math.round(p40 * 10000) / 100,
     p80Favorable: Math.round(p80 * 10000) / 100,
     avgTimeToTP: Math.round(avgTime * 10) / 10,
-    recommendedTP: Math.round(recTP * 10000) / 100,
-    recommendedSL: Math.round(recSL * 10000) / 100,
-    estimatedWinRate: Math.round(wr * 1000) / 10,
-    expectedValue: Math.round(ev * 10000) / 100,
+    recommendedTP: Math.round(bestTP * 10000) / 100,
+    recommendedSL: Math.round(bestSL * 10000) / 100,
+    estimatedWinRate: Math.round(bestWR * 1000) / 10,
+    expectedValue: Math.round(bestEV * 10000) / 100,
     edgeScore: Math.round(edgeScore * 100) / 100,
   };
 }
