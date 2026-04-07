@@ -8,6 +8,7 @@ import type { MultiBotConfig, MultiBotCreateInput } from '@/types/bot';
 import { computeIndicators } from './indicators';
 import { generateSignal, getStrategy } from './strategies';
 import { consultDeepMapRules } from './deep-mapping/bot-integration';
+import { consultBollingerProfile } from './bollinger-bot/bot-integration';
 import { checkCircuitBreaker, trailingStopATR, atrPositionSize, getCapitalRules, timeframePositionSize, preTradeChecks, checkProfitLock } from './risk';
 import { AlpacaBroker } from '@/lib/broker/alpaca';
 import { notifyTrade, notifyTradeClose, notifyBot } from './notifications';
@@ -216,6 +217,21 @@ async function tickBot(botId: string) {
           console.warn(`[TICK][${rt.config.name}] Deep Map consult failed: ${e.message}`);
         }
 
+        // ── Bollinger Bot calibrated profile (per-asset edge) ──
+        let bollingerOverride: { tpDistPct: number; slDistPct: number } | null = null;
+        try {
+          const bb = await consultBollingerProfile(symbol, bestSignal.signal as 'BUY' | 'SELL' | 'NEUTRAL', rt.config.name);
+          if (bb.hasProfile && bb.confBoost > 0) {
+            const newConf = Math.min(1, bestSignal.confidence + bb.confBoost / 100);
+            bestSignal = { ...bestSignal, confidence: newConf };
+            if (bb.tpDistPct && bb.slDistPct) {
+              bollingerOverride = { tpDistPct: bb.tpDistPct, slDistPct: bb.slDistPct };
+            }
+          }
+        } catch (e: any) {
+          console.warn(`[TICK][${rt.config.name}] Bollinger consult failed: ${e.message}`);
+        }
+
         const logEntry: BotSignalLog = { botId, symbol, signal: bestSignal.signal, confidence: bestSignal.confidence, strategy: bestSignal.strategy, price, regime: bestSignal.regime, time: now.toISOString(), acted: false };
 
         // Check existing position — with PROFIT LOCK
@@ -329,10 +345,13 @@ async function tickBot(botId: string) {
 
             if (sizing.quantity > 0 && sizing.capitalUsed < cash * 0.95 && rt.positions.length < maxPosByMode) {
               const orderQty = parseFloat(sizing.quantity.toFixed(isCrypto(symbol) ? 6 : 0));
-              const stopLoss = side === 'LONG' ? price - sizing.stopDist : price + sizing.stopDist;
-              const takeProfit = side === 'LONG' ? price + sizing.tpDist : price - sizing.tpDist;
+              // Override TP/SL with Bollinger calibrated values if available
+              const slDist = bollingerOverride ? price * bollingerOverride.slDistPct : sizing.stopDist;
+              const tpDist = bollingerOverride ? price * bollingerOverride.tpDistPct : sizing.tpDist;
+              const stopLoss = side === 'LONG' ? price - slDist : price + slDist;
+              const takeProfit = side === 'LONG' ? price + tpDist : price - tpDist;
 
-              console.log(`  📥 ENTER ${side} ${symbol} @ $${price.toFixed(2)} | mode=${mode} cap=${(capRules.maxCapitalPerTrade * 100).toFixed(0)}% SL=${capRules.stopLossATR}xATR TP=${capRules.takeProfitATR}xATR`);
+              console.log(`  📥 ENTER ${side} ${symbol} @ $${price.toFixed(2)} | ${bollingerOverride ? `BB-calibrated TP=${(bollingerOverride.tpDistPct*100).toFixed(2)}% SL=${(bollingerOverride.slDistPct*100).toFixed(2)}%` : `ATR TP=${capRules.takeProfitATR}xATR SL=${capRules.stopLossATR}xATR`}`);
 
               try {
                 const order = await broker.placeOrder({ symbol, side, type: 'market', quantity: orderQty });

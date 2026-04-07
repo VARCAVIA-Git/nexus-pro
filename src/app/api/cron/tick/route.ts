@@ -14,6 +14,8 @@ import { classifyRegime } from '@/lib/engine/regime-classifier';
 import { evaluateEntryTiming } from '@/lib/engine/smart-timing';
 import { detectTrap } from '@/lib/engine/trap-detector';
 import { managePosition } from '@/lib/engine/position-manager';
+import { consultBollingerProfile } from '@/lib/engine/bollinger-bot';
+import { consultDeepMapRules } from '@/lib/engine/deep-mapping/bot-integration';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 55; // Vercel Pro allows up to 60s
@@ -316,10 +318,43 @@ export async function GET(request: Request) {
             }
           } catch {}
 
+          // ── Bollinger Bot calibrated profile (per-asset TP/SL + conf boost) ──
+          let bollingerOverride: any = null;
+          let bollingerBoost = 0;
+          try {
+            const bb = await consultBollingerProfile(symbol, bestSignal.signal as 'BUY' | 'SELL' | 'NEUTRAL', config.name);
+            if (bb.hasProfile && bb.confBoost > 0) {
+              bollingerBoost = bb.confBoost;
+              if (bb.tpDistPct && bb.slDistPct) {
+                bollingerOverride = { tpDistPct: bb.tpDistPct, slDistPct: bb.slDistPct };
+              }
+            }
+          } catch {}
+
+          // ── Deep Map rules consultation (pattern-mined edge) ──
+          let deepMapBoost = 0;
+          try {
+            const dmAdj = await consultDeepMapRules(symbol, {
+              rsi14: indicators.rsi[lastIdx] ?? 50,
+              macdHistogram: indicators.macd.histogram[lastIdx] ?? 0,
+              macdSignal: 'ABOVE',
+              bbPosition: 'AT_MID',
+              bbWidth: indicators.bollinger.width[lastIdx] ?? 0,
+              adx14: indicators.adx[lastIdx] ?? 0,
+              stochK: indicators.stochastic.k[lastIdx] ?? 50,
+              trendShort: 'FLAT',
+              trendMedium: 'FLAT',
+              trendLong: 'FLAT',
+              volumeProfile: 'NORMAL',
+              regime: regime.regime,
+            }, config.name);
+            deepMapBoost = dmAdj;
+          } catch {}
+
           // Mode-based confidence threshold
           const confThreshold = mode === 'scalp' ? 0.55 : mode === 'intraday' ? 0.60 : 0.65;
-          const adjustedConf = bestSignal.confidence + (profileBoost / 100);
-          console.log(`[CRON] Bot "${config.name}": ${symbol} score=${(adjustedConf*100).toFixed(0)}% signal=${bestSignal.signal} threshold=${(confThreshold*100).toFixed(0)}%`);
+          const adjustedConf = bestSignal.confidence + (profileBoost / 100) + (bollingerBoost / 100) + (deepMapBoost / 100);
+          console.log(`[CRON] Bot "${config.name}": ${symbol} score=${(adjustedConf*100).toFixed(0)}% (base ${(bestSignal.confidence*100).toFixed(0)}, profile +${profileBoost}, BB +${bollingerBoost}, DM ${deepMapBoost > 0 ? '+' : ''}${deepMapBoost}) signal=${bestSignal.signal} threshold=${(confThreshold*100).toFixed(0)}%`);
 
           if (bestSignal.signal !== 'NEUTRAL' && adjustedConf >= confThreshold) {
             const side: Side = bestSignal.signal === 'BUY' ? 'LONG' : 'SHORT';
@@ -356,6 +391,16 @@ export async function GET(request: Request) {
               logEntry.reason = `rejected: ${check.reason}`;
             } else {
               const sizing = timeframePositionSize(tradingCapital * regime.sizeMultiplier, mode, atr, price);
+
+              // If Bollinger profile provides calibrated TP/SL, override the ATR-based defaults
+              let tpDist = sizing.tpDist;
+              let slDist = sizing.stopDist;
+              if (bollingerOverride) {
+                slDist = price * bollingerOverride.slDistPct;
+                tpDist = price * bollingerOverride.tpDistPct;
+                console.log(`[TICK][${config.name}] ${symbol}: Bollinger override TP=${(bollingerOverride.tpDistPct*100).toFixed(2)}% SL=${(bollingerOverride.slDistPct*100).toFixed(2)}%`);
+              }
+
               if (sizing.quantity > 0 && sizing.capitalUsed < botCash * 0.95 && state.positions.length < capRules.maxOpenPositions) {
                 const orderQty = parseFloat(sizing.quantity.toFixed(isCrypto(symbol) ? 6 : 0));
                 try {
@@ -363,8 +408,8 @@ export async function GET(request: Request) {
                   state.positions.push({
                     symbol, side, entryPrice: price, quantity: orderQty, orderId: order.id,
                     strategy: bestSignal.strategy as StrategyKey, confidence: bestSignal.confidence,
-                    stopLoss: side === 'LONG' ? price - sizing.stopDist : price + sizing.stopDist,
-                    takeProfit: side === 'LONG' ? price + sizing.tpDist : price - sizing.tpDist,
+                    stopLoss: side === 'LONG' ? price - slDist : price + slDist,
+                    takeProfit: side === 'LONG' ? price + tpDist : price - tpDist,
                     entryTime: now.toISOString(),
                   });
                   logEntry.acted = true;
