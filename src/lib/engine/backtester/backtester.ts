@@ -258,8 +258,11 @@ function computeStats(
   const grossLoss = Math.abs(losses.reduce((s, t) => s + t.pnl, 0));
   const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0;
 
-  const maxDrawdown = equityCurve.length > 0 ? Math.min(...equityCurve.map(e => -e.drawdown)) : 0;
-  const maxDrawdownPct = Math.abs(maxDrawdown);
+  // drawdown values are stored as negative (e.g. -3.5%); the worst is the most negative.
+  // Math.min returns the most negative number; abs() converts to positive %
+  const minDrawdown = equityCurve.length > 0 ? Math.min(...equityCurve.map(e => e.drawdown)) : 0;
+  const maxDrawdown = minDrawdown; // most negative = worst
+  const maxDrawdownPct = Math.abs(minDrawdown);
 
   // Daily returns from equity curve
   const dailyReturns: number[] = [];
