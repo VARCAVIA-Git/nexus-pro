@@ -18,6 +18,7 @@ export default function BacktesterPage() {
   const [risk, setRisk] = useState(1.5);
   const [tpMult, setTpMult] = useState(3);
   const [slMult, setSlMult] = useState(1.5);
+  const [signalSource, setSignalSource] = useState<'strategies' | 'deepmap' | 'both'>('strategies');
 
   const [jobId, setJobId] = useState<string | null>(null);
   const [job, setJob] = useState<any>(null);
@@ -60,6 +61,7 @@ export default function BacktesterPage() {
           action: 'start', preset, months,
           riskPerTrade: risk, tpMultiplier: tpMult, slMultiplier: slMult,
           initialCapital: 10000,
+          signalSource,
         }),
       });
       if (!r.ok) {
@@ -118,6 +120,20 @@ export default function BacktesterPage() {
             <p className="label mb-1">SL multiplier (× ATR)</p>
             <input type="number" step="0.5" min="0.5" max="4" value={slMult} onChange={e => setSlMult(parseFloat(e.target.value))} className="w-full rounded-xl border border-n-border bg-n-input px-3 py-2 text-sm text-n-text min-h-[44px]" />
           </div>
+          <div className="sm:col-span-2">
+            <p className="label mb-1">Signal source</p>
+            <div className="flex gap-2">
+              {[
+                { v: 'strategies', l: 'Strategie hard-coded' },
+                { v: 'deepmap', l: 'Deep Map rules' },
+                { v: 'both', l: 'Entrambe' },
+              ].map(o => (
+                <button key={o.v} onClick={() => setSignalSource(o.v as any)} className={`flex-1 rounded-xl border px-3 py-2 text-xs font-medium transition-colors min-h-[44px] ${signalSource === o.v ? 'border-blue-500 bg-blue-500/10 text-blue-400' : 'border-n-border text-n-dim hover:text-n-text'}`}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="flex items-end">
             <button onClick={start} disabled={!!busy} className="w-full rounded-xl bg-n-text py-2 text-sm font-medium text-n-bg min-h-[44px] disabled:opacity-50 flex items-center justify-center gap-2">
               {busy ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
@@ -153,6 +169,14 @@ export default function BacktesterPage() {
               <h3 className="text-sm font-bold">VERDETTO: {results.verdict}</h3>
             </div>
             <p className="text-xs">{results.verdictReason}</p>
+            <p className="text-[10px] mt-2 opacity-80">
+              Signal source: <span className="font-mono font-bold">{results.config.signalSource ?? 'strategies'}</span>
+              {results.deepMapStats && (results.deepMapStats.loaded > 0 || results.deepMapStats.skipped > 0) && (
+                <> · DeepMap rules loaded: <span className="font-mono">{results.deepMapStats.loaded}</span>
+                {results.deepMapStats.skipped > 0 && <> · skipped (no rules): <span className="font-mono">{results.deepMapStats.skipped}</span></>}
+                </>
+              )}
+            </p>
           </div>
 
           {/* Tabs */}

@@ -51,6 +51,7 @@ export interface OpenPosition {
   takeProfit: number;
   entryTime: number;
   entryBarIndex: number;
+  strategy?: string;  // name of the strategy that generated this signal
 }
 
 export interface SizingResult {

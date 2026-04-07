@@ -7,9 +7,12 @@
 import type { OHLCV, Indicators } from '@/types';
 import { computeIndicators } from '@/lib/engine/indicators';
 import { getAllRunnableStrategies, type RunnableStrategy } from '@/lib/engine/rnd/strategy-runner';
+import { createDeepMapStrategy } from './deepmap-source';
 import {
   sizePosition, type MMConfig, DEFAULT_MM, type OpenPosition, getGroup,
 } from './money-management';
+
+export type SignalSource = 'strategies' | 'deepmap' | 'both';
 
 export interface BacktesterConfig {
   assets: string[];
@@ -20,6 +23,7 @@ export interface BacktesterConfig {
   slMultiplier: number;       // ATR × slMultiplier = SL distance (default 1.5)
   maxBarsHold: number;        // timeout (default 48 = 2 days on 1h)
   minConfidence: number;      // minimum signal confidence to enter (default 0.55)
+  signalSource: SignalSource; // strategies | deepmap | both
 }
 
 export const DEFAULT_BT_CONFIG: BacktesterConfig = {
@@ -31,6 +35,7 @@ export const DEFAULT_BT_CONFIG: BacktesterConfig = {
   slMultiplier: 1.5,
   maxBarsHold: 48,
   minConfidence: 0.55,
+  signalSource: 'strategies',
 };
 
 export interface BacktestTrade {
@@ -81,6 +86,7 @@ export interface BacktestResult {
   monthly: { month: string; trades: number; wins: number; pnl: number; winRate: number }[];
   perStrategy: Record<string, { trades: number; wins: number; pnl: number; winRate: number; avgReturn: number }>;
   rejectionStats: Record<string, number>;
+  deepMapStats?: { loaded: number; skipped: number };
   verdict: 'GREEN' | 'YELLOW' | 'RED';
   verdictReason: string;
 }
@@ -169,9 +175,16 @@ async function fetchAssetData(asset: string, months: number): Promise<OHLCV[]> {
   return sorted;
 }
 
-async function prepareAssets(assets: string[], months: number, onProgress?: (msg: string) => void): Promise<{ states: AssetState[]; failures: string[] }> {
+async function prepareAssets(
+  assets: string[],
+  months: number,
+  signalSource: SignalSource,
+  onProgress?: (msg: string) => void,
+): Promise<{ states: AssetState[]; failures: string[]; deepMapStats: { loaded: number; skipped: number } }> {
   const states: AssetState[] = [];
   const failures: string[] = [];
+  let dmLoaded = 0, dmSkipped = 0;
+
   for (const asset of assets) {
     onProgress?.(`Fetching ${asset}...`);
     const candles = await fetchAssetData(asset, months);
@@ -182,11 +195,32 @@ async function prepareAssets(assets: string[], months: number, onProgress?: (msg
       continue;
     }
     const indicators = computeIndicators(candles);
-    const strategies = getAllRunnableStrategies(indicators);
+
+    let strategies: RunnableStrategy[] = [];
+    if (signalSource === 'strategies' || signalSource === 'both') {
+      strategies = strategies.concat(getAllRunnableStrategies(indicators));
+    }
+    if (signalSource === 'deepmap' || signalSource === 'both') {
+      const dm = await createDeepMapStrategy(asset, indicators);
+      if (dm) {
+        strategies.push(dm);
+        dmLoaded++;
+        onProgress?.(`${asset}: Deep Map rules loaded`);
+      } else {
+        dmSkipped++;
+        onProgress?.(`${asset}: no Deep Map rules`);
+      }
+    }
+
+    if (strategies.length === 0) {
+      failures.push(`${asset}: no signal source available`);
+      continue;
+    }
+
     states.push({ asset, candles, indicators, strategies });
-    onProgress?.(`Loaded ${asset}: ${candles.length} bars`);
+    onProgress?.(`Loaded ${asset}: ${candles.length} bars, ${strategies.length} strategies`);
   }
-  return { states, failures };
+  return { states, failures, deepMapStats: { loaded: dmLoaded, skipped: dmSkipped } };
 }
 
 // ── Build unified timeline ──
@@ -323,9 +357,10 @@ export async function runMultiAssetBacktest(
 
   // 1. Fetch + prepare all assets
   onProgress?.('fetching', 5, 'Fetching market data...');
-  const { states, failures } = await prepareAssets(config.assets, config.months, msg => {
-    onProgress?.('fetching', 10, msg);
-  });
+  const { states, failures, deepMapStats } = await prepareAssets(
+    config.assets, config.months, config.signalSource ?? 'strategies',
+    msg => onProgress?.('fetching', 10, msg),
+  );
   if (states.length === 0) {
     const reason = failures.length > 0 ? failures.join('; ') : 'all assets returned 0 bars';
     throw new Error(`No valid asset data fetched: ${reason}. Check Alpaca API keys and asset symbols.`);
@@ -333,6 +368,7 @@ export async function runMultiAssetBacktest(
   if (failures.length > 0) {
     console.log(`[BACKTESTER] Skipped ${failures.length} assets: ${failures.join(', ')}`);
   }
+  console.log(`[BACKTESTER] Signal source: ${config.signalSource ?? 'strategies'} (DeepMap loaded: ${deepMapStats.loaded}, skipped: ${deepMapStats.skipped})`);
 
   // 2. Build unified timeline
   onProgress?.('preparing', 20, 'Building timeline...');
@@ -381,9 +417,6 @@ export async function runMultiAssetBacktest(
       const pnlPct = pos.entryPrice > 0 ? ((exit.price - pos.entryPrice) / pos.entryPrice) * 100 * mult : 0;
       equity += pnl;
 
-      const matchingState = stateByAsset.get(pos.asset);
-      const stratName = matchingState ? 'mixed' : 'unknown';
-
       trades.push({
         asset: pos.asset, group: getGroup(pos.asset),
         side: pos.side,
@@ -393,7 +426,7 @@ export async function runMultiAssetBacktest(
         pnl: Math.round(pnl * 100) / 100,
         pnlPct: Math.round(pnlPct * 100) / 100,
         exitReason: exit.reason!,
-        strategy: stratName,
+        strategy: pos.strategy ?? 'unknown',
         durationBars: assetBar.idx - pos.entryBarIndex,
       });
     }
@@ -440,6 +473,7 @@ export async function runMultiAssetBacktest(
           takeProfit: side === 'long' ? price + tpDist : price - tpDist,
           entryTime: tb.time,
           entryBarIndex: assetBar.idx,
+          strategy: bestSig.strat,
         });
       }
     }
@@ -481,7 +515,7 @@ export async function runMultiAssetBacktest(
       pnl: Math.round(pnl * 100) / 100,
       pnlPct: Math.round(pnlPct * 100) / 100,
       exitReason: 'timeout',
-      strategy: 'mixed',
+      strategy: pos.strategy ?? 'unknown',
       durationBars: 0,
     });
   }
@@ -553,6 +587,7 @@ export async function runMultiAssetBacktest(
     monthly,
     perStrategy,
     rejectionStats,
+    deepMapStats,
     verdict,
     verdictReason: reason,
   };

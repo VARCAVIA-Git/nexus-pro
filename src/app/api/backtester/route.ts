@@ -69,6 +69,8 @@ export async function POST(request: Request) {
   if (action === 'start') {
     const preset: string = body.preset ?? 'crypto_diverse';
     const assets: string[] = body.assets ?? PRESETS[preset] ?? PRESETS['crypto_diverse'];
+    const validSources = ['strategies', 'deepmap', 'both'];
+    const signalSource = validSources.includes(body.signalSource) ? body.signalSource : 'strategies';
     const config: BacktesterConfig = {
       ...DEFAULT_BT_CONFIG,
       assets,
@@ -79,6 +81,7 @@ export async function POST(request: Request) {
       slMultiplier: parseFloat(body.slMultiplier ?? '1.5'),
       maxBarsHold: parseInt(body.maxBarsHold ?? '48'),
       minConfidence: parseFloat(body.minConfidence ?? '0.55'),
+      signalSource,
     };
     const id = `bt_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     await setJob(id, { phase: 'fetching', progress: 0, message: 'Job started' });
