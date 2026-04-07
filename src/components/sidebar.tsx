@@ -26,6 +26,7 @@ const TOOLS_NAV = [
   { href: '/backtest', label: 'Backtest', icon: FlaskConical },
   { href: '/rnd', label: 'R&D Lab', icon: Microscope },
   { href: '/deep-mapping', label: 'Deep Mapping', icon: Dna },
+  { href: '/backtester', label: 'Backtester', icon: BarChart3 },
 ];
 
 const SYSTEM_NAV = [
