@@ -9,10 +9,28 @@ export interface MinedRule {
   id: string;
   conditions: string[];
   occurrences: number;
-  winRate: number;       // % of times direction was correct (24h)
+  winRate: number;       // raw % of times direction was correct (24h)
+  wilsonLB: number;      // Wilson 95% lower bound — honest WR estimate
   avgReturn: number;     // % avg return at 24h
   direction: 'BUY' | 'SELL';
-  edgeScore: number;     // avgReturn × sqrt(occurrences)
+  edgeScore: number;     // wilsonLB × |avgReturn| × sqrt(occurrences)
+}
+
+/**
+ * Wilson score interval lower bound (95% confidence).
+ * Standard fix for selection bias: penalizes extreme WR on small samples.
+ * Example: 100% WR with 10 samples → Wilson LB ≈ 72%
+ *          100% WR with 30 samples → Wilson LB ≈ 89%
+ *          100% WR with 100 samples → Wilson LB ≈ 96%
+ */
+function wilsonLowerBound(wins: number, n: number): number {
+  if (n === 0) return 0;
+  const z = 1.96;
+  const p = wins / n;
+  const denom = 1 + (z * z) / n;
+  const center = p + (z * z) / (2 * n);
+  const margin = z * Math.sqrt((p * (1 - p) + (z * z) / (4 * n)) / n);
+  return Math.max(0, (center - margin) / denom);
 }
 
 interface Condition {
@@ -84,9 +102,37 @@ export function minePatterns(contexts: CandleContext[]): MinedRule[] {
 
   console.log(`[DEEP-MAP] Pattern mining on ${contexts.length} contexts, ${CONDITIONS.length} conditions`);
   const rules: MinedRule[] = [];
-  const minOccurrences2 = 15;
-  const minOccurrences3 = 10;
-  const minEdge = 0.001; // |avg return| > 0.1%
+  // Statistical hygiene: 20+ samples + Wilson LB ≥ 50% (i.e. p<0.05 vs random)
+  // Combined with avgReturn ≥ 0.2% — eliminates noise without being too strict
+  const minOccurrences2 = 25;
+  const minOccurrences3 = 20;
+  const minEdge = 0.002; // |avg return| > 0.2% (above noise)
+  const minWilsonBuy = 0.50;  // Wilson LB ≥ 50% — statistically above random
+  const maxWilsonSell = 0.50; // Wilson UB on wins ≤ 50% for SELL (confidently losing)
+
+  function buildRule(conds: Condition[], r: { count: number; wins: number; sumRet: number }): MinedRule | null {
+    const wr = (r.wins / r.count) * 100;
+    const avgRet = r.sumRet / r.count;
+    if (Math.abs(avgRet) < minEdge) return null;
+    const wlb = wilsonLowerBound(r.wins, r.count);
+    const wub = 1 - wilsonLowerBound(r.count - r.wins, r.count); // upper bound
+    const dir: 'BUY' | 'SELL' = avgRet > 0 ? 'BUY' : 'SELL';
+    // Apply Wilson filter
+    if (dir === 'BUY' && wlb < minWilsonBuy) return null;
+    if (dir === 'SELL' && wub > maxWilsonSell) return null;
+    // Use Wilson LB for ranking — it's the honest probability of being right
+    const honestWR = dir === 'BUY' ? wlb : (1 - wub);
+    return {
+      id: conds.map(c => c.id).join('+'),
+      conditions: conds.map(c => c.id),
+      occurrences: r.count,
+      winRate: Math.round(wr),
+      wilsonLB: Math.round(wlb * 1000) / 10,
+      avgReturn: Math.round(avgRet * 10000) / 100,
+      direction: dir,
+      edgeScore: honestWR * Math.abs(avgRet) * Math.sqrt(r.count),
+    };
+  }
 
   // 2-combinations: 30×29/2 = 435
   let combos2 = 0;
@@ -95,20 +141,8 @@ export function minePatterns(contexts: CandleContext[]): MinedRule[] {
       const r = testRule(contexts, [CONDITIONS[i], CONDITIONS[j]]);
       combos2++;
       if (r.count < minOccurrences2) continue;
-      const wr = (r.wins / r.count) * 100;
-      const avgRet = r.sumRet / r.count;
-      if (Math.abs(avgRet) < minEdge) continue;
-      if (wr <= 58 && wr >= 42) continue;
-      const dir: 'BUY' | 'SELL' = avgRet > 0 ? 'BUY' : 'SELL';
-      rules.push({
-        id: `${CONDITIONS[i].id}+${CONDITIONS[j].id}`,
-        conditions: [CONDITIONS[i].id, CONDITIONS[j].id],
-        occurrences: r.count,
-        winRate: Math.round(wr),
-        avgReturn: Math.round(avgRet * 10000) / 100,
-        direction: dir,
-        edgeScore: Math.abs(avgRet) * Math.sqrt(r.count),
-      });
+      const rule = buildRule([CONDITIONS[i], CONDITIONS[j]], r);
+      if (rule) rules.push(rule);
     }
   }
   console.log(`[DEEP-MAP] 2-combos tested: ${combos2}, kept: ${rules.length}`);
@@ -122,21 +156,8 @@ export function minePatterns(contexts: CandleContext[]): MinedRule[] {
         const r = testRule(contexts, [CONDITIONS[i], CONDITIONS[j], CONDITIONS[k]]);
         combos3++;
         if (r.count < minOccurrences3) continue;
-        const wr = (r.wins / r.count) * 100;
-        const avgRet = r.sumRet / r.count;
-        if (Math.abs(avgRet) < minEdge) continue;
-        if (wr <= 60 && wr >= 40) continue;
-        const dir: 'BUY' | 'SELL' = avgRet > 0 ? 'BUY' : 'SELL';
-        rules.push({
-          id: `${CONDITIONS[i].id}+${CONDITIONS[j].id}+${CONDITIONS[k].id}`,
-          conditions: [CONDITIONS[i].id, CONDITIONS[j].id, CONDITIONS[k].id],
-          occurrences: r.count,
-          winRate: Math.round(wr),
-          avgReturn: Math.round(avgRet * 10000) / 100,
-          direction: dir,
-          edgeScore: Math.abs(avgRet) * Math.sqrt(r.count),
-        });
-        kept3++;
+        const rule = buildRule([CONDITIONS[i], CONDITIONS[j], CONDITIONS[k]], r);
+        if (rule) { rules.push(rule); kept3++; }
       }
     }
   }
@@ -144,6 +165,6 @@ export function minePatterns(contexts: CandleContext[]): MinedRule[] {
 
   rules.sort((a, b) => b.edgeScore - a.edgeScore);
   const top = rules.slice(0, 50);
-  console.log(`[DEEP-MAP] Pattern mining DONE: ${top.length} top rules`);
+  console.log(`[DEEP-MAP] Pattern mining DONE: ${top.length} top rules (Wilson-validated)`);
   return top;
 }

@@ -78,16 +78,19 @@ export async function consultDeepMapRules(
     let matchCount = 0;
 
     for (const rule of rules) {
-      if (rule.winRate < 60) continue;
+      // Use Wilson lower bound (honest WR), not raw winRate
+      // Old rules without wilsonLB fall back to a conservative penalty
+      const honestWR = (rule as any).wilsonLB ?? Math.max(0, rule.winRate - 15);
+      if (honestWR < 55) continue;
       const allMatch = rule.conditions.every(c => conditionMatches(c, ctx));
       if (!allMatch) continue;
 
-      const magnitude = rule.winRate >= 80 ? 15 : rule.winRate >= 70 ? 10 : 5;
+      const magnitude = honestWR >= 75 ? 15 : honestWR >= 65 ? 10 : 5;
       const adjustment = rule.direction === 'BUY' ? magnitude : -magnitude;
       totalAdjustment += adjustment;
       matchCount++;
 
-      console.log(`[TICK]${botName ? `[${botName}]` : ''} Deep Map rule matched: ${rule.id} → ${rule.direction} (WR ${rule.winRate}%, ${rule.occurrences}x) adj=${adjustment > 0 ? '+' : ''}${adjustment}`);
+      console.log(`[TICK]${botName ? `[${botName}]` : ''} Deep Map rule matched: ${rule.id} → ${rule.direction} (Wilson ${honestWR.toFixed(0)}%, raw ${rule.winRate}%, ${rule.occurrences}x) adj=${adjustment > 0 ? '+' : ''}${adjustment}`);
     }
 
     // Cap total adjustment to ±25
