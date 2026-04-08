@@ -23,7 +23,7 @@ export async function POST(req: Request, { params }: { params: { symbol: string 
   }
 
   const analytic = await spawnAnalytic(symbol, assetClass);
-  const job = await enqueue(symbol);
+  const job = await enqueue(symbol, assetClass);
 
   return NextResponse.json({ analytic, job });
 }
