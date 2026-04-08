@@ -5,35 +5,24 @@ import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { useModeStore } from '@/stores/mode-store';
 import {
-  LayoutDashboard, Briefcase, ArrowLeftRight, Zap, BarChart3,
-  Bot, Brain, FlaskConical, Microscope, Activity, Dna, Boxes,
-  Settings, Plug, Menu, X, Rocket, ArrowRightLeft, LogOut, Sparkles,
+  LayoutDashboard, Brain, Target, Activity, Wallet,
+  Settings, Plug, HeartPulse, Menu, X, Rocket, ArrowRightLeft, LogOut,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
 const MAIN_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/portfolio', label: 'Portfolio', icon: Briefcase },
-  { href: '/operazioni', label: 'Operazioni', icon: ArrowLeftRight },
-  { href: '/segnali', label: 'Segnali', icon: Zap },
-  { href: '/analysis', label: 'Analisi', icon: BarChart3 },
-  { href: '/assets', label: 'Assets', icon: Boxes },
-];
-
-const TOOLS_NAV = [
-  { href: '/strategy', label: 'Strategy', icon: Bot },
-  { href: '/intelligence', label: 'Intelligence', icon: Brain },
-  { href: '/rnd', label: 'R&D Lab', icon: Microscope },
-  { href: '/deep-mapping', label: 'Deep Mapping', icon: Dna },
-  { href: '/bollinger-bot', label: 'Bollinger Bot', icon: Sparkles },
-  { href: '/backtester', label: 'Backtester', icon: FlaskConical },
+  { href: '/assets', label: 'Assets', icon: Brain },
+  { href: '/strategy', label: 'Strategy', icon: Target },
+  { href: '/operazioni', label: 'Operazioni', icon: Activity },
+  { href: '/portfolio', label: 'Portfolio', icon: Wallet },
 ];
 
 const SYSTEM_NAV = [
   { href: '/impostazioni', label: 'Impostazioni', icon: Settings },
   { href: '/connections', label: 'Connessioni', icon: Plug },
-  { href: '/status', label: 'Status', icon: Activity },
+  { href: '/status', label: 'Status', icon: HeartPulse },
 ];
 
 function NavLink({ href, label, icon: Icon, pathname, onClick }: {
@@ -79,13 +68,6 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
           <p className="label px-3 mb-1.5">Principale</p>
           <div className="space-y-0.5">
             {MAIN_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
-          </div>
-        </div>
-
-        <div>
-          <p className="label px-3 mb-1.5">Strumenti</p>
-          <div className="space-y-0.5">
-            {TOOLS_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
           </div>
         </div>
 
