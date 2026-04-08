@@ -76,6 +76,12 @@ interface PersistedBotState {
 
 // ── Cron Tick Handler ─────────────────────────────────────
 
+// PM2 cron-worker.js POSTs to this endpoint, while Vercel Cron sends GET.
+// Both verbs map to the same handler.
+export async function POST(request: Request) {
+  return GET(request);
+}
+
 export async function GET(request: Request) {
   // Verify cron secret (Vercel sends this header)
   const authHeader = request.headers.get('authorization');

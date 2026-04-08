@@ -278,17 +278,25 @@ function ReportView({ report }: { report: AnalyticReport }) {
     .join(' · ');
   const generated = new Date(report.generatedAt).toLocaleString();
 
-  const buyRules = (report.topRules ?? [])
-    .filter((r) => r.direction === 'long')
-    .sort((a, b) => b.confidenceScore - a.confidenceScore)
+  const safeTopRules = Array.isArray(report.topRules) ? report.topRules : [];
+  const buyRules = safeTopRules
+    .filter((r) => r?.direction === 'long')
+    .sort((a, b) => (b?.confidenceScore ?? 0) - (a?.confidenceScore ?? 0))
     .slice(0, 10);
-  const sellRules = (report.topRules ?? [])
-    .filter((r) => r.direction === 'short')
-    .sort((a, b) => b.confidenceScore - a.confidenceScore)
+  const sellRules = safeTopRules
+    .filter((r) => r?.direction === 'short')
+    .sort((a, b) => (b?.confidenceScore ?? 0) - (a?.confidenceScore ?? 0))
     .slice(0, 10);
-  const zones = (report.reactionZones ?? []).slice(0, 15);
-  const fits = (report.strategyFit ?? []).slice(0, 12);
-  const indicators = Object.values(report.indicatorReactivity ?? {});
+  const zones = (Array.isArray(report.reactionZones) ? report.reactionZones : []).slice(0, 15);
+  const fits = (Array.isArray(report.strategyFit) ? report.strategyFit : []).slice(0, 12);
+  const indicators = report.indicatorReactivity && typeof report.indicatorReactivity === 'object'
+    ? Object.values(report.indicatorReactivity)
+    : [];
+  // Phase 3 optional sections (caso report Phase 2 legacy senza questi campi)
+  const eventImpacts = Array.isArray(report.eventImpacts) ? report.eventImpacts : [];
+  const trainingHistory = Array.isArray(report.trainingHistory) ? report.trainingHistory : [];
+  void eventImpacts;
+  void trainingHistory;
 
   return (
     <div className="space-y-5">
@@ -345,20 +353,20 @@ function ReportView({ report }: { report: AnalyticReport }) {
               <tbody className="text-n-text">
                 {zones.map((z, i) => (
                   <tr key={i} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{fmtNum(z.priceLevel, 2)}</td>
+                    <td className="px-2 py-1.5 font-mono">{fmtNum(z?.priceLevel, 2)}</td>
                     <td className="px-2 py-1.5">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                          z.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                          z?.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
                         }`}
                       >
-                        {z.type}
+                        {z?.type ?? '—'}
                       </span>
                     </td>
-                    <td className="px-2 py-1.5">{z.strength}</td>
-                    <td className="px-2 py-1.5">{z.touchCount}</td>
-                    <td className="px-2 py-1.5">{fmtPct((z.bounceProbability ?? 0) * 100)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(z.avgBounceMagnitude)}</td>
+                    <td className="px-2 py-1.5">{z?.strength ?? '—'}</td>
+                    <td className="px-2 py-1.5">{z?.touchCount ?? '—'}</td>
+                    <td className="px-2 py-1.5">{fmtPct((z?.bounceProbability ?? 0) * 100)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(z?.avgBounceMagnitude)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -388,16 +396,16 @@ function ReportView({ report }: { report: AnalyticReport }) {
                 </tr>
               </thead>
               <tbody className="text-n-text">
-                {fits.map((f) => (
-                  <tr key={`${f.strategyName}-${f.timeframe}`} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{f.rank}</td>
-                    <td className="px-2 py-1.5">{f.strategyName}</td>
-                    <td className="px-2 py-1.5">{f.timeframe}</td>
-                    <td className="px-2 py-1.5">{f.totalTrades}</td>
-                    <td className="px-2 py-1.5">{fmtPct(f.winRate, 1)}</td>
-                    <td className="px-2 py-1.5">{fmtNum(f.profitFactor)}</td>
-                    <td className="px-2 py-1.5">{fmtNum(f.sharpe)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(f.maxDrawdown)}</td>
+                {fits.map((f, i) => (
+                  <tr key={`${f?.strategyName ?? 'x'}-${f?.timeframe ?? i}`} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{f?.rank ?? '—'}</td>
+                    <td className="px-2 py-1.5">{f?.strategyName ?? '—'}</td>
+                    <td className="px-2 py-1.5">{f?.timeframe ?? '—'}</td>
+                    <td className="px-2 py-1.5">{f?.totalTrades ?? '—'}</td>
+                    <td className="px-2 py-1.5">{fmtPct(f?.winRate, 1)}</td>
+                    <td className="px-2 py-1.5">{fmtNum(f?.profitFactor)}</td>
+                    <td className="px-2 py-1.5">{fmtNum(f?.sharpe)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(f?.maxDrawdown)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -423,12 +431,12 @@ function ReportView({ report }: { report: AnalyticReport }) {
                 </tr>
               </thead>
               <tbody className="text-n-text">
-                {indicators.map((ind) => (
-                  <tr key={ind.indicatorName} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{ind.indicatorName}</td>
-                    <td className="px-2 py-1.5">{ind.signalCount}</td>
-                    <td className="px-2 py-1.5">{fmtPct(ind.winRate, 1)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(ind.avgReturn, 3)}</td>
+                {indicators.map((ind, i) => (
+                  <tr key={ind?.indicatorName ?? `ind-${i}`} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{ind?.indicatorName ?? '—'}</td>
+                    <td className="px-2 py-1.5">{ind?.signalCount ?? '—'}</td>
+                    <td className="px-2 py-1.5">{fmtPct(ind?.winRate, 1)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(ind?.avgReturn, 3)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -458,10 +466,11 @@ function RuleTable({
   rules: AnalyticReport['topRules'];
   dir: 'long' | 'short';
 }) {
+  const safeRules = Array.isArray(rules) ? rules : [];
   return (
     <div className="rounded-2xl border border-n-border bg-n-card p-5">
       <h2 className="mb-3 text-sm font-semibold text-n-text">{title}</h2>
-      {rules.length === 0 ? (
+      {safeRules.length === 0 ? (
         <p className="text-xs text-n-dim">Nessuna regola {dir} significativa.</p>
       ) : (
         <div className="overflow-x-auto">
@@ -476,13 +485,15 @@ function RuleTable({
               </tr>
             </thead>
             <tbody className="text-n-text">
-              {rules.map((r) => (
-                <tr key={r.id} className="border-t border-n-border align-top">
-                  <td className="px-2 py-1.5 font-mono text-[10px]">{r.conditions.join(' + ')}</td>
-                  <td className="px-2 py-1.5">{fmtPct(r.winRate, 0)}</td>
-                  <td className="px-2 py-1.5">{r.occurrences}</td>
-                  <td className="px-2 py-1.5">{fmtPct(r.avgReturn)}</td>
-                  <td className="px-2 py-1.5">{r.confidenceScore}</td>
+              {safeRules.map((r, i) => (
+                <tr key={r?.id ?? `rule-${i}`} className="border-t border-n-border align-top">
+                  <td className="px-2 py-1.5 font-mono text-[10px]">
+                    {(Array.isArray(r?.conditions) ? r.conditions : []).join(' + ')}
+                  </td>
+                  <td className="px-2 py-1.5">{fmtPct(r?.winRate, 0)}</td>
+                  <td className="px-2 py-1.5">{r?.occurrences ?? '—'}</td>
+                  <td className="px-2 py-1.5">{fmtPct(r?.avgReturn)}</td>
+                  <td className="px-2 py-1.5">{r?.confidenceScore ?? '—'}</td>
                 </tr>
               ))}
             </tbody>

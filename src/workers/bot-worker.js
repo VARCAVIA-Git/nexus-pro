@@ -20,17 +20,57 @@ const COIN_MAP = { 'BTC/USD': 'bitcoin', 'ETH/USD': 'ethereum', 'SOL/USD': 'sola
 function ts() { return new Date().toISOString().replace('T', ' ').slice(0, 19); }
 function log(msg) { console.log(`[${ts()}] ${msg}`); }
 
-// ── Redis helpers ─────────────────────────────────────────
+// ── Redis helpers (Phase 3 hotfix: timeout + retry on socket errors) ──
+
+const REDIS_TIMEOUT_MS = 8000;
+const REDIS_BACKOFF_MS = [200, 500, 1000];
+
+function isTransient(err) {
+  const msg = String((err && err.message) || err || '').toLowerCase();
+  const code = String((err && (err.code || (err.cause && err.cause.code))) || '').toUpperCase();
+  if (
+    msg.includes('socket hang up') ||
+    msg.includes('econnreset') ||
+    msg.includes('und_err_socket') ||
+    msg.includes('und_err_connect_timeout') ||
+    msg.includes('fetch failed') ||
+    msg.includes('the operation was aborted') ||
+    msg.includes('terminated')
+  ) return true;
+  if (code === 'ECONNRESET' || code === 'UND_ERR_SOCKET' || code === 'ETIMEDOUT' || code === 'EAI_AGAIN') return true;
+  return false;
+}
 
 async function redis(cmd) {
-  const res = await fetch(REDIS_URL, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(cmd),
-  });
-  if (!res.ok) throw new Error(`Redis ${res.status}`);
-  const d = await res.json();
-  return d.result;
+  let lastErr = null;
+  for (let attempt = 0; attempt < REDIS_BACKOFF_MS.length; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REDIS_TIMEOUT_MS);
+    try {
+      const res = await fetch(REDIS_URL, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${REDIS_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(cmd),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
+      if (!res.ok) throw new Error(`Redis ${res.status}`);
+      const d = await res.json();
+      return d.result;
+    } catch (err) {
+      clearTimeout(timer);
+      lastErr = err;
+      const transient = isTransient(err) || (err && err.name === 'AbortError');
+      if (!transient) throw err;
+      if (attempt < REDIS_BACKOFF_MS.length - 1) {
+        await new Promise((r) => setTimeout(r, REDIS_BACKOFF_MS[attempt]));
+        continue;
+      }
+      log(`[redis] retry exhausted (cmd=${cmd[0]}): ${(err && err.message) || err}`);
+      throw err;
+    }
+  }
+  throw lastErr || new Error('Redis unknown failure');
 }
 
 async function rGet(key) {
