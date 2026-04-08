@@ -36,20 +36,34 @@ function MomentumBadge({ score }: { score: number }) {
   );
 }
 
+function LiveContextPlaceholder({ msg }: { msg: string }) {
+  return (
+    <div className="rounded-2xl border border-n-border bg-n-card p-5">
+      <div className="flex items-center gap-2 text-sm font-semibold text-n-text">
+        <Activity size={16} className="text-blue-400" /> Live Context
+      </div>
+      <p className="mt-2 text-xs text-n-dim">{msg}</p>
+    </div>
+  );
+}
+
 export function LiveContextCard({ context }: { context: LiveContext | null | undefined }) {
   if (!context) {
-    return (
-      <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <div className="flex items-center gap-2 text-sm font-semibold text-n-text">
-          <Activity size={16} className="text-blue-400" /> Live Context
-        </div>
-        <p className="mt-2 text-xs text-n-dim">Nessun snapshot live disponibile. Verrà popolato al prossimo tick.</p>
-      </div>
-    );
+    return <LiveContextPlaceholder msg="In attesa di dati live (verrà popolato al prossimo tick)." />;
   }
 
-  const upZones = context.nearestZones.filter((z) => z.distancePct > 0);
-  const downZones = context.nearestZones.filter((z) => z.distancePct <= 0);
+  // Defensive: legacy/partial LiveContext può non avere alcuni campi.
+  // Tutto è null-safe da qui in poi.
+  const activeRules = Array.isArray(context.activeRules) ? context.activeRules : [];
+  const nearestZones = Array.isArray(context.nearestZones) ? context.nearestZones : [];
+  const upZones = nearestZones.filter((z) => z?.distancePct != null && z.distancePct > 0);
+  const downZones = nearestZones.filter((z) => z?.distancePct != null && z.distancePct <= 0);
+
+  const hasMinimumShape =
+    typeof context.price === 'number' && typeof context.regime === 'string';
+  if (!hasMinimumShape) {
+    return <LiveContextPlaceholder msg="Live context in formato legacy. Sarà aggiornato al prossimo tick." />;
+  }
 
   return (
     <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 space-y-4">
@@ -57,7 +71,7 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
         <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
           <Activity size={16} /> Live Context
         </div>
-        <span className="text-[10px] text-n-dim">aggiornato {timeAgo(context.updatedAt)}</span>
+        <span className="text-[10px] text-n-dim">aggiornato {context.updatedAt ? timeAgo(context.updatedAt) : '—'}</span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -72,25 +86,25 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
         <div className="rounded-xl bg-n-bg-s p-3">
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Momentum</div>
           <div className="mt-1">
-            <MomentumBadge score={context.momentumScore} />
+            <MomentumBadge score={context.momentumScore ?? 0} />
           </div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Vol percentile</div>
-          <div className="mt-1 text-sm font-semibold text-n-text">{context.volatilityPercentile}%</div>
+          <div className="mt-1 text-sm font-semibold text-n-text">{context.volatilityPercentile ?? 0}%</div>
         </div>
       </div>
 
       <div>
         <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-n-text">
           <Zap size={12} className="text-amber-400" />
-          Active rules ({context.activeRules.length})
+          Active rules ({activeRules.length})
         </div>
-        {context.activeRules.length === 0 ? (
+        {activeRules.length === 0 ? (
           <p className="text-[11px] text-n-dim">Nessuna regola top attiva al momento.</p>
         ) : (
           <div className="flex flex-wrap gap-1.5">
-            {context.activeRules.slice(0, 6).map((r) => (
+            {activeRules.slice(0, 6).map((r) => (
               <span
                 key={r.ruleId}
                 className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-mono ${
@@ -98,7 +112,8 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
                 }`}
                 title={r.ruleId}
               >
-                {r.directionBias === 'long' ? '↑' : '↓'} {r.ruleId.split('+').slice(0, 2).join('+')} · {r.confidence}
+                {r.directionBias === 'long' ? '↑' : '↓'}{' '}
+                {(r.ruleId ?? '').split('+').slice(0, 2).join('+')} · {r.confidence ?? 0}
               </span>
             ))}
           </div>
@@ -107,7 +122,7 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
 
       <div>
         <div className="mb-2 text-xs font-semibold text-n-text">Nearest reaction zones (±3%)</div>
-        {context.nearestZones.length === 0 ? (
+        {nearestZones.length === 0 ? (
           <p className="text-[11px] text-n-dim">Nessuna zona vicina.</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">

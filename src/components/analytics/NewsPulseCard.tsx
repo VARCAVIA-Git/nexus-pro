@@ -19,20 +19,25 @@ function timeAgo(ts: number): string {
 }
 
 export function NewsPulseCard({ digest }: { digest: NewsDigest | null | undefined }) {
-  if (!digest || digest.count === 0) {
+  const topItems = Array.isArray(digest?.topItems) ? digest!.topItems : [];
+  const count = digest?.count ?? topItems.length;
+
+  if (!digest || count === 0) {
     return (
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
         <div className="flex items-center gap-2 text-sm font-semibold text-n-text">
           <Newspaper size={16} className="text-amber-400" /> News Pulse
         </div>
-        <p className="mt-2 text-xs text-n-dim">Nessuna news rilevante nelle ultime 24h.</p>
+        <p className="mt-2 text-xs text-n-dim">In attesa di dati live (nessuna news rilevante nelle ultime 24h).</p>
       </div>
     );
   }
 
-  const sent = fmtSent(digest.avgSentiment);
+  const avgSentiment = typeof digest.avgSentiment === 'number' ? digest.avgSentiment : 0;
+  const delta24h = typeof digest.sentimentDelta24h === 'number' ? digest.sentimentDelta24h : 0;
+  const sent = fmtSent(avgSentiment);
   const SentIcon = sent.Icon;
-  const items = digest.topItems.slice(0, 5);
+  const items = topItems.slice(0, 5);
 
   return (
     <div className="rounded-2xl border border-n-border bg-n-card p-5 space-y-4">
@@ -40,7 +45,7 @@ export function NewsPulseCard({ digest }: { digest: NewsDigest | null | undefine
         <div className="flex items-center gap-2 text-sm font-semibold text-n-text">
           <Newspaper size={16} className="text-amber-400" /> News Pulse
         </div>
-        <span className="text-[10px] text-n-dim">{digest.count} articoli · 24h</span>
+        <span className="text-[10px] text-n-dim">{count} articoli · 24h</span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
@@ -48,29 +53,29 @@ export function NewsPulseCard({ digest }: { digest: NewsDigest | null | undefine
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Sentiment medio</div>
           <div className="mt-1">
             <span className={`inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold ${sent.cls}`}>
-              <SentIcon size={12} /> {sent.label} ({digest.avgSentiment.toFixed(2)})
+              <SentIcon size={12} /> {sent.label} ({avgSentiment.toFixed(2)})
             </span>
           </div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Delta vs precedente</div>
           <div className="mt-1 font-mono text-sm font-semibold text-n-text">
-            {digest.sentimentDelta24h > 0 ? '+' : ''}
-            {digest.sentimentDelta24h.toFixed(3)}
+            {delta24h > 0 ? '+' : ''}
+            {delta24h.toFixed(3)}
           </div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Articoli totali</div>
-          <div className="mt-1 text-sm font-semibold text-n-text">{digest.count}</div>
+          <div className="mt-1 text-sm font-semibold text-n-text">{count}</div>
         </div>
       </div>
 
       <ul className="space-y-2">
         {items.map((it) => (
-          <li key={it.id} className="flex items-start gap-2 rounded-lg bg-n-bg-s px-3 py-2">
+          <li key={it.id ?? it.url ?? it.title} className="flex items-start gap-2 rounded-lg bg-n-bg-s px-3 py-2">
             <span
               className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
-                it.sentiment > 0.1 ? 'bg-emerald-400' : it.sentiment < -0.1 ? 'bg-red-400' : 'bg-n-dim'
+                (it.sentiment ?? 0) > 0.1 ? 'bg-emerald-400' : (it.sentiment ?? 0) < -0.1 ? 'bg-red-400' : 'bg-n-dim'
               }`}
             />
             <div className="flex-1 min-w-0">
@@ -84,11 +89,11 @@ export function NewsPulseCard({ digest }: { digest: NewsDigest | null | undefine
                 {it.title}
               </a>
               <div className="mt-0.5 flex items-center gap-2 text-[10px] text-n-dim">
-                <span>{it.source}</span>
+                <span>{it.source ?? '—'}</span>
                 <span>·</span>
-                <span>{timeAgo(it.publishedAt)} fa</span>
+                <span>{it.publishedAt ? `${timeAgo(it.publishedAt)} fa` : '—'}</span>
                 <span>·</span>
-                <span>rel {Math.round(it.relevance * 100)}%</span>
+                <span>rel {Math.round((it.relevance ?? 0) * 100)}%</span>
               </div>
             </div>
           </li>
