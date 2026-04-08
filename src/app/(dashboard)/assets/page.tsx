@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import { ASSETS, type AssetConfig } from '@/lib/config/assets';
 import type { AssetAnalytic, AnalyticStatus, AssetClass } from '@/lib/analytics/types';
-import { Boxes, Loader2, CheckCircle2, Clock, AlertTriangle, Plus } from 'lucide-react';
+import { Boxes, Loader2, CheckCircle2, Clock, AlertTriangle, Plus, X } from 'lucide-react';
 
 type Tab = 'crypto' | 'us_stock' | 'us_etf';
 
@@ -37,6 +38,17 @@ function classifyAsset(a: AssetConfig): AssetClass {
 }
 
 export default function AssetsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-n-dim" /></div>}>
+      <AssetsPageInner />
+    </Suspense>
+  );
+}
+
+function AssetsPageInner() {
+  const searchParams = useSearchParams();
+  const archivedFrom = searchParams.get('archived');
+  const [archivedToast, setArchivedToast] = useState<string | null>(archivedFrom);
   const [tab, setTab] = useState<Tab>('crypto');
   const [analytics, setAnalytics] = useState<AssetAnalytic[]>([]);
   const [loading, setLoading] = useState(true);
@@ -90,6 +102,23 @@ export default function AssetsPage() {
 
   return (
     <div className="space-y-5">
+      {archivedToast && (
+        <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
+          <div>
+            <span className="font-semibold">Sezione archiviata.</span>{' '}
+            La sezione <span className="font-mono">/{archivedToast}</span> è stata rimossa.
+            L&apos;AI Analytic la sostituisce — gestisci i tuoi asset da qui.
+          </div>
+          <button
+            onClick={() => setArchivedToast(null)}
+            className="shrink-0 rounded p-1 text-amber-300 hover:bg-amber-500/15"
+            aria-label="Chiudi"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
