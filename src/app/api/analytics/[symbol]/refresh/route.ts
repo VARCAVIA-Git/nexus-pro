@@ -16,6 +16,6 @@ export async function POST(_req: Request, { params }: { params: { symbol: string
   const state = await getAnalytic(symbol);
   if (!state) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  const job = await enqueue(symbol);
+  const job = await enqueue(symbol, state.assetClass);
   return NextResponse.json({ job });
 }

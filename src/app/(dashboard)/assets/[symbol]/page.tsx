@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { AssetAnalytic, JobStatus } from '@/lib/analytics/types';
+import type { AssetAnalytic, JobStatus, AnalyticReport } from '@/lib/analytics/types';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
 
 export default function AssetDetailPage() {
@@ -12,6 +12,7 @@ export default function AssetDetailPage() {
   const symbol = decodeURIComponent(params.symbol);
 
   const [analytic, setAnalytic] = useState<AssetAnalytic | null>(null);
+  const [report, setReport] = useState<AnalyticReport | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -21,8 +22,10 @@ export default function AssetDetailPage() {
     if (r.ok) {
       const d = await r.json();
       setAnalytic(d.analytic);
+      setReport(d.report ?? null);
     } else {
       setAnalytic(null);
+      setReport(null);
     }
     setLoading(false);
   }, [symbol]);
@@ -154,15 +157,13 @@ export default function AssetDetailPage() {
         </div>
       )}
 
-      {isReady && (
+      {isReady && report && <ReportView report={report} />}
+      {isReady && !report && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
             <CheckCircle2 size={16} /> AI Analytic pronta
           </div>
-          <p className="mt-2 text-xs text-n-dim">
-            Report disponibile (verrà popolato in Phase 2). Pattern, reaction zones e strategy fit
-            saranno mostrati qui non appena la pipeline sarà attiva.
-          </p>
+          <p className="mt-2 text-xs text-n-dim">Report non disponibile.</p>
         </div>
       )}
 
@@ -179,6 +180,240 @@ export default function AssetDetailPage() {
         <div className="rounded-2xl border border-n-border bg-n-card p-5 text-xs text-n-dim">
           <Clock size={14} className="mr-2 inline" />
           Nessun training avviato. Usa &quot;Aggiorna ora&quot; per accodarne uno.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Report rendering ───────────────────────────────────────────────
+
+function fmtPct(v: number | undefined | null, digits = 2): string {
+  if (v === undefined || v === null || Number.isNaN(v)) return '—';
+  return `${v.toFixed(digits)}%`;
+}
+
+function fmtNum(v: number | undefined | null, digits = 2): string {
+  if (v === undefined || v === null || Number.isNaN(v)) return '—';
+  return v.toFixed(digits);
+}
+
+function ReportView({ report }: { report: AnalyticReport }) {
+  const tfCounts = report.datasetCoverage?.candleCounts ?? {};
+  const datasetSummary = ['15m', '1h', '4h', '1d']
+    .map((tf) => `${tfCounts[tf] ?? 0} ${tf}`)
+    .join(' · ');
+  const generated = new Date(report.generatedAt).toLocaleString();
+
+  const buyRules = (report.topRules ?? [])
+    .filter((r) => r.direction === 'long')
+    .sort((a, b) => b.confidenceScore - a.confidenceScore)
+    .slice(0, 10);
+  const sellRules = (report.topRules ?? [])
+    .filter((r) => r.direction === 'short')
+    .sort((a, b) => b.confidenceScore - a.confidenceScore)
+    .slice(0, 10);
+  const zones = (report.reactionZones ?? []).slice(0, 15);
+  const fits = (report.strategyFit ?? []).slice(0, 12);
+  const indicators = Object.values(report.indicatorReactivity ?? {});
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
+          <CheckCircle2 size={16} /> AI Analytic pronta
+        </div>
+        <p className="mt-2 text-xs text-n-dim">
+          Report generato il <span className="font-mono">{generated}</span> · dataset: {datasetSummary}
+        </p>
+      </div>
+
+      {/* Raccomandazione */}
+      <div className="rounded-2xl border border-n-border bg-n-card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Raccomandazione</h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="Operation mode" value={report.recommendedOperationMode} />
+          <Stat label="Best timeframe" value={report.recommendedTimeframe} />
+          <Stat label="Best regime LONG" value={report.globalStats?.bestRegimeForLong} />
+          <Stat label="Best regime SHORT" value={report.globalStats?.bestRegimeForShort} />
+        </div>
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <Stat label="Max gain 24h" value={fmtPct(report.globalStats?.maxGainObserved)} />
+          <Stat label="Max loss 24h" value={fmtPct(report.globalStats?.maxLossObserved)} />
+          <Stat label="Vol 1h" value={fmtPct(report.globalStats?.volatility?.['1h'], 3)} />
+          <Stat label="Vol 1d" value={fmtPct(report.globalStats?.volatility?.['1d'], 3)} />
+        </div>
+      </div>
+
+      {/* Top rules */}
+      <div className="grid gap-5 lg:grid-cols-2">
+        <RuleTable title="Top 10 regole BUY" rules={buyRules} dir="long" />
+        <RuleTable title="Top 10 regole SELL" rules={sellRules} dir="short" />
+      </div>
+
+      {/* Reaction zones */}
+      <div className="rounded-2xl border border-n-border bg-n-card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Reaction zones</h2>
+        {zones.length === 0 ? (
+          <p className="text-xs text-n-dim">Nessuna zona identificata.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">Livello</th>
+                  <th className="px-2 py-1.5">Tipo</th>
+                  <th className="px-2 py-1.5">Strength</th>
+                  <th className="px-2 py-1.5">Touches</th>
+                  <th className="px-2 py-1.5">P(bounce)</th>
+                  <th className="px-2 py-1.5">Avg bounce</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {zones.map((z, i) => (
+                  <tr key={i} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{fmtNum(z.priceLevel, 2)}</td>
+                    <td className="px-2 py-1.5">
+                      <span
+                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                          z.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                        }`}
+                      >
+                        {z.type}
+                      </span>
+                    </td>
+                    <td className="px-2 py-1.5">{z.strength}</td>
+                    <td className="px-2 py-1.5">{z.touchCount}</td>
+                    <td className="px-2 py-1.5">{fmtPct((z.bounceProbability ?? 0) * 100)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(z.avgBounceMagnitude)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Strategy fit */}
+      <div className="rounded-2xl border border-n-border bg-n-card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Strategy fit</h2>
+        {fits.length === 0 ? (
+          <p className="text-xs text-n-dim">Nessun fit calcolato.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">#</th>
+                  <th className="px-2 py-1.5">Strategia</th>
+                  <th className="px-2 py-1.5">TF</th>
+                  <th className="px-2 py-1.5">Trades</th>
+                  <th className="px-2 py-1.5">WR</th>
+                  <th className="px-2 py-1.5">PF</th>
+                  <th className="px-2 py-1.5">Sharpe</th>
+                  <th className="px-2 py-1.5">MaxDD</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {fits.map((f) => (
+                  <tr key={`${f.strategyName}-${f.timeframe}`} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{f.rank}</td>
+                    <td className="px-2 py-1.5">{f.strategyName}</td>
+                    <td className="px-2 py-1.5">{f.timeframe}</td>
+                    <td className="px-2 py-1.5">{f.totalTrades}</td>
+                    <td className="px-2 py-1.5">{fmtPct(f.winRate, 1)}</td>
+                    <td className="px-2 py-1.5">{fmtNum(f.profitFactor)}</td>
+                    <td className="px-2 py-1.5">{fmtNum(f.sharpe)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(f.maxDrawdown)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Indicator reactivity */}
+      <div className="rounded-2xl border border-n-border bg-n-card p-5">
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Indicator reactivity</h2>
+        {indicators.length === 0 ? (
+          <p className="text-xs text-n-dim">Nessun indicatore con segnali sufficienti.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">Indicatore</th>
+                  <th className="px-2 py-1.5">Segnali</th>
+                  <th className="px-2 py-1.5">WR</th>
+                  <th className="px-2 py-1.5">Avg return</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {indicators.map((ind) => (
+                  <tr key={ind.indicatorName} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{ind.indicatorName}</td>
+                    <td className="px-2 py-1.5">{ind.signalCount}</td>
+                    <td className="px-2 py-1.5">{fmtPct(ind.winRate, 1)}</td>
+                    <td className="px-2 py-1.5">{fmtPct(ind.avgReturn, 3)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string | number | undefined }) {
+  return (
+    <div className="rounded-xl bg-n-bg-s p-3">
+      <div className="text-[10px] uppercase tracking-wide text-n-dim">{label}</div>
+      <div className="mt-1 text-sm font-semibold text-n-text">{value ?? '—'}</div>
+    </div>
+  );
+}
+
+function RuleTable({
+  title,
+  rules,
+  dir,
+}: {
+  title: string;
+  rules: AnalyticReport['topRules'];
+  dir: 'long' | 'short';
+}) {
+  return (
+    <div className="rounded-2xl border border-n-border bg-n-card p-5">
+      <h2 className="mb-3 text-sm font-semibold text-n-text">{title}</h2>
+      {rules.length === 0 ? (
+        <p className="text-xs text-n-dim">Nessuna regola {dir} significativa.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[11px]">
+            <thead className="text-n-dim">
+              <tr>
+                <th className="px-2 py-1.5">Conditions</th>
+                <th className="px-2 py-1.5">WR</th>
+                <th className="px-2 py-1.5">N</th>
+                <th className="px-2 py-1.5">Avg ret</th>
+                <th className="px-2 py-1.5">Conf</th>
+              </tr>
+            </thead>
+            <tbody className="text-n-text">
+              {rules.map((r) => (
+                <tr key={r.id} className="border-t border-n-border align-top">
+                  <td className="px-2 py-1.5 font-mono text-[10px]">{r.conditions.join(' + ')}</td>
+                  <td className="px-2 py-1.5">{fmtPct(r.winRate, 0)}</td>
+                  <td className="px-2 py-1.5">{r.occurrences}</td>
+                  <td className="px-2 py-1.5">{fmtPct(r.avgReturn)}</td>
+                  <td className="px-2 py-1.5">{r.confidenceScore}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>

@@ -62,6 +62,92 @@ export async function redisLlen(key: string): Promise<number> {
   return await redis<number>(['LLEN', key]) ?? 0;
 }
 
+// ── Raw LIST helpers (Phase 2: store plain string members like symbols) ──
+
+/** LPUSH a single raw string. Returns new list length. */
+export async function redisLPush(key: string, value: string): Promise<number> {
+  return (await redis<number>(['LPUSH', key, value])) ?? 0;
+}
+
+/** RPOP a single raw string member, or null if empty. */
+export async function redisRPop(key: string): Promise<string | null> {
+  return (await redis<string | null>(['RPOP', key])) ?? null;
+}
+
+/** LRANGE returning raw string members (no JSON parse). */
+export async function redisLRange(key: string, start: number, stop: number): Promise<string[]> {
+  const raw = await redis<string[]>(['LRANGE', key, String(start), String(stop)]);
+  return Array.isArray(raw) ? raw : [];
+}
+
+/** LLEN of a list. */
+export async function redisLLen(key: string): Promise<number> {
+  return (await redis<number>(['LLEN', key])) ?? 0;
+}
+
+/** LREM count occurrences of value from list. */
+export async function redisLRem(key: string, count: number, value: string): Promise<number> {
+  return (await redis<number>(['LREM', key, String(count), value])) ?? 0;
+}
+
+// ── SET helpers ───────────────────────────────────────────
+
+export async function redisSAdd(key: string, member: string): Promise<number> {
+  return (await redis<number>(['SADD', key, member])) ?? 0;
+}
+
+export async function redisSRem(key: string, member: string): Promise<number> {
+  return (await redis<number>(['SREM', key, member])) ?? 0;
+}
+
+export async function redisSMembers(key: string): Promise<string[]> {
+  const raw = await redis<string[]>(['SMEMBERS', key]);
+  return Array.isArray(raw) ? raw : [];
+}
+
+export async function redisSIsMember(key: string, member: string): Promise<boolean> {
+  const raw = await redis<number>(['SISMEMBER', key, member]);
+  return raw === 1;
+}
+
+// ── Misc primitives ───────────────────────────────────────
+
+export async function redisExists(key: string): Promise<boolean> {
+  const raw = await redis<number>(['EXISTS', key]);
+  return raw === 1;
+}
+
+export async function redisExpire(key: string, seconds: number): Promise<number> {
+  return (await redis<number>(['EXPIRE', key, String(seconds)])) ?? 0;
+}
+
+export async function redisIncr(key: string): Promise<number> {
+  return (await redis<number>(['INCR', key])) ?? 0;
+}
+
+/**
+ * SET with NX (only if not exists) + EX (TTL seconds).
+ * Returns true if the lock was acquired, false if a value already exists.
+ */
+export async function redisSetNX(key: string, value: string, exSeconds: number): Promise<boolean> {
+  const result = await redis<string | null>(['SET', key, value, 'NX', 'EX', String(exSeconds)]);
+  return result === 'OK';
+}
+
+/** Raw GET (no JSON parse). */
+export async function redisGetRaw(key: string): Promise<string | null> {
+  return (await redis<string | null>(['GET', key])) ?? null;
+}
+
+/** Raw SET (no JSON encode), with optional TTL. */
+export async function redisSetRaw(key: string, value: string, exSeconds?: number): Promise<void> {
+  if (exSeconds) {
+    await redis(['SET', key, value, 'EX', String(exSeconds)]);
+  } else {
+    await redis(['SET', key, value]);
+  }
+}
+
 /** Check connection */
 export async function redisPing(): Promise<boolean> {
   try {
