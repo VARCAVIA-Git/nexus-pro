@@ -10,7 +10,7 @@ import {
   downloadCompleteHistory,
   analyzeAllCandles,
   minePatterns,
-} from '@/lib/engine/deep-mapping';
+} from '@/lib/research/deep-mapping';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300; // 5 minutes — long-running job

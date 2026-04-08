@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { stopBot, deleteBot } from '@/lib/engine/live-runner';
+import { stopBot, deleteBot } from '@/lib/analytics/action/live-runner';
 
 export const dynamic = 'force-dynamic';
 

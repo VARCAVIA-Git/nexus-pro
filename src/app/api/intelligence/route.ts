@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { generateAllMasterSignals } from '@/lib/engine/master-signal';
-import { getEconomicCalendar } from '@/lib/engine/economic-calendar';
+import { generateAllMasterSignals } from '@/lib/analytics/cognition/master-signal';
+import { getEconomicCalendar } from '@/lib/analytics/perception/economic-calendar';
 
 export const dynamic = 'force-dynamic';
 

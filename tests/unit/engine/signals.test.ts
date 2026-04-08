@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { generateSignalsForAssets, generateSignalSummary } from '@/lib/engine/signals';
+import { generateSignalsForAssets, generateSignalSummary } from '@/lib/analytics/cognition/signals';
 
 describe('generateSignalsForAssets', () => {
   it('should generate signals for provided symbols', () => {

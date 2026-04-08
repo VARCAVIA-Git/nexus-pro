@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
-import { analyzeAllAssets } from '@/lib/engine/learning/pattern-analyzer';
-import { getAdaptiveWeights } from '@/lib/engine/learning/adaptive-weights';
-import { optimizeAllStrategies } from '@/lib/engine/learning/strategy-optimizer';
-import { loadOutcomes } from '@/lib/engine/learning/outcome-tracker';
+import { analyzeAllAssets } from '@/lib/analytics/learning/pattern-analyzer';
+import { getAdaptiveWeights } from '@/lib/analytics/learning/adaptive-weights';
+import { optimizeAllStrategies } from '@/lib/analytics/learning/strategy-optimizer';
+import { loadOutcomes } from '@/lib/analytics/learning/outcome-tracker';
 
 export const dynamic = 'force-dynamic';
 

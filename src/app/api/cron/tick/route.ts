@@ -1,21 +1,21 @@
 import { NextResponse } from 'next/server';
 import type { OHLCV, StrategyKey, TradeRecord, Side } from '@/types';
 import type { MultiBotConfig } from '@/types/bot';
-import { computeIndicators } from '@/lib/engine/indicators';
-import { generateSignal } from '@/lib/engine/strategies';
-import { checkCircuitBreaker, trailingStopATR, getCapitalRules, timeframePositionSize, preTradeChecks, checkProfitLock } from '@/lib/engine/risk';
+import { computeIndicators } from '@/lib/core/indicators';
+import { generateSignal } from '@/lib/analytics/cognition/strategies';
+import { checkCircuitBreaker, trailingStopATR, getCapitalRules, timeframePositionSize, preTradeChecks, checkProfitLock } from '@/lib/analytics/action/risk';
 import { calculateRiskParams } from '@/lib/config/assets';
-import { notifyTrade, notifyTradeClose, notifyBot } from '@/lib/engine/notifications';
-import { buildOutcome, saveOutcome } from '@/lib/engine/learning/outcome-tracker';
+import { notifyTrade, notifyTradeClose, notifyBot } from '@/lib/analytics/action/notifications';
+import { buildOutcome, saveOutcome } from '@/lib/analytics/learning/outcome-tracker';
 import { redisGet, redisSet, redisLpush, KEYS } from '@/lib/db/redis';
 import { AlpacaBroker } from '@/lib/broker/alpaca';
-import type { BotPosition, BotSignalLog } from '@/lib/engine/live-runner';
-import { classifyRegime } from '@/lib/engine/regime-classifier';
-import { evaluateEntryTiming } from '@/lib/engine/smart-timing';
-import { detectTrap } from '@/lib/engine/trap-detector';
-import { managePosition } from '@/lib/engine/position-manager';
-import { consultBollingerProfile } from '@/lib/engine/bollinger-bot';
-import { consultDeepMapRules } from '@/lib/engine/deep-mapping/bot-integration';
+import type { BotPosition, BotSignalLog } from '@/lib/analytics/action/live-runner';
+import { classifyRegime } from '@/lib/analytics/perception/regime-classifier';
+import { evaluateEntryTiming } from '@/lib/analytics/cognition/smart-timing';
+import { detectTrap } from '@/lib/analytics/cognition/trap-detector';
+import { managePosition } from '@/lib/analytics/action/position-manager';
+import { consultBollingerProfile } from '@/lib/research/bollinger-bot';
+import { consultDeepMapRules } from '@/lib/research/deep-mapping/bot-integration';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 55; // Vercel Pro allows up to 60s

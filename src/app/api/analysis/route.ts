@@ -1,13 +1,13 @@
 import { NextResponse } from 'next/server';
 import type { OHLCV } from '@/types';
-import { computeIndicators, detectRegime } from '@/lib/engine/indicators';
-import { detectPatterns } from '@/lib/engine/patterns';
-import { generateSignal } from '@/lib/engine/strategies';
-import { runMTFAnalysis } from '@/lib/engine/mtf-analysis';
-import { getNewsSentiment } from '@/lib/engine/news-sentiment';
-import { checkCalendarForAsset, getEconomicCalendar } from '@/lib/engine/economic-calendar';
-import { getKnowledgeBase } from '@/lib/engine/rnd/knowledge-base';
-import { downloadHistory } from '@/lib/engine/rnd/history-loader';
+import { computeIndicators, detectRegime } from '@/lib/core/indicators';
+import { detectPatterns } from '@/lib/core/patterns';
+import { generateSignal } from '@/lib/analytics/cognition/strategies';
+import { runMTFAnalysis } from '@/lib/analytics/perception/mtf-analysis';
+import { getNewsSentiment } from '@/lib/analytics/perception/news-sentiment';
+import { checkCalendarForAsset, getEconomicCalendar } from '@/lib/analytics/perception/economic-calendar';
+import { getKnowledgeBase } from '@/lib/research/rnd/knowledge-base';
+import { downloadHistory } from '@/lib/research/rnd/history-loader';
 import { redisGet, redisSet } from '@/lib/db/redis';
 
 export const dynamic = 'force-dynamic';

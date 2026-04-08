@@ -15,3 +15,7 @@ docker/data/
 # pnpm-lock.yaml — keep in git for Vercel
 nexus-*.sh
 setup.log
+
+# Runtime logs
+logs/*
+!logs/.gitkeep

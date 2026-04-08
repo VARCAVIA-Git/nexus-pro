@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { computeIndicators } from '@/lib/engine/indicators';
-import { generateSignal } from '@/lib/engine/strategies';
+import { computeIndicators } from '@/lib/core/indicators';
+import { generateSignal } from '@/lib/analytics/cognition/strategies';
 import { redisGet, redisSet } from '@/lib/db/redis';
 import { fetchAlpacaBars } from '@/lib/data/providers/alpaca-data';
 import type { OHLCV, StrategyKey, SignalStrength } from '@/types';

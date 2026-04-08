@@ -116,6 +116,25 @@ export default function StrategyPage() {
 
   return (
     <div className="space-y-5">
+      {/* Strategy V2 banner */}
+      <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-4">
+        <div className="flex items-start gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-blue-500/15 text-blue-400">
+            <Zap size={16} />
+          </div>
+          <div className="flex-1 text-xs">
+            <div className="mb-1 font-semibold text-blue-300">Strategy V2 in arrivo</div>
+            <p className="text-n-dim">
+              Ogni Strategy userà le AI Analytic dei tuoi asset.{' '}
+              <a href="/assets" className="font-semibold text-blue-300 underline-offset-2 hover:underline">
+                Vai su /assets
+              </a>{' '}
+              per assegnarle.
+            </p>
+          </div>
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

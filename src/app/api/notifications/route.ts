@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getNotifications, getUnreadCount, markRead, markAllRead } from '@/lib/engine/notifications';
+import { getNotifications, getUnreadCount, markRead, markAllRead } from '@/lib/analytics/action/notifications';
 
 export const dynamic = 'force-dynamic';
 

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   kellySize, atrPositionSize, pearsonCorrelation,
   correlationRisk, checkCircuitBreaker, trailingStopATR,
-} from '@/lib/engine/risk';
+} from '@/lib/analytics/action/risk';
 import type { TradeRecord } from '@/types';
 
 describe('kellySize', () => {
