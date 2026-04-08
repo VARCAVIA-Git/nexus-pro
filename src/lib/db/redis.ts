@@ -6,20 +6,75 @@
 const getUrl = () => process.env.UPSTASH_REDIS_REST_URL ?? '';
 const getToken = () => process.env.UPSTASH_REDIS_REST_TOKEN ?? '';
 
+// Retry-aware Upstash REST client
+// - Timeout 8s (AbortController)
+// - 3 tentativi totali con backoff 200/500/1000 ms
+// - Retry SOLO su errori di rete (socket hang up / ECONNRESET / UND_ERR_SOCKET / abort)
+// - Log a console.warn solo dopo il terzo tentativo fallito
+
+const REDIS_TIMEOUT_MS = 8000;
+const RETRY_BACKOFF_MS = [200, 500, 1000];
+
+function isTransientNetError(err: any): boolean {
+  const msg = String(err?.message ?? err ?? '').toLowerCase();
+  const code = String(err?.code ?? err?.cause?.code ?? '').toUpperCase();
+  if (
+    msg.includes('socket hang up') ||
+    msg.includes('econnreset') ||
+    msg.includes('und_err_socket') ||
+    msg.includes('und_err_connect_timeout') ||
+    msg.includes('fetch failed') ||
+    msg.includes('the operation was aborted') ||
+    msg.includes('terminated')
+  )
+    return true;
+  if (code === 'ECONNRESET' || code === 'UND_ERR_SOCKET' || code === 'ETIMEDOUT' || code === 'EAI_AGAIN') return true;
+  return false;
+}
+
 async function redis<T = any>(cmd: string[]): Promise<T> {
   const url = getUrl();
   const token = getToken();
   if (!url || !token) throw new Error('Upstash Redis not configured');
 
-  const res = await fetch(`${url}`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(cmd),
-  });
+  let lastErr: any = null;
+  for (let attempt = 0; attempt < RETRY_BACKOFF_MS.length; attempt++) {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), REDIS_TIMEOUT_MS);
+    try {
+      const res = await fetch(`${url}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(cmd),
+        signal: ctrl.signal,
+      });
+      clearTimeout(timer);
 
-  if (!res.ok) throw new Error(`Redis error ${res.status}`);
-  const data = await res.json();
-  return data.result;
+      if (!res.ok) {
+        // Errori HTTP non sono transient: throw immediato senza retry
+        throw new Error(`Redis error ${res.status}`);
+      }
+      const data = await res.json();
+      return data.result;
+    } catch (err: any) {
+      clearTimeout(timer);
+      lastErr = err;
+      const transient = isTransientNetError(err) || err?.name === 'AbortError';
+      if (!transient) throw err;
+      if (attempt < RETRY_BACKOFF_MS.length - 1) {
+        await new Promise((r) => setTimeout(r, RETRY_BACKOFF_MS[attempt]));
+        continue;
+      }
+      // Ultimo tentativo fallito: log e rilancia
+      console.warn(`[redis] retry exhausted (cmd=${cmd[0]}): ${err?.message ?? err}`);
+      throw err;
+    }
+  }
+  // Unreachable, ma TS lo richiede
+  throw lastErr ?? new Error('Redis unknown failure');
 }
 
 // ── Generic helpers ───────────────────────────────────────

@@ -34,8 +34,16 @@ function callTick(path, label) {
               console.log(`  ${r.ticked ? '✅' : '❌'} ${r.name}: ${r.signals ?? 0} signals ${r.error ? `— ${r.error}` : ''}`);
             }
           }
-        } else {
+        } else if (label === 'analytic') {
           console.log(`[${ts}] Analytic: ${res.statusCode} | observed=${d.observed ?? 0} processed=${d.processed ? 'yes' : 'no'} ${d.errors && d.errors.length ? '| errors=' + d.errors.join(';') : ''}`);
+        } else if (label === 'live') {
+          console.log(`[${ts}] Live: ${res.statusCode} | symbol=${d.symbol ?? '-'} regime=${d.regime ?? '-'} momentum=${d.momentumScore ?? '-'} active=${d.activeRules ?? 0}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
+        } else if (label === 'news') {
+          console.log(`[${ts}] News: ${res.statusCode} | symbol=${d.symbol ?? '-'} count=${d.count ?? 0} sent=${d.avgSentiment ?? '-'} delta=${d.delta ?? '-'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
+        } else if (label === 'auto-retrain') {
+          console.log(`[${ts}] AutoRetrain: ${res.statusCode} | scheduled=${d.scheduled?.scheduled ?? 'none'} reason=${d.scheduled?.reason ?? '-'} incr=${d.incrementalResult ? (d.incrementalResult.skipped ? 'skipped:'+d.incrementalResult.reason : 'done:'+d.incrementalResult.symbol) : 'none'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
+        } else {
+          console.log(`[${ts}] ${label}: ${res.statusCode}`);
         }
       } catch {
         console.log(`[${ts}] ${label}: ${res.statusCode}`);
@@ -48,14 +56,35 @@ function callTick(path, label) {
   req.end();
 }
 
+let tickCounter = 0;
+
 function tick() {
+  tickCounter++;
+  const now = Math.floor(Date.now() / 1000);
+
+  // Sequenziali ma asincroni: ogni route ha il suo timeout interno
   callTick('/api/cron/tick', 'tick');
   callTick('/api/cron/analytic-tick', 'analytic');
+  // Live observer: ogni tick (1 symbol round-robin)
+  callTick('/api/cron/live-observer-tick', 'live');
+  // News: ogni 30 min (1800s) con finestra di 60s
+  if (now % 1800 < 60) {
+    callTick('/api/cron/news-tick', 'news');
+  }
+  // Auto-retrain: ogni 1h (3600s) con finestra di 60s
+  if (now % 3600 < 60) {
+    callTick('/api/cron/auto-retrain-tick', 'auto-retrain');
+  }
 }
 
 console.log('═══════════════════════════════════════');
 console.log('NEXUS PRO — Cron Worker');
-console.log(`Ticking /api/cron/tick + /api/cron/analytic-tick every 60s on :${PORT}`);
+console.log(`Ticking 5 endpoints every 60s on :${PORT}`);
+console.log('  - /api/cron/tick                  (legacy bot)');
+console.log('  - /api/cron/analytic-tick         (queue worker)');
+console.log('  - /api/cron/live-observer-tick    (1/tick round-robin)');
+console.log('  - /api/cron/news-tick             (every 30 min)');
+console.log('  - /api/cron/auto-retrain-tick     (every 1 h)');
 console.log('═══════════════════════════════════════');
 console.log('');
 

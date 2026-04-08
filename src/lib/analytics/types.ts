@@ -26,6 +26,13 @@ export interface AssetAnalytic {
   trainingJobId: string | null;
   failureCount: number;
   reportVersion: number;
+
+  // Phase 3 — Living Brain (tutti opzionali per retrocompat)
+  lastIncrementalTrainAt?: number | null;
+  lastLiveContextAt?: number | null;
+  lastNewsFetchAt?: number | null;
+  currentRegime?: string | null;
+  regimeChangedAt?: number | null;
 }
 
 export interface AnalyticReport {
@@ -36,6 +43,8 @@ export interface AnalyticReport {
     candleCounts: Record<string, number>;
     rangeStart: number;
     rangeEnd: number;
+    /** Phase 3: ultimo timestamp candela 1h del dataset (per incremental trainer). */
+    lastCandleTimestamp?: number;
   };
   globalStats: {
     avgReturnPerCandle: Record<string, number>;
@@ -52,6 +61,100 @@ export interface AnalyticReport {
   recommendedOperationMode: 'scalp' | 'intraday' | 'daily' | 'swing';
   recommendedTimeframe: '15m' | '1h' | '4h' | '1d';
   eventReactivity: EventReactivity[];
+
+  // Phase 3 — Living Brain (tutti opzionali per retrocompat)
+  liveContext?: LiveContext;
+  newsDigest?: NewsDigest;
+  eventImpacts?: EventImpactStat[];
+  feedback?: FeedbackStats;
+  trainingHistory?: TrainingHistoryEntry[];
+}
+
+// ─── Phase 3: Living Brain types ──────────────────────────────
+
+export interface LiveContext {
+  updatedAt: number;
+  price: number;
+  regime: string;
+  activeRules: Array<{
+    ruleId: string;
+    matched: boolean;
+    directionBias: 'long' | 'short' | 'neutral';
+    confidence: number;
+  }>;
+  nearestZones: Array<{
+    level: number;
+    type: 'support' | 'resistance';
+    distancePct: number;
+    pBounce: number;
+  }>;
+  momentumScore: number; // -1..+1
+  volatilityPercentile: number; // 0..100
+  // Snapshot indicatori utili per UI / debug (opzionale)
+  indicators?: {
+    rsi: number;
+    macdHistogram: number;
+    bbPosition: string;
+    adx: number;
+    stochK: number;
+    atr: number;
+  };
+}
+
+export interface NewsItem {
+  id: string;
+  source: string;
+  publishedAt: number;
+  title: string;
+  url: string;
+  sentiment: number; // -1..+1
+  relevance: number; // 0..1
+  keywords: string[];
+}
+
+export interface NewsDigest {
+  symbol: string;
+  window: '24h';
+  updatedAt: number;
+  count: number;
+  avgSentiment: number;
+  topItems: NewsItem[]; // max 10
+  sentimentDelta24h: number; // delta vs previous window
+}
+
+export interface MacroEvent {
+  id: string;
+  name: string;
+  country: string;
+  scheduledAt: number;
+  importance: 'low' | 'medium' | 'high';
+  actual: number | null;
+  forecast: number | null;
+  previous: number | null;
+}
+
+export interface EventImpactStat {
+  eventName: string;
+  direction: 'up' | 'down' | 'mixed';
+  avgReturn24h: number;
+  winRate: number;
+  sampleSize: number;
+}
+
+export interface FeedbackStats {
+  totalTrades: number;
+  wins: number;
+  losses: number;
+  ruleScores: Record<string, { weight: number; trades: number; wr: number }>; // peso 0.5..2.0
+  lastUpdated: number;
+}
+
+export interface TrainingHistoryEntry {
+  timestamp: number;
+  version: number;
+  mode: 'full' | 'incremental';
+  candlesAdded: number;
+  rulesChanged: number;
 }
 
 export interface MinedRule {
