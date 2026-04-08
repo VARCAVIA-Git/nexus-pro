@@ -90,8 +90,17 @@ describe('findNearestZones', () => {
     expect(found.length).toBe(1);
   });
 
-  it('returns empty when nothing within range', () => {
+  it('Phase 3.6: falls back to nearest 2 outside range when nothing within', () => {
+    // Nothing within ±5% of price 1000 → fallback returns 2 nearest by abs distance
     const found = findNearestZones(zones, 1000, 3, 0.05);
-    expect(found.length).toBe(0);
+    expect(found.length).toBe(2);
+    // 200 is closer than 100/105 (in absolute distance from 1000)
+    // 200 ↔ 1000: |distance|=0.8, 105 ↔ 1000: |distance|=0.895, 100 ↔ 1000: |distance|=0.9
+    expect(found[0].level).toBe(200);
+    expect(found[1].level).toBe(105);
+  });
+
+  it('returns empty when zones list itself is empty', () => {
+    expect(findNearestZones([], 1000, 3, 0.05).length).toBe(0);
   });
 });
