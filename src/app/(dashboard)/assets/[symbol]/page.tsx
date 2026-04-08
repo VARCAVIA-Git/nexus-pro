@@ -15,6 +15,8 @@ import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clo
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
+import { RelevantEventsCard } from '@/components/analytics/RelevantEventsCard';
+import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
 
 export default function AssetDetailPage() {
   const params = useParams<{ symbol: string }>();
@@ -215,10 +217,15 @@ export default function AssetDetailPage() {
             <NewsPulseCard digest={news} />
             <MacroEventsCard events={events} />
           </div>
+          <RelevantEventsCard
+            events={events}
+            eventImpacts={report?.eventImpacts}
+            symbol={symbol}
+          />
         </>
       )}
 
-      {isReady && report && <ReportView report={report} />}
+      {isReady && report && <ReportView report={report} currentPrice={live?.price ?? null} />}
       {isReady && !report && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
@@ -271,7 +278,7 @@ function fmtNum(v: number | undefined | null, digits = 2): string {
   return v.toFixed(digits);
 }
 
-function ReportView({ report }: { report: AnalyticReport }) {
+function ReportView({ report, currentPrice }: { report: AnalyticReport; currentPrice: number | null }) {
   const tfCounts = report.datasetCoverage?.candleCounts ?? {};
   const datasetSummary = ['15m', '1h', '4h', '1d']
     .map((tf) => `${tfCounts[tf] ?? 0} ${tf}`)
@@ -287,8 +294,28 @@ function ReportView({ report }: { report: AnalyticReport }) {
     .filter((r) => r?.direction === 'short')
     .sort((a, b) => (b?.confidenceScore ?? 0) - (a?.confidenceScore ?? 0))
     .slice(0, 10);
-  const zones = (Array.isArray(report.reactionZones) ? report.reactionZones : []).slice(0, 15);
-  const fits = (Array.isArray(report.strategyFit) ? report.strategyFit : []).slice(0, 12);
+  // Phase 3.6: filtra le reaction zones a ±15% dal prezzo corrente, ordinate per vicinanza.
+  // Se currentPrice non è disponibile, fallback su tutte le zone (decorate distancePct=0).
+  const allZones = Array.isArray(report.reactionZones) ? report.reactionZones : [];
+  const filteredZones = filterZonesByDistance(allZones, currentPrice, 0.15).slice(0, 15);
+  const zonesHasFilter = currentPrice != null && currentPrice > 0;
+  // Phase 3.6: strategy fit N-gate.
+  // - Le righe con trades<10 sono mostrate ma marcate "low sample" e
+  //   *escluse dal ranking*. Le righe con trades>=10 sono ordinate per
+  //   PF × min(1, N/30) (penalizza sample size piccolo).
+  const allFits = (Array.isArray(report.strategyFit) ? report.strategyFit : []).map((f) => {
+    const trades = f?.totalTrades ?? 0;
+    const pf = f?.profitFactor ?? 0;
+    const weight = Math.min(1, trades / 30);
+    return { ...f, _weightedScore: pf * weight, _lowSample: trades < 10 };
+  });
+  const reliableFits = allFits
+    .filter((f) => !f._lowSample)
+    .sort((a, b) => (b._weightedScore ?? 0) - (a._weightedScore ?? 0));
+  const lowSampleFits = allFits.filter((f) => f._lowSample);
+  // Riassegna rank in base al ranking pesato
+  reliableFits.forEach((f, i) => ((f as any).rank = i + 1));
+  const fits = [...reliableFits, ...lowSampleFits].slice(0, 12);
   const indicators = report.indicatorReactivity && typeof report.indicatorReactivity === 'object'
     ? Object.values(report.indicatorReactivity)
     : [];
@@ -332,17 +359,33 @@ function ReportView({ report }: { report: AnalyticReport }) {
         <RuleTable title="Top 10 regole SELL" rules={sellRules} dir="short" />
       </div>
 
-      {/* Reaction zones */}
+      {/* Reaction zones — Phase 3.6: filtrate ±15% dal prezzo corrente */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-n-text">Reaction zones</h2>
-        {zones.length === 0 ? (
-          <p className="text-xs text-n-dim">Nessuna zona identificata.</p>
+        <div className="mb-3 flex items-baseline justify-between gap-2">
+          <h2 className="text-sm font-semibold text-n-text">
+            {zonesHasFilter ? 'Zone vicine al prezzo corrente (±15%)' : 'Reaction zones'}
+          </h2>
+          {zonesHasFilter && (
+            <span className="text-[10px] text-n-dim">
+              Prezzo: <span className="font-mono text-n-text">{fmtNum(currentPrice, 2)}</span>
+              {' · '}
+              {filteredZones.length}/{allZones.length} zone
+            </span>
+          )}
+        </div>
+        {filteredZones.length === 0 ? (
+          <p className="text-xs text-n-dim">
+            {zonesHasFilter
+              ? 'Nessuna zona di reazione storica vicina al prezzo corrente — territorio vergine (possibile breakout).'
+              : 'Nessuna zona identificata.'}
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px]">
               <thead className="text-n-dim">
                 <tr>
                   <th className="px-2 py-1.5">Livello</th>
+                  <th className="px-2 py-1.5">Δ%</th>
                   <th className="px-2 py-1.5">Tipo</th>
                   <th className="px-2 py-1.5">Strength</th>
                   <th className="px-2 py-1.5">Touches</th>
@@ -351,24 +394,36 @@ function ReportView({ report }: { report: AnalyticReport }) {
                 </tr>
               </thead>
               <tbody className="text-n-text">
-                {zones.map((z, i) => (
-                  <tr key={i} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{fmtNum(z?.priceLevel, 2)}</td>
-                    <td className="px-2 py-1.5">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                          z?.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                {filteredZones.map((z, i) => {
+                  const distancePct = (z as any).distancePct ?? 0;
+                  const distanceLabel =
+                    distancePct === 0 ? '—' : `${distancePct > 0 ? '+' : ''}${(distancePct * 100).toFixed(2)}%`;
+                  return (
+                    <tr key={i} className="border-t border-n-border">
+                      <td className="px-2 py-1.5 font-mono">{fmtNum(z?.priceLevel, 2)}</td>
+                      <td
+                        className={`px-2 py-1.5 font-mono ${
+                          distancePct > 0 ? 'text-emerald-300' : distancePct < 0 ? 'text-red-300' : 'text-n-dim'
                         }`}
                       >
-                        {z?.type ?? '—'}
-                      </span>
-                    </td>
-                    <td className="px-2 py-1.5">{z?.strength ?? '—'}</td>
-                    <td className="px-2 py-1.5">{z?.touchCount ?? '—'}</td>
-                    <td className="px-2 py-1.5">{fmtPct((z?.bounceProbability ?? 0) * 100)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(z?.avgBounceMagnitude)}</td>
-                  </tr>
-                ))}
+                        {distanceLabel}
+                      </td>
+                      <td className="px-2 py-1.5">
+                        <span
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                            z?.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
+                          }`}
+                        >
+                          {z?.type ?? '—'}
+                        </span>
+                      </td>
+                      <td className="px-2 py-1.5">{z?.strength ?? '—'}</td>
+                      <td className="px-2 py-1.5">{z?.touchCount ?? '—'}</td>
+                      <td className="px-2 py-1.5">{fmtPct((z?.bounceProbability ?? 0) * 100)}</td>
+                      <td className="px-2 py-1.5">{fmtPct(z?.avgBounceMagnitude)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -396,18 +451,31 @@ function ReportView({ report }: { report: AnalyticReport }) {
                 </tr>
               </thead>
               <tbody className="text-n-text">
-                {fits.map((f, i) => (
-                  <tr key={`${f?.strategyName ?? 'x'}-${f?.timeframe ?? i}`} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{f?.rank ?? '—'}</td>
-                    <td className="px-2 py-1.5">{f?.strategyName ?? '—'}</td>
-                    <td className="px-2 py-1.5">{f?.timeframe ?? '—'}</td>
-                    <td className="px-2 py-1.5">{f?.totalTrades ?? '—'}</td>
-                    <td className="px-2 py-1.5">{fmtPct(f?.winRate, 1)}</td>
-                    <td className="px-2 py-1.5">{fmtNum(f?.profitFactor)}</td>
-                    <td className="px-2 py-1.5">{fmtNum(f?.sharpe)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(f?.maxDrawdown)}</td>
-                  </tr>
-                ))}
+                {fits.map((f, i) => {
+                  const lowSample = (f as any)._lowSample;
+                  return (
+                    <tr
+                      key={`${f?.strategyName ?? 'x'}-${f?.timeframe ?? i}`}
+                      className={`border-t border-n-border ${lowSample ? 'text-n-dim opacity-60' : ''}`}
+                    >
+                      <td className="px-2 py-1.5 font-mono">{lowSample ? '—' : f?.rank ?? '—'}</td>
+                      <td className="px-2 py-1.5">
+                        {f?.strategyName ?? '—'}
+                        {lowSample && (
+                          <span className="ml-1.5 rounded bg-n-card px-1.5 py-0.5 text-[9px] font-semibold text-n-dim">
+                            low sample
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5">{f?.timeframe ?? '—'}</td>
+                      <td className="px-2 py-1.5">{f?.totalTrades ?? '—'}</td>
+                      <td className="px-2 py-1.5">{fmtPct(f?.winRate, 1)}</td>
+                      <td className="px-2 py-1.5">{fmtNum(f?.profitFactor)}</td>
+                      <td className="px-2 py-1.5">{fmtNum(f?.sharpe)}</td>
+                      <td className="px-2 py-1.5">{fmtPct(f?.maxDrawdown)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

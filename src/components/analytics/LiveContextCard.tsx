@@ -121,28 +121,48 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
       </div>
 
       <div>
-        <div className="mb-2 text-xs font-semibold text-n-text">Nearest reaction zones (±3%)</div>
+        <div className="mb-2 text-xs font-semibold text-n-text">
+          {nearestZones.length > 0 ? 'Reaction zones (±3%)' : 'Reaction zones più vicine'}
+        </div>
         {nearestZones.length === 0 ? (
-          <p className="text-[11px] text-n-dim">Nessuna zona vicina.</p>
+          <p className="text-[11px] text-n-dim">In attesa di dati live (nessuna zona indicata dal live observer).</p>
         ) : (
           <div className="grid gap-2 sm:grid-cols-2">
-            {[...upZones, ...downZones].slice(0, 4).map((z, i) => (
-              <div
-                key={`${z.level}-${i}`}
-                className="flex items-center justify-between rounded-lg bg-n-bg-s px-3 py-2 text-[11px]"
-              >
-                <span className="font-mono text-n-text">{fmtNum(z.level, 2)}</span>
-                <span
-                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-                    z.type === 'support' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
-                  }`}
+            {nearestZones.slice(0, 3).map((z, i) => {
+              const pBouncePct = (z.pBounce ?? 0) * 100;
+              const isStrongSupport = z.type === 'support' && pBouncePct >= 70;
+              const isStrongResistance = z.type === 'resistance' && pBouncePct >= 70;
+              const cls = isStrongSupport
+                ? 'border-emerald-500/30 bg-emerald-500/10'
+                : isStrongResistance
+                ? 'border-red-500/30 bg-red-500/10'
+                : 'border-n-border bg-n-bg-s';
+              const distancePct = z.distancePct ?? 0;
+              return (
+                <div
+                  key={`${z.level}-${i}`}
+                  className={`flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-[11px] ${cls}`}
                 >
-                  {z.type}
-                </span>
-                <span className="text-n-dim">{fmtPct(z.distancePct * 100, 2)}</span>
-                <span className="text-n-dim">P {fmtPct(z.pBounce * 100, 0)}</span>
-              </div>
-            ))}
+                  <span className="font-mono text-n-text">{fmtNum(z.level, 2)}</span>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
+                      z.type === 'support' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-red-500/15 text-red-300'
+                    }`}
+                  >
+                    {z.type}
+                  </span>
+                  <span
+                    className={`font-mono ${
+                      Math.abs(distancePct) > 0.03 ? 'text-amber-300' : 'text-n-dim'
+                    }`}
+                  >
+                    {Math.abs(distancePct) > 0.03 ? '+' : ''}
+                    {(distancePct * 100).toFixed(2)}%
+                  </span>
+                  <span className="text-n-dim">P {fmtPct(pBouncePct, 0)}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </div>

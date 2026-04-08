@@ -52,6 +52,10 @@ const KEY_STATE = (s: string) => `nexus:analytic:${s}`;
 const KEY_DATASET = (s: string) => `nexus:analytic:dataset:${s}`;
 const KEY_REPORT = (s: string) => `nexus:analytic:report:${s}`;
 const KEY_LIVE = (s: string) => `nexus:analytic:live:${s}`;
+// Phase 2 legacy ring buffer of MTF snapshots — NON è il LiveContext Phase 3.
+// Vive su una chiave dedicata per non collidere con `nexus:analytic:live:{symbol}`
+// (che ora ospita il LiveContext object scritto da live-observer.ts).
+const KEY_LIVE_BUFFER = (s: string) => `nexus:analytic:live-buffer:${s}`;
 const KEY_ZONES = (s: string) => `nexus:analytic:zones:${s}`;
 const KEY_LIST = 'nexus:analytic:list';
 const KEY_QUEUE = 'nexus:analytic:queue';
@@ -113,6 +117,7 @@ export class AssetAnalytic {
       redisDel(KEY_DATASET(this.symbol)),
       redisDel(KEY_REPORT(this.symbol)),
       redisDel(KEY_LIVE(this.symbol)),
+      redisDel(KEY_LIVE_BUFFER(this.symbol)),
       redisDel(KEY_ZONES(this.symbol)),
     ]);
     await redisSRem(KEY_LIST, this.symbol).catch(() => {});
@@ -312,11 +317,15 @@ async function doObserve(symbol: string, start: number): Promise<void> {
     /* ignore — il provider potrebbe essere irraggiungibile */
   }
 
-  // Aggiorna ring buffer live (semplice array di snapshot, max 100)
-  const buf = (await redisGet<any[]>(KEY_LIVE(symbol))) ?? [];
+  // Aggiorna ring buffer legacy MTF snapshots su chiave dedicata (Phase 2).
+  // Defensive: se per qualsiasi motivo il valore esistente non è un array
+  // (es. shape Phase 3 LiveContext), riparte da array vuoto.
+  const existing = await redisGet<unknown>(KEY_LIVE_BUFFER(symbol));
+  const buf: Array<{ ts: number; regime: string; alignment: string | null }> =
+    Array.isArray(existing) ? (existing as any[]) : [];
   buf.push({ ts: Date.now(), regime: mtfRegime, alignment: mtfAlignment });
   while (buf.length > LIVE_BUFFER_MAX) buf.shift();
-  await redisSet(KEY_LIVE(symbol), buf);
+  await redisSet(KEY_LIVE_BUFFER(symbol), buf);
 
   // Aggiorna lastObservedAt nello state
   const state = await redisGet<AssetAnalyticState>(KEY_STATE(symbol));

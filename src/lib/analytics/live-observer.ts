@@ -257,16 +257,19 @@ export function matchTopRules(rules: MinedRule[], ctx: MatchContext): LiveContex
 }
 
 export function findNearestZones(zones: ReactionZone[], price: number, max: number, maxDistancePct: number): LiveContext['nearestZones'] {
-  const filtered = zones
+  const all = zones
+    .filter((z) => z && typeof z.priceLevel === 'number')
     .map((z) => ({
       level: z.priceLevel,
       type: z.type,
       distancePct: round4((z.priceLevel - price) / price),
-      pBounce: z.bounceProbability,
+      pBounce: z.bounceProbability ?? 0,
     }))
-    .filter((z) => Math.abs(z.distancePct) <= maxDistancePct)
     .sort((a, b) => Math.abs(a.distancePct) - Math.abs(b.distancePct));
-  return filtered.slice(0, max);
+  const inside = all.filter((z) => Math.abs(z.distancePct) <= maxDistancePct);
+  if (inside.length > 0) return inside.slice(0, max);
+  // Phase 3.6: fallback — nessuna zona dentro il range, mostra le 2 più vicine fuori range
+  return all.slice(0, Math.min(2, max));
 }
 
 function round2(n: number): number {

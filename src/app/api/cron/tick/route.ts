@@ -76,18 +76,22 @@ interface PersistedBotState {
 
 // ── Cron Tick Handler ─────────────────────────────────────
 
-// PM2 cron-worker.js POSTs to this endpoint, while Vercel Cron sends GET.
-// Both verbs map to the same handler.
-export async function POST(request: Request) {
-  return GET(request);
-}
-
-export async function GET(request: Request) {
-  // Verify cron secret (Vercel sends this header)
-  const authHeader = request.headers.get('authorization');
+// PM2 cron-worker.js POSTa a questa route, Vercel Cron usa GET.
+// Phase 3.6: la handler è una sola funzione esportata come ENTRAMBI i verbi
+// (pattern più robusto del POST→GET delegation, evita ogni edge case di
+// hoisting/tree-shaking nei chunk Next.js prodotti dal build).
+async function tickHandler(request: Request) {
+  // Verify cron secret — accetta sia `Authorization: Bearer X` (Vercel)
+  // che `X-Cron-Secret: X` (PM2 cron-worker.js)
   const cronSecret = process.env.CRON_SECRET;
-  if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  if (cronSecret) {
+    const authHeader = request.headers.get('authorization');
+    const xCronSecret = request.headers.get('x-cron-secret');
+    const okBearer = authHeader === `Bearer ${cronSecret}`;
+    const okHeader = xCronSecret === cronSecret;
+    if (!okBearer && !okHeader) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
   }
 
   const startTime = Date.now();
@@ -465,3 +469,9 @@ export async function GET(request: Request) {
     timestamp: new Date().toISOString(),
   });
 }
+
+// Esporta lo stesso handler per entrambi i verbi.
+// Pattern Next.js 14+: gli HTTP method exports DEVONO essere top-level
+// `export async function METHOD(req)` perché Next li scopre via static analysis.
+export async function GET(request: Request) { return tickHandler(request); }
+export async function POST(request: Request) { return tickHandler(request); }
