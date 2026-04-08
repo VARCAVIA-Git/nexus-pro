@@ -1,0 +1,41 @@
+{
+  "positive": [
+    "surge", "rally", "soar", "soars", "gains", "gain", "jump", "jumps", "rises", "rise",
+    "rebound", "recover", "recovers", "recovery", "bullish", "bull", "uptrend", "upgrade",
+    "upgraded", "outperform", "outperforms", "beat", "beats", "exceeds", "exceed", "strong",
+    "robust", "growth", "grow", "growing", "expand", "expands", "expansion", "boost", "boosts",
+    "boosted", "record", "high", "highs", "ath", "all-time", "milestone", "breakthrough",
+    "approve", "approved", "approval", "support", "supported", "buy", "buying", "buyers",
+    "demand", "increase", "increased", "increases", "positive", "positivity", "win", "wins",
+    "winning", "profit", "profits", "profitable", "earnings", "dividend", "dividends",
+    "innovate", "innovation", "launch", "launched", "launches", "partnership", "partnerships",
+    "deal", "deals", "agreement", "acquisition", "merger", "ipo", "listing", "raise", "raised",
+    "fundraise", "successful", "success", "milestone", "lead", "leader", "leading", "best",
+    "optimistic", "optimism", "confidence", "trust", "secure", "stable", "stability",
+    "advance", "advances", "advancing", "momentum", "accelerate", "accelerates",
+    "breakout", "breakouts", "trending", "trends", "favorable", "improvement", "improving",
+    "improved", "outpace", "outpaces", "double", "tripled", "skyrocket", "skyrockets"
+  ],
+  "negative": [
+    "crash", "crashes", "plunge", "plunges", "plunged", "tumble", "tumbles", "fall", "falls",
+    "drop", "drops", "decline", "declines", "declining", "loss", "losses", "lose", "loses",
+    "losing", "bearish", "bear", "downtrend", "downgrade", "downgraded", "underperform",
+    "underperforms", "miss", "misses", "missed", "weak", "weakness", "slump", "slumps",
+    "shrink", "shrinks", "shrinking", "contract", "contraction", "shock", "shocks", "shocked",
+    "low", "lows", "bottom", "trough", "warning", "warns", "alert", "concern", "concerns",
+    "concerned", "fear", "fears", "panic", "uncertainty", "uncertain", "risk", "risks",
+    "risky", "danger", "dangerous", "threat", "threats", "vulnerable", "vulnerability",
+    "fraud", "scam", "hack", "hacked", "exploit", "exploited", "stolen", "theft",
+    "lawsuit", "sued", "fined", "fine", "penalty", "penalties", "investigation",
+    "investigate", "investigates", "investigated", "subpoena", "indicted", "charge",
+    "charges", "accused", "denial", "deny", "denies", "rejected", "reject", "rejects",
+    "ban", "banned", "halt", "halted", "suspended", "suspend", "suspension",
+    "delist", "delisted", "delisting", "default", "defaults", "bankrupt", "bankruptcy",
+    "liquidation", "liquidate", "selloff", "sell-off", "dump", "dumped", "dumping",
+    "negative", "pessimistic", "pessimism", "doubt", "doubts", "instability", "unstable",
+    "volatile", "volatility", "turbulent", "turmoil", "freeze", "frozen", "outflow",
+    "outflows", "redemption", "withdraw", "withdrawal", "exit", "exits", "exiting",
+    "downturn", "recession", "depression", "stagnation", "stagnant", "slowdown", "slow",
+    "slower", "lag", "lags", "lagging"
+  ]
+}

@@ -3,8 +3,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import type { AssetAnalytic, JobStatus, AnalyticReport } from '@/lib/analytics/types';
+import type {
+  AssetAnalytic,
+  JobStatus,
+  AnalyticReport,
+  LiveContext,
+  NewsDigest,
+  MacroEvent,
+} from '@/lib/analytics/types';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { LiveContextCard } from '@/components/analytics/LiveContextCard';
+import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
+import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
 
 export default function AssetDetailPage() {
   const params = useParams<{ symbol: string }>();
@@ -14,6 +24,9 @@ export default function AssetDetailPage() {
   const [analytic, setAnalytic] = useState<AssetAnalytic | null>(null);
   const [report, setReport] = useState<AnalyticReport | null>(null);
   const [job, setJob] = useState<JobStatus | null>(null);
+  const [live, setLive] = useState<LiveContext | null>(null);
+  const [news, setNews] = useState<NewsDigest | null>(null);
+  const [events, setEvents] = useState<MacroEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -30,6 +43,16 @@ export default function AssetDetailPage() {
     setLoading(false);
   }, [symbol]);
 
+  const loadLive = useCallback(async () => {
+    const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}/live`);
+    if (r.ok) {
+      const d = await r.json();
+      setLive(d.live ?? null);
+      setNews(d.news ?? null);
+      setEvents(Array.isArray(d.events) ? d.events : []);
+    }
+  }, [symbol]);
+
   const loadJob = useCallback(async () => {
     const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}/job`);
     if (r.ok) {
@@ -40,7 +63,8 @@ export default function AssetDetailPage() {
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadLive();
+  }, [load, loadLive]);
 
   // Polling job status while training
   useEffect(() => {
@@ -53,6 +77,16 @@ export default function AssetDetailPage() {
     }, 3000);
     return () => clearInterval(id);
   }, [analytic, loadJob, load]);
+
+  // Auto-refresh live context every 30s when ready
+  useEffect(() => {
+    if (!analytic || analytic.status !== 'ready') return;
+    const id = setInterval(() => {
+      loadLive();
+      load();
+    }, 30000);
+    return () => clearInterval(id);
+  }, [analytic, loadLive, load]);
 
   async function refresh() {
     setBusy(true);
@@ -99,6 +133,10 @@ export default function AssetDetailPage() {
   const isTraining = analytic.status === 'training' || analytic.status === 'queued' || analytic.status === 'refreshing';
   const isReady = analytic.status === 'ready';
   const lastTrained = analytic.lastTrainedAt ? new Date(analytic.lastTrainedAt).toLocaleString() : '—';
+  const lastTrainedAgo = analytic.lastTrainedAt ? formatAgo(Date.now() - analytic.lastTrainedAt) : '—';
+  const nextRefreshIn = analytic.nextScheduledRefresh
+    ? formatAgo(analytic.nextScheduledRefresh - Date.now())
+    : '—';
 
   return (
     <div className="space-y-5">
@@ -113,6 +151,19 @@ export default function AssetDetailPage() {
             <p className="text-xs text-n-dim">
               Stato: <span className="font-semibold text-n-text">{analytic.status}</span> · Ultimo refresh: {lastTrained}
             </p>
+            {isReady && (
+              <p className="mt-1 text-[10px] text-n-dim">
+                <span className="rounded bg-n-bg-s px-2 py-0.5">Last train: {lastTrainedAgo} fa</span>
+                {analytic.nextScheduledRefresh && (
+                  <span className="ml-1.5 rounded bg-n-bg-s px-2 py-0.5">Next: in {nextRefreshIn}</span>
+                )}
+                {analytic.currentRegime && (
+                  <span className="ml-1.5 rounded bg-blue-500/10 px-2 py-0.5 text-blue-300">
+                    Regime: {analytic.currentRegime}
+                  </span>
+                )}
+              </p>
+            )}
           </div>
           <div className="flex gap-2">
             <button
@@ -157,6 +208,16 @@ export default function AssetDetailPage() {
         </div>
       )}
 
+      {isReady && (
+        <>
+          <LiveContextCard context={live} />
+          <div className="grid gap-5 lg:grid-cols-2">
+            <NewsPulseCard digest={news} />
+            <MacroEventsCard events={events} />
+          </div>
+        </>
+      )}
+
       {isReady && report && <ReportView report={report} />}
       {isReady && !report && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
@@ -187,6 +248,18 @@ export default function AssetDetailPage() {
 }
 
 // ─── Report rendering ───────────────────────────────────────────────
+
+function formatAgo(deltaMs: number): string {
+  if (Number.isNaN(deltaMs)) return '—';
+  const abs = Math.abs(deltaMs);
+  const mins = Math.floor(abs / 60000);
+  if (mins < 1) return 'pochi sec';
+  if (mins < 60) return `${mins} min`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  return `${days}g`;
+}
 
 function fmtPct(v: number | undefined | null, digits = 2): string {
   if (v === undefined || v === null || Number.isNaN(v)) return '—';

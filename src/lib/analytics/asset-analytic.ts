@@ -213,6 +213,14 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
   const recommendedTimeframe = pickRecommendedTimeframe(strategyFit);
   const recommendedOperationMode = mapTimeframeToMode(recommendedTimeframe);
 
+  // Phase 3: preserva trainingHistory esistente (se refresh)
+  const previousReport = refresh ? await redisGet<AnalyticReport>(KEY_REPORT(symbol)) : null;
+  const trainingHistory = previousReport?.trainingHistory ?? [];
+  const lastCandleTimestamp =
+    history['1h'] && history['1h'].length > 0
+      ? new Date(history['1h'][history['1h'].length - 1].date).getTime()
+      : Date.now();
+
   const report: AnalyticReport = {
     symbol,
     generatedAt: Date.now(),
@@ -221,6 +229,7 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
       candleCounts,
       rangeStart: firstDate(history),
       rangeEnd: lastDate(history),
+      lastCandleTimestamp,
     },
     globalStats,
     topRules,
@@ -230,6 +239,21 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     recommendedOperationMode,
     recommendedTimeframe,
     eventReactivity,
+    // Carry-over Phase 3 fields se presenti
+    liveContext: previousReport?.liveContext,
+    newsDigest: previousReport?.newsDigest,
+    eventImpacts: previousReport?.eventImpacts,
+    feedback: previousReport?.feedback,
+    trainingHistory: [
+      ...trainingHistory.slice(-19),
+      {
+        timestamp: Date.now(),
+        version: (state.reportVersion ?? 0) + 1,
+        mode: 'full' as const,
+        candlesAdded: candleCounts['1h'] ?? 0,
+        rulesChanged: topRules.length,
+      },
+    ],
   };
 
   await redisSet(KEY_REPORT(symbol), report);
