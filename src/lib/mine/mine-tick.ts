@@ -11,7 +11,7 @@
 // 7. Update state in Redis
 // ═══════════════════════════════════════════════════════════════
 
-import type { Mine, MineAction, CapitalProfile } from './types';
+import type { Mine, MineAction, CapitalProfile, AICSignal, DetectedSignal, MarketRegime } from './types';
 import type { LiveContext, AnalyticReport, NewsDigest, MacroEvent } from '@/lib/analytics/types';
 import {
   isEngineEnabled,
@@ -27,6 +27,7 @@ import { getProfile, calcUnrealizedPnl } from './utils';
 import { detectSignals } from './signal-detector';
 import type { SignalDetectorInput } from './signal-detector';
 import { monitorMines, evaluateSignals } from './decision-engine';
+import type { AICContext } from './decision-engine';
 import {
   placeMarketOrder,
   closePosition,
@@ -35,6 +36,14 @@ import {
 } from './execution';
 import { saveFeedback } from './feedback';
 import { SUPPORTED_SYMBOLS } from './constants';
+import {
+  isAICHealthy,
+  getLatestSignal,
+  getConfluence,
+  getRegime,
+  getResearch,
+  sendFeedback as sendAICFeedback,
+} from './aic-client';
 
 // ─── Data Loaders (injected for testability) ──────────────────
 
@@ -55,6 +64,8 @@ export interface MineTickResult {
   actionsExecuted: number;
   errors: string[];
   elapsedMs: number;
+  aicOnline?: boolean;
+  regime?: string;
 }
 
 // ─── Main ─────────────────────────────────────────────────────
@@ -121,37 +132,94 @@ export async function executeMineeTick(
   const openMines = allActiveMines.filter((m) => m.status === 'open');
   const monitorActions = monitorMines(openMines, liveContexts, profile);
 
-  // 6. Detect signals for each asset
+  // 6. Detect signals — AIC-first with TS fallback
   let totalSignals = 0;
   const allSignalActions: MineAction[] = [];
-
   const macroEvents = await loaders.loadMacroEvents();
+
+  // Phase 4.5: check AIC health for each symbol and build AIC context
+  const aicHealthMap = new Map<string, boolean>();
+  const aicContextMap = new Map<string, AICContext>();
+  let anyAicOnline = false;
+  let tickRegime: string | undefined;
+
+  for (const sym of SUPPORTED_SYMBOLS) {
+    const healthy = await isAICHealthy(sym);
+    aicHealthMap.set(sym, healthy);
+
+    if (healthy) {
+      anyAicOnline = true;
+      const [regimeData, confluence, research] = await Promise.all([
+        getRegime(sym),
+        getConfluence(sym),
+        getResearch(sym),
+      ]);
+      const ctx: AICContext = {
+        regime: regimeData?.regime as MarketRegime | undefined,
+        regimeConfidence: regimeData?.confidence,
+        confluence: confluence ?? undefined,
+        research: research ?? undefined,
+      };
+      aicContextMap.set(sym, ctx);
+      if (!tickRegime && ctx.regime) tickRegime = ctx.regime;
+    }
+  }
 
   for (const sym of SUPPORTED_SYMBOLS) {
     const live = liveContexts.get(sym);
     if (!live) continue;
 
-    const report = await loaders.loadReport(sym);
-    if (!report) continue;
+    const aicOnline = aicHealthMap.get(sym) ?? false;
+    const aicCtx = aicContextMap.get(sym);
 
-    const news = await loaders.loadNews(sym);
-    const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
+    let signals: DetectedSignal[] = [];
 
-    const input: SignalDetectorInput = {
-      symbol: sym,
-      live,
-      report,
-      news,
-      macroEvents,
-      activeMineDirections: minesForAsset
-        .filter((m) => m.status === 'open' || m.status === 'pending')
-        .map((m) => m.direction),
-    };
+    if (aicOnline) {
+      // Use AIC signals
+      const aicSignal = await getLatestSignal(sym);
+      if (aicSignal) {
+        // Convert AIC signal to DetectedSignal format
+        const direction: 'long' | 'short' = aicSignal.action === 'LONG' ? 'long' : 'short';
+        const tp = Array.isArray(aicSignal.TP) && aicSignal.TP.length > 0 ? aicSignal.TP[0] : 0;
+        const detected: DetectedSignal & { aicSetupName?: string } = {
+          symbol: sym,
+          signal: {
+            type: 'pattern_match',
+            confidence: aicSignal.confidence,
+            sourcePattern: aicSignal.setup_name,
+            macroClear: true, // AIC already factors this in
+          },
+          suggestedStrategy: 'trend',
+          suggestedTimeframe: '4h',
+          suggestedDirection: direction,
+          suggestedTp: tp,
+          suggestedSl: aicSignal.SL,
+          aicSetupName: aicSignal.setup_name,
+        };
+        signals = [detected];
+      }
+    } else {
+      // Fallback: use TypeScript signal detector
+      const report = await loaders.loadReport(sym);
+      if (!report) continue;
+      const news = await loaders.loadNews(sym);
+      const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
 
-    const signals = detectSignals(input);
+      const input: SignalDetectorInput = {
+        symbol: sym,
+        live,
+        report,
+        news,
+        macroEvents,
+        activeMineDirections: minesForAsset
+          .filter((m) => m.status === 'open' || m.status === 'pending')
+          .map((m) => m.direction),
+      };
+      signals = detectSignals(input);
+    }
+
     totalSignals += signals.length;
-
-    const actions = evaluateSignals(signals, profile, equity, allActiveMines);
+    const actions = evaluateSignals(signals, profile, equity, allActiveMines, aicCtx);
     allSignalActions.push(...actions);
   }
 
@@ -201,6 +269,32 @@ export async function executeMineeTick(
             // Save feedback for learning loop
             if (closed) {
               await saveFeedback(closed);
+              // Phase 4.5: send feedback to AIC
+              if (closed.aicSetupName) {
+                sendAICFeedback(closed.symbol, {
+                  ...({} as any), // spread TradeOutcome fields
+                  mineId: closed.id,
+                  symbol: closed.symbol,
+                  strategy: closed.strategy,
+                  timeframe: closed.timeframe,
+                  direction: closed.direction,
+                  entryPrice: closed.entryPrice ?? 0,
+                  exitPrice: closed.exitPrice ?? 0,
+                  pnlPct: closed.realizedPnl
+                    ? ((closed.exitPrice! - closed.entryPrice!) * (closed.direction === 'long' ? 1 : -1) / closed.entryPrice!) * 100
+                    : 0,
+                  outcome: closed.outcome!,
+                  durationHours: closed.entryTime && closed.exitTime
+                    ? (closed.exitTime - closed.entryTime) / 3600_000
+                    : 0,
+                  entrySignal: closed.entrySignal,
+                  closedAt: closed.exitTime ?? Date.now(),
+                  setup_name: closed.aicSetupName,
+                  original_confidence: closed.aicConfidence ?? closed.entrySignal.confidence,
+                  regime_at_entry: closed.regimeAtEntry,
+                  confluence_at_entry: closed.confluenceAtEntry,
+                }).catch(() => {}); // fire-and-forget
+              }
             }
             executed++;
           } else {
@@ -267,5 +361,7 @@ export async function executeMineeTick(
     actionsExecuted: executed,
     errors,
     elapsedMs: Date.now() - start,
+    aicOnline: anyAicOnline,
+    regime: tickRegime,
   };
 }

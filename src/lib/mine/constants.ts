@@ -61,6 +61,9 @@ export const MINE_KEYS = {
   engineLastError: 'nexus:mine-engine:last-error',
   portfolioSnapshot: 'nexus:portfolio:snapshot',
   feedback: (symbol: string) => `nexus:feedback:${symbol}`,
+  // Phase 4.5 — AIC + Scorecard
+  scorecard: (symbol: string, setup: string) => `nexus:scorecard:${symbol}:${setup}`,
+  scorecardIndex: (symbol: string) => `nexus:scorecards:${symbol}`,
 } as const;
 
 // ─── Defaults ─────────────────────────────────────────────────

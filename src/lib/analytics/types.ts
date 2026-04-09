@@ -265,4 +265,10 @@ export type {
   PortfolioSnapshot,
   TradeOutcome,
   MineEngineState,
+  AICSignal,
+  AICStatus,
+  AICConfluence,
+  AICResearch,
+  MarketRegime,
+  SetupScorecard,
 } from '@/lib/mine/types';
