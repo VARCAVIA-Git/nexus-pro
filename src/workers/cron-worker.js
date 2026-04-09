@@ -40,6 +40,8 @@ function callTick(path, label) {
           console.log(`[${ts}] Live: ${res.statusCode} | symbol=${d.symbol ?? '-'} regime=${d.regime ?? '-'} momentum=${d.momentumScore ?? '-'} active=${d.activeRules ?? 0}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
         } else if (label === 'news') {
           console.log(`[${ts}] News: ${res.statusCode} | symbol=${d.symbol ?? '-'} count=${d.count ?? 0} sent=${d.avgSentiment ?? '-'} delta=${d.delta ?? '-'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
+        } else if (label === 'mine') {
+          console.log(`[${ts}] Mine: ${res.statusCode} | enabled=${d.enabled ?? false} monitored=${d.monitored ?? 0} signals=${d.signalsDetected ?? 0} actions=${d.actionsExecuted ?? 0} ${d.elapsedMs ?? 0}ms${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}${d.errors?.length ? ' errors=' + d.errors.join(';') : ''}`);
         } else if (label === 'auto-retrain') {
           console.log(`[${ts}] AutoRetrain: ${res.statusCode} | scheduled=${d.scheduled?.scheduled ?? 'none'} reason=${d.scheduled?.reason ?? '-'} incr=${d.incrementalResult ? (d.incrementalResult.skipped ? 'skipped:'+d.incrementalResult.reason : 'done:'+d.incrementalResult.symbol) : 'none'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
         } else {
@@ -71,6 +73,8 @@ function tick() {
   // ora ogni 60s. Con dedup per guid e cache TTL 2h non c'è rischio di
   // spam. Con N asset ognuno viene aggiornato ogni N min.
   callTick('/api/cron/news-tick', 'news');
+  // Mine engine: ogni tick (Phase 4)
+  callTick('/api/cron/mine-tick', 'mine');
   // Auto-retrain: ogni 1h (3600s) con finestra di 60s
   if (now % 3600 < 60) {
     callTick('/api/cron/auto-retrain-tick', 'auto-retrain');
@@ -79,11 +83,12 @@ function tick() {
 
 console.log('═══════════════════════════════════════');
 console.log('NEXUS PRO — Cron Worker');
-console.log(`Ticking 5 endpoints every 60s on :${PORT}`);
+console.log(`Ticking 6 endpoints every 60s on :${PORT}`);
 console.log('  - /api/cron/tick                  (legacy bot)');
 console.log('  - /api/cron/analytic-tick         (queue worker)');
 console.log('  - /api/cron/live-observer-tick    (1/tick round-robin)');
 console.log('  - /api/cron/news-tick             (every tick, 1 symbol)');
+console.log('  - /api/cron/mine-tick             (mine engine, every tick)');
 console.log('  - /api/cron/auto-retrain-tick     (every 1 h)');
 console.log('═══════════════════════════════════════');
 console.log('');
