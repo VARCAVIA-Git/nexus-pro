@@ -1,25 +1,19 @@
 // ═══════════════════════════════════════════════════════════════
-// Mine Manager — gestione lifecycle delle Mine (Phase 1: stub)
+// Mine Manager — DEPRECATED Phase 1 stub
+// Phase 4 uses src/lib/mine/ instead. This file is kept for
+// backward compatibility only.
 // ═══════════════════════════════════════════════════════════════
 
-import type { Mine, MineCandidate } from '../types';
+const NOT_IMPL = 'Deprecated: use src/lib/mine/ (Phase 4)';
 
-const NOT_IMPL = 'Not implemented in Phase 1';
-
-/** Crea una nuova Mine a partire da una candidate generata da una Strategy. */
-export async function createMine(strategyId: string, candidate: MineCandidate): Promise<Mine> {
-  void strategyId;
-  void candidate;
+export async function createMine(): Promise<never> {
   throw new Error(NOT_IMPL);
 }
 
-/** Cancella tutte le mine il cui TTL è scaduto. Ritorna il numero cancellate. */
-export async function cancelExpiredMines(): Promise<number> {
+export async function cancelExpiredMines(): Promise<never> {
   throw new Error(NOT_IMPL);
 }
 
-/** Sincronizza lo stato della Mine con il broker (fill/cancel/expire). */
-export async function syncMineState(mine: Mine): Promise<Mine> {
-  void mine;
+export async function syncMineState(): Promise<never> {
   throw new Error(NOT_IMPL);
 }
