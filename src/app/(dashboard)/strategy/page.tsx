@@ -21,6 +21,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 export default function StrategyPage() {
   const mode = useModeStore((s) => s.mode);
   const [allBots, setAllBots] = useState<MultiBotConfig[]>([]);
+  const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [accountEquity, setAccountEquity] = useState(0);
   const [showCreate, setShowCreate] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -48,6 +49,7 @@ export default function StrategyPage() {
       if (res.ok) {
         const d = await res.json();
         setAllBots(d.bots ?? []);
+        setDisabledIds(new Set<string>(Array.isArray(d.disabledIds) ? d.disabledIds : []));
         setAccountEquity(d.accountEquity ?? 0);
       }
     } catch {}
@@ -160,8 +162,11 @@ export default function StrategyPage() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 xl:grid-cols-3">
-          {allBots.map((bot) => (
+          {allBots.map((bot) => {
+            const isLegacyDisabled = disabledIds.has(bot.id);
+            return (
             <div key={bot.id} className={`rounded-xl border p-4 transition-all ${
+              isLegacyDisabled ? 'border-amber-500/40 bg-amber-500/5 opacity-80' :
               bot.status === 'running' ? 'border-green-500/30 bg-green-500/5' :
               bot.status === 'error' || bot.status === 'paused' ? 'border-red-500/30 bg-red-500/5' :
               'border-n-border bg-n-card'
@@ -169,15 +174,29 @@ export default function StrategyPage() {
               {/* Bot header */}
               <div className="flex items-start justify-between mb-3">
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <h3 className="text-sm font-bold text-n-text">{bot.name}</h3>
                     <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${bot.environment === 'demo' ? 'bg-amber-500/15 text-amber-400' : 'bg-blue-500/15 text-blue-400'}`}>
                       {bot.environment === 'demo' ? 'DEMO' : 'LIVE'}
                     </span>
+                    {isLegacyDisabled && (
+                      <span
+                        className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-bold text-amber-300"
+                        title="Bot legacy disabilitato dal cleanup zombie. Non viene più eseguito dal cron tick. Usa 'Elimina definitivamente' per rimuoverlo dal database."
+                      >
+                        LEGACY · disabilitato
+                      </span>
+                    )}
                   </div>
                   <div className="mt-1 flex items-center gap-1.5">
-                    <span className={`h-2 w-2 rounded-full ${bot.status === 'running' ? 'bg-green-400 animate-pulse-dot' : bot.status === 'error' ? 'bg-red-400' : 'bg-n-dim'}`} />
-                    <span className="text-[10px] text-n-dim capitalize">{bot.status}</span>
+                    <span className={`h-2 w-2 rounded-full ${
+                      isLegacyDisabled ? 'bg-amber-400' :
+                      bot.status === 'running' ? 'bg-green-400 animate-pulse-dot' :
+                      bot.status === 'error' ? 'bg-red-400' : 'bg-n-dim'
+                    }`} />
+                    <span className="text-[10px] text-n-dim capitalize">
+                      {isLegacyDisabled ? 'fermo (legacy)' : bot.status}
+                    </span>
                   </div>
                 </div>
                 <div className="flex gap-1">
@@ -226,7 +245,8 @@ export default function StrategyPage() {
                 </div>
               </div>
             </div>
-          ))}
+          );
+          })}
         </div>
       )}
 

@@ -485,18 +485,68 @@ export function stopBot(botId?: string): { ok: boolean } {
   return { ok: true };
 }
 
-export function deleteBot(botId: string): { ok: boolean } {
+/**
+ * Cancella un bot in modo idempotente e Redis-first.
+ *
+ * Phase 4 fix: prima della Phase 4, deleteBot operava SOLO sulla mappa
+ * in-memory `bots`, che dopo `pm2 restart` è vuota fino al primo
+ * `loadSavedBots()`. Il risultato era che dopo un restart i bot in Redis
+ * NON potevano essere cancellati (l'in-memory era empty → no-op) e
+ * continuavano a girare via `/api/cron/tick` (che legge da Redis).
+ *
+ * Ora:
+ *   1. Pulisce eventuale runtime in-memory (clearInterval, delete dalla mappa).
+ *   2. Legge `KEYS.botConfig` da Redis, filtra il botId, riscrive.
+ *   3. Cancella `nexus:bot:state:{botId}`.
+ *   4. Rimuove l'id dalla SET `nexus:bot_legacy_disabled` se presente.
+ */
+export async function deleteBot(botId: string): Promise<{ ok: boolean }> {
+  // 1. Pulisci runtime in-memory (best effort)
   const rt = bots[botId];
   if (rt) {
     if (rt.timer) clearInterval(rt.timer);
     delete bots[botId];
-    persistAllBots();
   }
+
+  // 2. Redis: rimuovi dalla lista di config (source of truth)
+  try {
+    const allConfigs = (await redisGet<MultiBotConfig[]>(KEYS.botConfig)) ?? [];
+    const filtered = allConfigs.filter((c) => c.id !== botId);
+    if (filtered.length !== allConfigs.length) {
+      await redisSet(KEYS.botConfig, filtered);
+    }
+  } catch (e) {
+    console.warn(`[deleteBot] redis configs update failed: ${(e as Error).message}`);
+  }
+
+  // 3. Cancella state key dedicato
+  try {
+    const { redisDel } = await import('@/lib/db/redis');
+    await redisDel(`nexus:bot:state:${botId}`);
+  } catch (e) {
+    console.warn(`[deleteBot] redis state delete failed: ${(e as Error).message}`);
+  }
+
+  // 4. Rimuovi dalla SET disabled se presente
+  try {
+    const { redisSRem } = await import('@/lib/db/redis');
+    await redisSRem('nexus:bot_legacy_disabled', botId);
+  } catch (e) {
+    console.warn(`[deleteBot] redis disabled-set update failed: ${(e as Error).message}`);
+  }
+
   return { ok: true };
 }
 
-export function getAllBots(): MultiBotConfig[] {
-  return Object.values(bots).map(rt => rt.config);
+/**
+ * Ritorna tutti i bot configurati. Source of truth: Redis (`KEYS.botConfig`).
+ *
+ * Phase 4 fix: prima leggeva dalla mappa `bots` in-memory, che è vuota
+ * dopo `pm2 restart` finché un'altra funzione non chiama `loadSavedBots`.
+ * Ora legge sempre da Redis. Async.
+ */
+export async function getAllBots(): Promise<MultiBotConfig[]> {
+  return loadSavedBots();
 }
 
 export function getBotRuntime(botId: string): BotRuntime | null {

@@ -10,7 +10,7 @@ export async function POST(request: Request) {
 
     if (body.action === 'delete' && botId) {
       stopBot(botId);
-      deleteBot(botId);
+      await deleteBot(botId);
       return NextResponse.json({ ok: true, deleted: true });
     }
 
