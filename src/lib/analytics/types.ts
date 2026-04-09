@@ -253,43 +253,16 @@ export interface StrategyV2 {
   currentEquity: number;
 }
 
-// ─── Mine ─────────────────────────────────────────────────────
-
-export interface Mine {
-  id: string;
-  strategyId: string;
-  symbol: string;
-  side: 'buy' | 'sell';
-  triggerPrice: number;
-  triggerType: 'limit' | 'stop';
-  quantity: number;
-  notional: number;
-  takeProfit: number;
-  stopLoss: number;
-  expectedRR: number;
-  sourceRule: string;
-  sourceZone: number | null;
-  confidence: number;
-  createdAt: number;
-  expiresAt: number;
-  status: 'pending' | 'triggered' | 'expired' | 'cancelled' | 'closed_win' | 'closed_loss';
-  brokerOrderId: string | null;
-  brokerTpOrderId: string | null;
-  brokerSlOrderId: string | null;
-  closedAt: number | null;
-  fillPrice: number | null;
-  exitPrice: number | null;
-  realizedPnl: number | null;
-}
-
-export interface MineCandidate {
-  symbol: string;
-  side: 'buy' | 'sell';
-  triggerPrice: number;
-  takeProfit: number;
-  stopLoss: number;
-  confidence: number;
-  sourceRule: string;
-  sourceZone: number | null;
-  expectedRR: number;
-}
+// ─── Mine (Phase 4 — re-exported from src/lib/mine/types.ts) ─
+export type {
+  Mine,
+  MineStatus,
+  MineOutcome,
+  EntrySignal,
+  StrategyType,
+  AggressivenessProfile,
+  DetectedSignal,
+  PortfolioSnapshot,
+  TradeOutcome,
+  MineEngineState,
+} from '@/lib/mine/types';

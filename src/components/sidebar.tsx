@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
 import { useModeStore } from '@/stores/mode-store';
 import {
-  LayoutDashboard, Brain, Target, Activity, Wallet,
+  LayoutDashboard, Brain, Target, Activity, Wallet, Pickaxe,
   Settings, Plug, HeartPulse, Menu, X, Rocket, ArrowRightLeft, LogOut,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -14,6 +14,7 @@ import { useState, useEffect } from 'react';
 const MAIN_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/assets', label: 'Assets', icon: Brain },
+  { href: '/mines', label: 'Mines', icon: Pickaxe },
   { href: '/strategy', label: 'Strategy', icon: Target },
   { href: '/operazioni', label: 'Operazioni', icon: Activity },
   { href: '/portfolio', label: 'Portfolio', icon: Wallet },
