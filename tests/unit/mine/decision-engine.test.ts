@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { monitorMines, evaluateSignals } from '@/lib/mine/decision-engine';
+import { monitorMines, evaluateSignals, applyAICGates } from '@/lib/mine/decision-engine';
+import type { AICContext } from '@/lib/mine/decision-engine';
 import { checkRisk } from '@/lib/mine/risk-manager';
 import type { Mine, CapitalProfile, DetectedSignal } from '@/lib/mine/types';
 import type { LiveContext } from '@/lib/analytics/types';
@@ -236,5 +237,89 @@ describe('evaluateSignals', () => {
     const opens = actions.filter((a) => a.type === 'open_mine');
     // moderate allows 5 max, 4 existing → only 1 new
     expect(opens.length).toBe(1);
+  });
+});
+
+// ─── AIC Gates (Phase 4.5) ───────────────────────────────────
+
+describe('applyAICGates', () => {
+  it('CHOP regime reduces confidence by 30%', () => {
+    const result = applyAICGates(mockSignal({ signal: { type: 'zone_bounce', confidence: 0.8, macroClear: true } }), { regime: 'CHOP' });
+    expect(result.rejected).toBe(false);
+    expect(result.confidence).toBeCloseTo(0.56, 1);
+  });
+
+  it('ACCUMULATION blocks SHORT', () => {
+    const result = applyAICGates(
+      mockSignal({ suggestedDirection: 'short' }),
+      { regime: 'ACCUMULATION' },
+    );
+    expect(result.rejected).toBe(true);
+    expect(result.reason).toContain('ACCUMULATION');
+  });
+
+  it('DISTRIBUTION blocks LONG', () => {
+    const result = applyAICGates(
+      mockSignal({ suggestedDirection: 'long' }),
+      { regime: 'DISTRIBUTION' },
+    );
+    expect(result.rejected).toBe(true);
+    expect(result.reason).toContain('DISTRIBUTION');
+  });
+
+  it('BULL gives +10% bonus to LONG', () => {
+    const result = applyAICGates(
+      mockSignal({ signal: { type: 'zone_bounce', confidence: 0.7, macroClear: true }, suggestedDirection: 'long' }),
+      { regime: 'BULL' },
+    );
+    expect(result.confidence).toBeCloseTo(0.77, 1);
+  });
+
+  it('confluence BEARISH rejects LONG', () => {
+    const result = applyAICGates(
+      mockSignal({ suggestedDirection: 'long' }),
+      { confluence: { bias: 'BEARISH', score: 0.8, bull_score: 0.2, bear_score: 0.7, bullish_tfs: [], bearish_tfs: ['4h'], neutral_tfs: [], aligned_count: 1, tf_biases: {} } },
+    );
+    expect(result.rejected).toBe(true);
+    expect(result.reason).toContain('confluence');
+  });
+
+  it('low confluence score reduces confidence', () => {
+    const result = applyAICGates(
+      mockSignal({ signal: { type: 'zone_bounce', confidence: 0.8, macroClear: true }, suggestedDirection: 'long' }),
+      { confluence: { bias: 'BULLISH', score: 0.3, bull_score: 0.3, bear_score: 0.2, bullish_tfs: ['4h'], bearish_tfs: [], neutral_tfs: [], aligned_count: 1, tf_biases: {} } },
+    );
+    expect(result.confidence).toBeCloseTo(0.64, 1); // 0.8 * 0.8
+  });
+
+  it('LONG_CROWDED funding reduces confidence for LONG', () => {
+    const result = applyAICGates(
+      mockSignal({ signal: { type: 'zone_bounce', confidence: 0.8, macroClear: true }, suggestedDirection: 'long' }),
+      { research: { funding_rate_current: 0.05, funding_sentiment: 'LONG_CROWDED', open_interest: 50000, fear_greed_index: 60, fear_greed_label: 'Greed', news_sentiment: 'NEUTRAL', total_liquidations_24h_usd: 100000000 } },
+    );
+    expect(result.confidence).toBeCloseTo(0.68, 1); // 0.8 * 0.85
+  });
+
+  it('scorecard rejects setup with WR < 40%', () => {
+    const scorecards = new Map([
+      ['bad_setup', { setup_name: 'bad_setup', symbol: 'BTC/USD', total_signals: 30, total_executed: 25, wins: 8, losses: 17, timeouts: 0, real_win_rate: 0.32, real_profit_factor: 0.6, avg_pnl_pct: -1.2, avg_confidence: 0.7, confidence_accuracy: 0.38, last_updated: '', last_10_outcomes: [] }],
+    ]);
+    const signal = { ...mockSignal(), aicSetupName: 'bad_setup' } as any;
+    const result = applyAICGates(signal, { scorecards });
+    expect(result.rejected).toBe(true);
+    expect(result.reason).toContain('WR');
+  });
+
+  it('evaluateSignals with AIC context applies gates', () => {
+    const aicCtx: AICContext = { regime: 'DISTRIBUTION' };
+    const actions = evaluateSignals(
+      [mockSignal({ suggestedDirection: 'long' })],
+      moderateProfile,
+      100000,
+      [],
+      aicCtx,
+    );
+    expect(actions.find((a) => a.type === 'open_mine')).toBeUndefined();
+    expect(actions.find((a) => a.type === 'no_action')).toBeDefined();
   });
 });
