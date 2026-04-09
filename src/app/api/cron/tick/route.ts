@@ -99,11 +99,21 @@ async function tickHandler(request: Request) {
 
   // Load all bot configs from Redis
   const configs = await redisGet<MultiBotConfig[]>(KEYS.botConfig) ?? [];
-  const runningBots = configs.filter(c => c.status === 'running');
-  console.log(`[CRON] ${configs.length} total bots, ${runningBots.length} running`);
+  // Phase 4: skip bot legacy disabilitati (set Redis `nexus:bot_legacy_disabled`).
+  // I bot in questa set non vengono mai eseguiti, anche se hanno status=running
+  // in `nexus:bot_config`. Sopravvivono solo per readonly nella UI fino a quando
+  // l'utente non li elimina definitivamente.
+  const { redisSMembers: _redisSMembers } = await import('@/lib/db/redis');
+  const disabledIds = new Set(await _redisSMembers('nexus:bot_legacy_disabled').catch(() => [] as string[]));
+  const runningBots = configs.filter(c => c.status === 'running' && !disabledIds.has(c.id));
+  const skippedDisabled = configs.filter(c => c.status === 'running' && disabledIds.has(c.id));
+  console.log(`[CRON] ${configs.length} total bots, ${runningBots.length} running, ${skippedDisabled.length} skipped (legacy disabled)`);
+  for (const sk of skippedDisabled) {
+    console.log(`  ⊘ ${sk.name}: SKIPPED (legacy disabled)`);
+  }
 
   if (runningBots.length === 0) {
-    return NextResponse.json({ processed: 0, message: 'No running bots' });
+    return NextResponse.json({ processed: 0, message: 'No running bots', skipped: skippedDisabled.length });
   }
 
   // Broker credentials per mode

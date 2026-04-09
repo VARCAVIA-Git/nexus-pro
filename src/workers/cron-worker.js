@@ -67,10 +67,10 @@ function tick() {
   callTick('/api/cron/analytic-tick', 'analytic');
   // Live observer: ogni tick (1 symbol round-robin)
   callTick('/api/cron/live-observer-tick', 'live');
-  // News: ogni 30 min (1800s) con finestra di 60s
-  if (now % 1800 < 60) {
-    callTick('/api/cron/news-tick', 'news');
-  }
+  // News: ogni tick (1 symbol round-robin). Phase 3.7: era ogni 30 min,
+  // ora ogni 60s. Con dedup per guid e cache TTL 2h non c'è rischio di
+  // spam. Con N asset ognuno viene aggiornato ogni N min.
+  callTick('/api/cron/news-tick', 'news');
   // Auto-retrain: ogni 1h (3600s) con finestra di 60s
   if (now % 3600 < 60) {
     callTick('/api/cron/auto-retrain-tick', 'auto-retrain');
@@ -83,7 +83,7 @@ console.log(`Ticking 5 endpoints every 60s on :${PORT}`);
 console.log('  - /api/cron/tick                  (legacy bot)');
 console.log('  - /api/cron/analytic-tick         (queue worker)');
 console.log('  - /api/cron/live-observer-tick    (1/tick round-robin)');
-console.log('  - /api/cron/news-tick             (every 30 min)');
+console.log('  - /api/cron/news-tick             (every tick, 1 symbol)');
 console.log('  - /api/cron/auto-retrain-tick     (every 1 h)');
 console.log('═══════════════════════════════════════');
 console.log('');

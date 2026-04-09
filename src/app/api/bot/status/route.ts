@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { redisGet, KEYS } from '@/lib/db/redis';
+import { redisGet, redisSMembers, KEYS } from '@/lib/db/redis';
 import type { MultiBotConfig } from '@/types/bot';
 
 export const dynamic = 'force-dynamic';
@@ -46,8 +46,12 @@ export async function GET(request: Request) {
     }
   }
 
+  // Phase 4: lista bot legacy disabilitati (UI mostra badge "LEGACY · disabilitato")
+  const disabledIds = await redisSMembers('nexus:bot_legacy_disabled').catch(() => [] as string[]);
+
   return NextResponse.json({
     running: runningCount > 0, bots: configs, runningCount,
+    disabledIds,
     positions: [], closedTrades: [],
     signalLog: allSignals.sort((a, b) => (b.time ?? '').localeCompare(a.time ?? '')).slice(0, 30),
     lastTick: null, tickCount: 0, circuitBreaker: { active: false },

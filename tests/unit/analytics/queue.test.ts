@@ -163,11 +163,15 @@ describe('analytic-queue', () => {
     expect(store.has('nexus:analytic:lock')).toBe(false);
   });
 
-  it('processNext refuses concurrent execution (lock held)', async () => {
+  it('processNext refuses concurrent execution (fresh lock held)', async () => {
     const { enqueue, processNext } = await import('@/lib/analytics/analytic-queue');
     await enqueue('AVAX/USD', 'crypto');
-    // Hold the lock
-    store.set('nexus:analytic:lock', 'other-job');
+    // Hold the lock with a fresh JSON lock (Phase 4 format).
+    // Fresh = lockedAt is now → not stale → acquireLock returns null.
+    store.set(
+      'nexus:analytic:lock',
+      JSON.stringify({ owner: 'cron', lockedAt: Date.now() }),
+    );
     const ok = await processNext();
     expect(ok).toBe(false);
     // Queue is still intact

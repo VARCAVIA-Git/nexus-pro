@@ -43,9 +43,84 @@ const KEY_REPORT = (s: string) => `nexus:analytic:report:${s}`;
 const KEY_LIVE = (s: string) => `nexus:analytic:live:${s}`;
 const KEY_ZONES = (s: string) => `nexus:analytic:zones:${s}`;
 
-const LOCK_TTL_SECONDS = 3600; // 60 min hard cap per training
+// Lock TTL ridotto da 3600s (1h) a 600s (10 min). Phase 2 metteva 1h come
+// hard cap del peggior caso reale di training, ma in caso di crash quel
+// valore impedisce per un'ora a live-observer e auto-retrain di girare.
+// 10 minuti coprono un retrain reale e mantengono auto-recovery rapido.
+export const LOCK_TTL_SECONDS = 600;
 const ETA_PER_SLOT_SECONDS = 720; // ≈12 min stima per asset
 const STALE_AFTER_MS = 2 * 60 * 60 * 1000;
+
+// ── Lock primitive (Phase 4 hardening) ───────────────────
+
+export interface LockValue {
+  owner: 'cron' | 'manual';
+  lockedAt: number;
+}
+
+/**
+ * Tenta di acquisire il lock di training.
+ * - Se il lock esiste con `lockedAt` più vecchio di LOCK_TTL_SECONDS → lo
+ *   considera stale, lo forza-rilascia e logga, poi riprova ad acquisire.
+ * - Se il lock esiste e NON è stale → ritorna null (locked).
+ * - Se il lock non esiste → SET NX EX con il valore JSON `{owner, lockedAt}`,
+ *   e ritorna la stringa del valore (usata come token in releaseLock).
+ *
+ * Esportata per testabilità.
+ */
+export async function acquireLock(owner: 'cron' | 'manual' = 'cron'): Promise<string | null> {
+  // 1. Check stale
+  const existingRaw = await redisGetRaw(KEY_LOCK);
+  if (existingRaw) {
+    let existing: LockValue | null = null;
+    try {
+      existing = JSON.parse(existingRaw);
+    } catch {
+      existing = null;
+    }
+    if (existing && typeof existing.lockedAt === 'number') {
+      const ageMs = Date.now() - existing.lockedAt;
+      if (ageMs > LOCK_TTL_SECONDS * 1000) {
+        console.warn(
+          `[lock] auto-released stale lock (age: ${Math.round(ageMs / 1000)}s, owner: ${existing.owner ?? 'unknown'})`,
+        );
+        await redisDel(KEY_LOCK);
+      } else {
+        return null; // lock attivo, non stale
+      }
+    } else {
+      // Lock in formato legacy (uuid string puro): se non è JSON valido,
+      // assumiamo che sia stale (non sappiamo l'età) e lo rilasciamo.
+      console.warn('[lock] auto-released legacy-format lock');
+      await redisDel(KEY_LOCK);
+    }
+  }
+
+  // 2. Try acquire
+  const value: LockValue = { owner, lockedAt: Date.now() };
+  const valueStr = JSON.stringify(value);
+  const ok = await redisSetNX(KEY_LOCK, valueStr, LOCK_TTL_SECONDS);
+  if (!ok) return null;
+  return valueStr;
+}
+
+/**
+ * Rilascia il lock SOLO se appartiene ancora al token passato.
+ * Best effort: in caso di errore Redis, log e non rilancia.
+ */
+export async function releaseLock(token: string): Promise<void> {
+  try {
+    const current = await redisGetRaw(KEY_LOCK);
+    if (current === token) {
+      await redisDel(KEY_LOCK);
+      console.log('[lock] released');
+    } else if (current) {
+      console.warn('[lock] release skipped: lock owned by another process');
+    }
+  } catch (e) {
+    console.warn(`[lock] release error: ${(e as Error).message}`);
+  }
+}
 
 function uuid(): string {
   // Use Node crypto if available, fallback to random hex
@@ -150,18 +225,20 @@ export async function enqueue(
 /**
  * Tenta di processare il prossimo job dalla coda.
  * Ritorna true se ha avviato un job (anche se poi è fallito), false se non c'era nulla da fare.
+ *
+ * Phase 4 hardening:
+ * - acquireLock() gestisce stale lock auto-release (>10 min).
+ * - finally garantisce releaseLock anche su throw del pipeline.
  */
 export async function processNext(): Promise<boolean> {
-  const jobId = uuid();
-  // Tenta di acquisire il lock atomicamente (SET NX EX)
-  const acquired = await redisSetNX(KEY_LOCK, jobId, LOCK_TTL_SECONDS);
-  if (!acquired) return false;
+  const token = await acquireLock('cron');
+  if (!token) return false;
 
   let symbol: string | null = null;
   try {
     symbol = await redisRPop(KEY_QUEUE);
     if (!symbol) {
-      await redisDel(KEY_LOCK);
+      // Niente in coda: rilascia subito e ritorna false
       return false;
     }
 
@@ -171,17 +248,16 @@ export async function processNext(): Promise<boolean> {
     return true;
   } catch (err) {
     if (symbol) {
-      await markFailed(symbol, err as Error);
+      try {
+        await markFailed(symbol, err as Error);
+      } catch (markErr) {
+        console.warn(`[processNext] markFailed error: ${(markErr as Error).message}`);
+      }
     }
     return true;
   } finally {
-    // Libera il lock SOLO se appartiene ancora a questo job (best effort)
-    try {
-      const current = await redisGetRaw(KEY_LOCK);
-      if (current === jobId) await redisDel(KEY_LOCK);
-    } catch {
-      await redisDel(KEY_LOCK).catch(() => {});
-    }
+    // GARANTITO anche in caso di throw nel try/catch sopra
+    await releaseLock(token);
   }
 }
 
