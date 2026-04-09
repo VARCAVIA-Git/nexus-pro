@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Shield, DollarSign, Gauge, Bell, Key,
+  Shield, DollarSign, Gauge, Bell, Key, Pickaxe,
   Save, RotateCcw, User, Globe, AlertTriangle, LogOut,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -106,6 +106,78 @@ function TickerSettings() {
         ))}
       </div>
     </div>
+  );
+}
+
+function MineEngineSettings() {
+  const [engineEnabled, setEngineEnabled] = useState(false);
+  const [profile, setProfile] = useState<string>('conservative');
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/mine/engine').then(r => r.ok ? r.json() : null).then(d => {
+      if (d) setEngineEnabled(d.enabled ?? false);
+    }).catch(() => {});
+    fetch('/api/config/profile').then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.profile?.name) setProfile(d.profile.name);
+    }).catch(() => {});
+  }, []);
+
+  const toggleEngine = async (v: boolean) => {
+    setSaving(true);
+    await fetch('/api/mine/engine', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: v ? 'start' : 'stop' }),
+    }).catch(() => {});
+    setEngineEnabled(v);
+    setSaving(false);
+  };
+
+  const changeProfile = async (p: string) => {
+    setSaving(true);
+    await fetch('/api/config/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ profile: p }),
+    }).catch(() => {});
+    setProfile(p);
+    setSaving(false);
+  };
+
+  return (
+    <Section title="Mine Engine" icon={Pickaxe}>
+      <div className="space-y-3">
+        <Toggle
+          label="Mine Engine Attivo"
+          description="Abilita l'apertura automatica di mine basate sui segnali AI"
+          checked={engineEnabled}
+          onChange={toggleEngine}
+        />
+        <div>
+          <label className="mb-1 block text-[10px] font-medium text-n-dim">Profilo di rischio</label>
+          <div className="flex rounded-lg border border-n-border">
+            {(['conservative', 'moderate', 'aggressive'] as const).map((p) => (
+              <button
+                key={p}
+                onClick={() => changeProfile(p)}
+                disabled={saving}
+                className={`flex-1 px-3 py-2 text-xs font-medium capitalize transition-colors ${
+                  profile === p ? 'bg-n-accent-dim text-n-text' : 'text-n-dim hover:text-n-text'
+                }`}
+              >
+                {p}
+              </button>
+            ))}
+          </div>
+          <p className="mt-1.5 text-[9px] text-n-dim">
+            {profile === 'conservative' && 'Max 5% equity a rischio, 3 mine, alta confidenza richiesta'}
+            {profile === 'moderate' && 'Max 10% equity a rischio, 5 mine, confidenza media'}
+            {profile === 'aggressive' && 'Max 20% equity a rischio, 8 mine, bassa soglia confidenza'}
+          </p>
+        </div>
+      </div>
+    </Section>
   );
 }
 
@@ -292,6 +364,9 @@ export default function ImpostazioniPage() {
             </div>
           </div>
         </Section>
+
+        {/* Mine Engine */}
+        <MineEngineSettings />
 
         {/* Preferences */}
         <Section title="Preferenze" icon={Shield}>
