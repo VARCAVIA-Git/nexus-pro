@@ -11,12 +11,16 @@ import type {
   NewsDigest,
   MacroEvent,
 } from '@/lib/analytics/types';
-import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
 import { RelevantEventsCard } from '@/components/analytics/RelevantEventsCard';
+import { PlainLanguageSummary } from '@/components/analytics/PlainLanguageSummary';
+import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
+import { useExplainMode } from '@/hooks/useExplainMode';
+import { ruleToItalian, regimeLabel } from '@/lib/analytics/labels';
 
 export default function AssetDetailPage() {
   const params = useParams<{ symbol: string }>();
@@ -31,6 +35,7 @@ export default function AssetDetailPage() {
   const [events, setEvents] = useState<MacroEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [explainMode, toggleExplain] = useExplainMode();
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}`);
@@ -169,6 +174,17 @@ export default function AssetDetailPage() {
           </div>
           <div className="flex gap-2">
             <button
+              onClick={toggleExplain}
+              className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold transition-all ${
+                explainMode
+                  ? 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
+                  : 'bg-n-bg-s text-n-dim hover:bg-n-border hover:text-n-text'
+              }`}
+              title="Mostra spiegazioni dettagliate per ogni metrica"
+            >
+              <Lightbulb size={12} /> Spiega {explainMode ? 'ON' : 'OFF'}
+            </button>
+            <button
               onClick={refresh}
               disabled={busy}
               className="flex items-center gap-2 rounded-lg bg-n-bg-s px-3 py-2 text-[11px] font-semibold text-n-text hover:bg-n-border disabled:opacity-50"
@@ -212,10 +228,23 @@ export default function AssetDetailPage() {
 
       {isReady && (
         <>
+          {/* Phase 3.7: riassunto in italiano naturale generato dall'AI Analytic */}
+          <PlainLanguageSummary
+            symbol={symbol}
+            report={report}
+            liveContext={live}
+            newsDigest={news}
+            macroEvents={events}
+            eventImpacts={report?.eventImpacts}
+          />
           <LiveContextCard context={live} />
           <div className="grid gap-5 lg:grid-cols-2">
-            <NewsPulseCard digest={news} />
-            <MacroEventsCard events={events} />
+            <NewsPulseCard digest={news} symbol={symbol} onRefresh={loadLive} />
+            <MacroEventsCard
+              events={events}
+              eventImpacts={report?.eventImpacts}
+              symbol={symbol}
+            />
           </div>
           <RelevantEventsCard
             events={events}
@@ -225,7 +254,14 @@ export default function AssetDetailPage() {
         </>
       )}
 
-      {isReady && report && <ReportView report={report} currentPrice={live?.price ?? null} />}
+      {isReady && report && (
+        <ReportView
+          report={report}
+          currentPrice={live?.price ?? null}
+          symbol={symbol}
+          explainMode={explainMode}
+        />
+      )}
       {isReady && !report && (
         <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
@@ -278,7 +314,17 @@ function fmtNum(v: number | undefined | null, digits = 2): string {
   return v.toFixed(digits);
 }
 
-function ReportView({ report, currentPrice }: { report: AnalyticReport; currentPrice: number | null }) {
+function ReportView({
+  report,
+  currentPrice,
+  symbol,
+  explainMode,
+}: {
+  report: AnalyticReport;
+  currentPrice: number | null;
+  symbol: string;
+  explainMode: boolean;
+}) {
   const tfCounts = report.datasetCoverage?.candleCounts ?? {};
   const datasetSummary = ['15m', '1h', '4h', '1d']
     .map((tf) => `${tfCounts[tf] ?? 0} ${tf}`)
@@ -338,12 +384,24 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
 
       {/* Raccomandazione */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-n-text">Raccomandazione</h2>
+        <h2 className="mb-1 text-sm font-semibold text-n-text">Raccomandazione</h2>
+        {explainMode && (
+          <p className="mb-3 text-[10px] italic text-n-dim">
+            Lo stile operativo e timeframe migliore secondo i backtest, e i regimi di mercato in
+            cui questo asset è stato storicamente più forte al rialzo o ribasso.
+          </p>
+        )}
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Operation mode" value={report.recommendedOperationMode} />
           <Stat label="Best timeframe" value={report.recommendedTimeframe} />
-          <Stat label="Best regime LONG" value={report.globalStats?.bestRegimeForLong} />
-          <Stat label="Best regime SHORT" value={report.globalStats?.bestRegimeForShort} />
+          <Stat
+            label="Best regime LONG"
+            value={regimeLabel(report.globalStats?.bestRegimeForLong)}
+          />
+          <Stat
+            label="Best regime SHORT"
+            value={regimeLabel(report.globalStats?.bestRegimeForShort)}
+          />
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           <Stat label="Max gain 24h" value={fmtPct(report.globalStats?.maxGainObserved)} />
@@ -355,8 +413,20 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
 
       {/* Top rules */}
       <div className="grid gap-5 lg:grid-cols-2">
-        <RuleTable title="Top 10 regole BUY" rules={buyRules} dir="long" />
-        <RuleTable title="Top 10 regole SELL" rules={sellRules} dir="short" />
+        <RuleTable
+          title="Top 10 regole BUY"
+          rules={buyRules}
+          dir="long"
+          symbol={symbol}
+          explainMode={explainMode}
+        />
+        <RuleTable
+          title="Top 10 regole SELL"
+          rules={sellRules}
+          dir="short"
+          symbol={symbol}
+          explainMode={explainMode}
+        />
       </div>
 
       {/* Reaction zones — Phase 3.6: filtrate ±15% dal prezzo corrente */}
@@ -397,10 +467,25 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
                 {filteredZones.map((z, i) => {
                   const distancePct = (z as any).distancePct ?? 0;
                   const distanceLabel =
-                    distancePct === 0 ? '—' : `${distancePct > 0 ? '+' : ''}${(distancePct * 100).toFixed(2)}%`;
+                    distancePct === 0
+                      ? '—'
+                      : `a ${distancePct > 0 ? '+' : ''}${(distancePct * 100).toFixed(2)}% dal prezzo attuale`;
+                  const bouncePct = (z?.bounceProbability ?? 0) * 100;
+                  const isStrongSupport = z?.type === 'support' && bouncePct >= 70;
+                  const isStrongResistance = z?.type === 'resistance' && bouncePct >= 70;
+                  const friendlyLabel = isStrongSupport
+                    ? '🟢 I trader storicamente comprano qui'
+                    : isStrongResistance
+                    ? '🔴 I trader storicamente vendono qui'
+                    : '⚪ Zona di reazione meno marcata';
                   return (
-                    <tr key={i} className="border-t border-n-border">
-                      <td className="px-2 py-1.5 font-mono">{fmtNum(z?.priceLevel, 2)}</td>
+                    <tr key={i} className="border-t border-n-border align-top">
+                      <td className="px-2 py-1.5 font-mono">
+                        {fmtNum(z?.priceLevel, 2)}
+                        <div className="mt-1 max-w-[180px] whitespace-normal text-[10px] font-sans text-n-dim">
+                          {friendlyLabel}
+                        </div>
+                      </td>
                       <td
                         className={`px-2 py-1.5 font-mono ${
                           distancePct > 0 ? 'text-emerald-300' : distancePct < 0 ? 'text-red-300' : 'text-n-dim'
@@ -414,12 +499,12 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
                             z?.type === 'support' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'
                           }`}
                         >
-                          {z?.type ?? '—'}
+                          {z?.type === 'support' ? 'supporto' : z?.type === 'resistance' ? 'resistenza' : '—'}
                         </span>
                       </td>
                       <td className="px-2 py-1.5">{z?.strength ?? '—'}</td>
                       <td className="px-2 py-1.5">{z?.touchCount ?? '—'}</td>
-                      <td className="px-2 py-1.5">{fmtPct((z?.bounceProbability ?? 0) * 100)}</td>
+                      <td className="px-2 py-1.5">{fmtPct(bouncePct)}</td>
                       <td className="px-2 py-1.5">{fmtPct(z?.avgBounceMagnitude)}</td>
                     </tr>
                   );
@@ -432,7 +517,14 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
 
       {/* Strategy fit */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-n-text">Strategy fit</h2>
+        <h2 className="mb-1 text-sm font-semibold text-n-text">Strategy fit</h2>
+        {explainMode && (
+          <p className="mb-3 text-[10px] italic text-n-dim">
+            Le strategie classiche backtestate su {symbol}, ordinate per qualità complessiva
+            (PF pesato per numero di trade). Le righe &quot;low sample&quot; hanno meno di 10
+            trade e non sono affidabili statisticamente.
+          </p>
+        )}
         {fits.length === 0 ? (
           <p className="text-xs text-n-dim">Nessun fit calcolato.</p>
         ) : (
@@ -443,11 +535,21 @@ function ReportView({ report, currentPrice }: { report: AnalyticReport; currentP
                   <th className="px-2 py-1.5">#</th>
                   <th className="px-2 py-1.5">Strategia</th>
                   <th className="px-2 py-1.5">TF</th>
-                  <th className="px-2 py-1.5">Trades</th>
-                  <th className="px-2 py-1.5">WR</th>
-                  <th className="px-2 py-1.5">PF</th>
-                  <th className="px-2 py-1.5">Sharpe</th>
-                  <th className="px-2 py-1.5">MaxDD</th>
+                  <th className="px-2 py-1.5">
+                    <MetricTooltip term="Trades">Trades</MetricTooltip>
+                  </th>
+                  <th className="px-2 py-1.5">
+                    <MetricTooltip term="WR">WR</MetricTooltip>
+                  </th>
+                  <th className="px-2 py-1.5">
+                    <MetricTooltip term="PF">PF</MetricTooltip>
+                  </th>
+                  <th className="px-2 py-1.5">
+                    <MetricTooltip term="Sharpe">Sharpe</MetricTooltip>
+                  </th>
+                  <th className="px-2 py-1.5">
+                    <MetricTooltip term="MaxDD">MaxDD</MetricTooltip>
+                  </th>
                 </tr>
               </thead>
               <tbody className="text-n-text">
@@ -529,15 +631,27 @@ function RuleTable({
   title,
   rules,
   dir,
+  symbol,
+  explainMode,
 }: {
   title: string;
   rules: AnalyticReport['topRules'];
   dir: 'long' | 'short';
+  symbol: string;
+  explainMode: boolean;
 }) {
   const safeRules = Array.isArray(rules) ? rules : [];
   return (
     <div className="rounded-2xl border border-n-border bg-n-card p-5">
-      <h2 className="mb-3 text-sm font-semibold text-n-text">{title}</h2>
+      <h2 className="mb-1 text-sm font-semibold text-n-text">{title}</h2>
+      {explainMode && (
+        <p className="mb-3 text-[10px] italic text-n-dim">
+          Le combinazioni di condizioni che storicamente hanno preceduto un movimento{' '}
+          {dir === 'long' ? 'rialzista' : 'ribassista'} di {symbol} nelle 24h successive. Più alta
+          è la <MetricTooltip term="Confidence">confidence</MetricTooltip>, più la regola è
+          robusta statisticamente.
+        </p>
+      )}
       {safeRules.length === 0 ? (
         <p className="text-xs text-n-dim">Nessuna regola {dir} significativa.</p>
       ) : (
@@ -546,10 +660,14 @@ function RuleTable({
             <thead className="text-n-dim">
               <tr>
                 <th className="px-2 py-1.5">Conditions</th>
-                <th className="px-2 py-1.5">WR</th>
+                <th className="px-2 py-1.5">
+                  <MetricTooltip term="WR">WR</MetricTooltip>
+                </th>
                 <th className="px-2 py-1.5">N</th>
                 <th className="px-2 py-1.5">Avg ret</th>
-                <th className="px-2 py-1.5">Conf</th>
+                <th className="px-2 py-1.5">
+                  <MetricTooltip term="Confidence">Conf</MetricTooltip>
+                </th>
               </tr>
             </thead>
             <tbody className="text-n-text">
@@ -557,6 +675,20 @@ function RuleTable({
                 <tr key={r?.id ?? `rule-${i}`} className="border-t border-n-border align-top">
                   <td className="px-2 py-1.5 font-mono text-[10px]">
                     {(Array.isArray(r?.conditions) ? r.conditions : []).join(' + ')}
+                    {r && Array.isArray(r.conditions) && r.conditions.length > 0 && (
+                      <div className="mt-1 max-w-xs whitespace-normal text-[10px] font-sans not-italic text-n-dim">
+                        {ruleToItalian(
+                          {
+                            conditions: r.conditions,
+                            direction: r.direction,
+                            avgReturn: r.avgReturn ?? 0,
+                            occurrences: r.occurrences ?? 0,
+                            winRate: r.winRate ?? 0,
+                          },
+                          symbol,
+                        )}
+                      </div>
+                    )}
                   </td>
                   <td className="px-2 py-1.5">{fmtPct(r?.winRate, 0)}</td>
                   <td className="px-2 py-1.5">{r?.occurrences ?? '—'}</td>
