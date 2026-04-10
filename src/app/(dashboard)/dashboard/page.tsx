@@ -1,170 +1,310 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { fmtDollar, fmtPnl } from '@/lib/utils/format';
 import Link from 'next/link';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
-import {
-  Wallet, TrendingUp, Bot, Target, RefreshCw, Calendar, Zap,
+  Wallet, TrendingUp, TrendingDown, Bot, RefreshCw, ArrowUpRight, ArrowDownRight,
+  DollarSign, BarChart3, Clock, XCircle, CheckCircle2, AlertTriangle, Loader2,
 } from 'lucide-react';
 
-interface BotStatusData { running: boolean; tickCount: number; positions: any[]; closedTrades: any[]; accountEquity: number; totalPnl: number; bots?: any[] }
-interface PerfData { totalTrades: number; wins: number; losses: number; winRate: number; totalPnl: number; dailyPnl: number; weeklyPnl: number; monthlyPnl: number; sharpeRatio: number; equityCurve: { date: string; equity: number }[] }
+// ── Types ────────────────────────────────────────────────────
+
+interface AccountData {
+  mode: 'live' | 'paper';
+  equity: number;
+  cash: number;
+  buyingPower: number;
+  portfolioValue: number;
+  lastEquity: number;
+  dailyChange: number;
+  dailyChangePct: number;
+  status: string;
+}
+
+interface Position {
+  symbol: string;
+  side: string;
+  qty: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  marketValue: number;
+  unrealizedPl: number;
+  unrealizedPlPct: number;
+  changeToday: number;
+}
+
+interface Order {
+  id: string;
+  symbol: string;
+  side: string;
+  type: string;
+  qty: number;
+  filledQty: number;
+  avgFillPrice: number | null;
+  status: string;
+  createdAt: string;
+  filledAt: string | null;
+}
+
+// ── Dashboard ────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [bot, setBot] = useState<BotStatusData | null>(null);
-  const [perf, setPerf] = useState<PerfData | null>(null);
-  const [balance, setBalance] = useState<number>(0);
-  const [brokerConnected, setBrokerConnected] = useState(true);
-  const [recentTrades, setRecentTrades] = useState<any[]>([]);
+  const [account, setAccount] = useState<AccountData | null>(null);
+  const [positions, setPositions] = useState<Position[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [activeBots, setActiveBots] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const fetchAll = async () => {
-    const [bRes, pRes, portRes, trRes] = await Promise.allSettled([
-      fetch(`/api/bot/status?mode=real`),
-      fetch('/api/performance'),
-      fetch(`/api/portfolio?env=real`),
-      fetch(`/api/trades?env=real&limit=5`),
+  const fetchAll = useCallback(async () => {
+    const [accRes, posRes, ordRes, botRes] = await Promise.allSettled([
+      fetch('/api/broker/account'),
+      fetch('/api/broker/positions'),
+      fetch('/api/broker/orders?status=all&limit=20'),
+      fetch('/api/bot/status?mode=real'),
     ]);
-    if (bRes.status === 'fulfilled' && bRes.value.ok) setBot(await bRes.value.json());
-    if (pRes.status === 'fulfilled' && pRes.value.ok) setPerf(await pRes.value.json());
-    if (portRes.status === 'fulfilled' && portRes.value.ok) {
-      const d = await portRes.value.json();
-      setBalance(d.balance ?? 0);
-      setBrokerConnected(d.connected !== false);
+
+    if (accRes.status === 'fulfilled' && accRes.value.ok) {
+      setAccount(await accRes.value.json());
+      setError(null);
+    } else {
+      setError('Broker non connesso');
     }
-    if (trRes.status === 'fulfilled' && trRes.value.ok) {
-      const d = await trRes.value.json();
-      setRecentTrades(d.trades ?? []);
+
+    if (posRes.status === 'fulfilled' && posRes.value.ok) {
+      const d = await posRes.value.json();
+      setPositions(d.positions ?? []);
     }
+
+    if (ordRes.status === 'fulfilled' && ordRes.value.ok) {
+      const d = await ordRes.value.json();
+      setOrders(d.orders ?? []);
+    }
+
+    if (botRes.status === 'fulfilled' && botRes.value.ok) {
+      const d = await botRes.value.json();
+      setActiveBots((d.bots ?? []).filter((b: any) => b.status === 'running').length);
+    }
+
     setLoading(false);
-  };
+  }, []);
 
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
+  useEffect(() => {
+    fetchAll();
+    const interval = setInterval(fetchAll, 15000);
+    return () => clearInterval(interval);
+  }, [fetchAll]);
 
-  const equity = brokerConnected ? balance : 0;
-  const totalPnl = perf?.totalPnl ?? 0;
-  const dailyPnl = perf?.dailyPnl ?? 0;
-  const activeBots = bot?.bots?.filter(b => b.status === 'running').length ?? 0;
-  const accent = '#3b82f6';
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 size={24} className="animate-spin text-n-dim" />
+      </div>
+    );
+  }
+
+  const isLive = account?.mode === 'live';
+  const equity = account?.equity ?? 0;
+  const dailyChange = account?.dailyChange ?? 0;
+  const dailyPct = account?.dailyChangePct ?? 0;
 
   return (
-    <div className="space-y-6 stagger">
-      {!brokerConnected && !loading && (
-        <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 px-4 py-3 text-sm text-blue-300">
-          Conto live non collegato. <Link href="/connections" className="underline font-medium">Configura le API keys live →</Link>
+    <div className="space-y-5 stagger">
+      {/* Connection status */}
+      {error && (
+        <Link href="/impostazioni" className="flex items-center gap-2 rounded-xl bg-blue-500/5 border border-blue-500/20 px-4 py-3 text-sm text-blue-300 hover:bg-blue-500/10 transition-all">
+          <AlertTriangle size={16} /> Broker non connesso. Configura le API keys →
+        </Link>
+      )}
+
+      {/* Account mode badge */}
+      {account && (
+        <div className="flex items-center gap-2">
+          <span className={`rounded-lg px-2.5 py-1 text-[11px] font-bold ${isLive ? 'bg-blue-500/15 text-blue-400' : 'bg-amber-500/15 text-amber-400'}`}>
+            {isLive ? 'LIVE' : 'PAPER'}
+          </span>
+          <span className="text-[10px] text-n-dim">
+            {isLive ? 'Operazioni con fondi reali' : 'Ambiente simulato'}
+          </span>
         </div>
       )}
 
-      {/* Bot banner */}
-      {bot?.running && (
-        <div className="flex items-center justify-between rounded-xl border border-green-500/20 bg-green-500/5 px-4 py-3">
-          <div className="flex items-center gap-3">
-            <span className="h-2.5 w-2.5 rounded-full bg-n-green animate-pulse-dot" />
-            <div>
-              <p className="text-sm font-medium text-n-green">{activeBots} bot attiv{activeBots === 1 ? 'o' : 'i'}</p>
-              <p className="text-xs text-n-dim" suppressHydrationWarning>Tick #{bot.tickCount} · {bot.positions.length} posizioni · {bot.closedTrades.length} trades</p>
+      {/* ═══ PORTFOLIO VALUE ═══ */}
+      <div className="rounded-2xl border border-n-border bg-n-card p-6">
+        <p className="text-xs text-n-dim mb-1">Il tuo portfolio</p>
+        <div className="flex items-baseline gap-3">
+          <p className="font-mono text-3xl font-bold text-n-text" suppressHydrationWarning>
+            {equity > 0 ? `$${equity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—'}
+          </p>
+          {dailyChange !== 0 && (
+            <div className={`flex items-center gap-1 ${dailyChange >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {dailyChange >= 0 ? <ArrowUpRight size={16} /> : <ArrowDownRight size={16} />}
+              <span className="font-mono text-sm font-bold" suppressHydrationWarning>
+                {dailyChange >= 0 ? '+' : ''}{fmtDollar(dailyChange)} ({dailyPct >= 0 ? '+' : ''}{dailyPct.toFixed(2)}%)
+              </span>
             </div>
-          </div>
-          <Link href="/bot" className="rounded-xl border border-green-500/20 px-3 py-2 text-xs font-medium text-n-green hover:bg-green-500/10 min-h-[40px] flex items-center gap-1.5"><Bot size={13} /> Gestisci</Link>
+          )}
         </div>
-      )}
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {[
-          { label: 'Bilancio', value: equity > 0 ? fmtDollar(equity) : '—', icon: Wallet },
-          { label: 'P&L Oggi', value: dailyPnl !== 0 ? fmtPnl(dailyPnl) : '$0.00', icon: TrendingUp, color: dailyPnl >= 0 ? 'text-n-green' : 'text-n-red' },
-          { label: 'P&L Totale', value: totalPnl !== 0 ? fmtPnl(totalPnl) : '$0.00', icon: TrendingUp, color: totalPnl >= 0 ? 'text-n-green' : 'text-n-red' },
-          { label: 'Bot Attivi', value: String(activeBots), icon: Bot },
-        ].map(s => (
-          <div key={s.label} className="rounded-xl border border-n-border bg-n-card p-5">
-            <div className="flex items-center justify-between"><p className="label">{s.label}</p><s.icon size={16} className={s.color || 'text-n-dim'} /></div>
-            <p className={`mt-2 font-mono text-2xl font-medium ${s.color || 'text-n-text'}`} suppressHydrationWarning>{s.value}</p>
-          </div>
-        ))}
       </div>
 
-      {/* Equity curve */}
-      {perf && perf.equityCurve.length > 1 && (
-        <div className="rounded-xl border border-n-border bg-n-card p-5">
-          <div className="flex flex-col gap-2 mb-4 sm:flex-row sm:items-center sm:justify-between">
-            <h3 className="label">Equity Curve</h3>
-            <div className="flex gap-1.5 flex-wrap">
-              {[{ l: 'Oggi', v: perf.dailyPnl }, { l: '7g', v: perf.weeklyPnl }, { l: '30g', v: perf.monthlyPnl }].map(p => (
-                <span key={p.l} className={`rounded-lg px-2 py-1 font-mono text-[11px] font-medium ${p.v >= 0 ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`} suppressHydrationWarning>{p.l}: {fmtPnl(p.v)}</span>
-              ))}
-            </div>
-          </div>
-          <div className="h-[200px] md:h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={perf.equityCurve} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
-                <defs><linearGradient id="dashG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={accent} stopOpacity={0.2} /><stop offset="100%" stopColor={accent} stopOpacity={0} /></linearGradient></defs>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tickFormatter={(v: number) => `$${v.toFixed(0)}`} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={45} />
-                <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, fontFamily: 'Roboto Mono' }} />
-                <Area type="monotone" dataKey="equity" stroke={accent} strokeWidth={2} fill="url(#dashG)" dot={false} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
+      {/* ═══ STATS GRID ═══ */}
+      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+        <StatCard label="Equity" value={fmtDollar(equity)} icon={Wallet} />
+        <StatCard label="Cash disponibile" value={fmtDollar(account?.cash ?? 0)} icon={DollarSign} />
+        <StatCard label="Buying Power" value={fmtDollar(account?.buyingPower ?? 0)} icon={BarChart3} />
+        <StatCard label="Bot Attivi" value={String(activeBots)} icon={Bot} color={activeBots > 0 ? 'text-green-400' : undefined} />
+      </div>
 
-      {/* Bot signal summary — only show if bots exist */}
-      {bot?.bots && bot.bots.length > 0 && (
-        <div className="rounded-xl border border-n-border bg-n-card p-4">
-          <h3 className="label mb-3">Bot attivi — ultimo check</h3>
-          <div className="space-y-1.5">
-            {bot.bots.filter((b: any) => b.status === 'running').map((b: any) => (
-              <div key={b.id} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-n-green animate-pulse-dot" />
-                  <span className="font-medium text-n-text">{b.name}</span>
-                  <span className="text-n-dim">{b.assets?.join(', ')}</span>
-                </div>
-                <span className="font-mono text-n-dim" suppressHydrationWarning>
-                  {b.stats?.totalTrades ?? 0} trades · {b.stats?.pnl >= 0 ? '+' : ''}{(b.stats?.pnl ?? 0).toFixed(2)}
-                </span>
-              </div>
-            ))}
-          </div>
+      {/* ═══ POSITIONS ═══ */}
+      <div className="rounded-xl border border-n-border bg-n-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-n-text">Posizioni aperte</h3>
+          <span className="text-[10px] text-n-dim">{positions.length} posizion{positions.length === 1 ? 'e' : 'i'}</span>
         </div>
-      )}
-
-      {/* Recent trades */}
-      {recentTrades.length > 0 && (
-        <div className="rounded-xl border border-n-border bg-n-card p-4">
-          <h3 className="label mb-3">Ultime operazioni</h3>
-          <div className="space-y-1.5">
-            {recentTrades.slice(0, 5).map((t: any) => (
-              <div key={t.id} className="flex items-center justify-between text-xs">
-                <div className="flex items-center gap-2">
-                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-medium ${t.side === 'LONG' ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`}>{t.side}</span>
-                  <span className="font-mono text-n-text">{t.symbol}</span>
-                </div>
-                <span className={`font-mono font-medium ${(t.netPnl ?? 0) >= 0 ? 'text-n-green' : 'text-n-red'}`} suppressHydrationWarning>
-                  {(t.netPnl ?? 0) >= 0 ? '+' : ''}{(t.netPnl ?? 0).toFixed(2)}
-                </span>
-              </div>
-            ))}
+        {positions.length === 0 ? (
+          <p className="text-xs text-n-dim py-4 text-center">Nessuna posizione aperta.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">Asset</th>
+                  <th className="px-2 py-1.5">Lato</th>
+                  <th className="px-2 py-1.5">Qty</th>
+                  <th className="px-2 py-1.5">Prezzo entry</th>
+                  <th className="px-2 py-1.5">Prezzo attuale</th>
+                  <th className="px-2 py-1.5">Valore</th>
+                  <th className="px-2 py-1.5">P&L</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {positions.map(p => (
+                  <tr key={p.symbol} className="border-t border-n-border">
+                    <td className="px-2 py-2 font-mono font-semibold">{p.symbol}</td>
+                    <td className="px-2 py-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${p.side === 'long' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                        {p.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 font-mono">{p.qty}</td>
+                    <td className="px-2 py-2 font-mono">${p.avgEntryPrice.toLocaleString()}</td>
+                    <td className="px-2 py-2 font-mono">${p.currentPrice.toLocaleString()}</td>
+                    <td className="px-2 py-2 font-mono">${p.marketValue.toLocaleString()}</td>
+                    <td className={`px-2 py-2 font-mono font-bold ${p.unrealizedPl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {p.unrealizedPl >= 0 ? '+' : ''}{fmtDollar(p.unrealizedPl)} ({p.unrealizedPlPct >= 0 ? '+' : ''}{p.unrealizedPlPct.toFixed(2)}%)
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {/* Empty state */}
-      {!bot?.running && (!bot?.bots || bot.bots.length === 0) && !loading && (
-        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center space-y-3">
-          <p className="text-sm text-n-text font-medium">Inizia configurando le AI Analytics</p>
-          <p className="text-xs text-n-dim">Le AI Analytics analizzano gli asset 24/7 e preparano le strategie per i bot.</p>
+      {/* ═══ RECENT ORDERS ═══ */}
+      <div className="rounded-xl border border-n-border bg-n-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-bold text-n-text">Ordini recenti</h3>
+          <span className="text-[10px] text-n-dim">{orders.length} ordin{orders.length === 1 ? 'e' : 'i'}</span>
+        </div>
+        {orders.length === 0 ? (
+          <p className="text-xs text-n-dim py-4 text-center">Nessun ordine. I bot genereranno ordini quando troveranno opportunità.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">Asset</th>
+                  <th className="px-2 py-1.5">Tipo</th>
+                  <th className="px-2 py-1.5">Lato</th>
+                  <th className="px-2 py-1.5">Qty</th>
+                  <th className="px-2 py-1.5">Filled</th>
+                  <th className="px-2 py-1.5">Prezzo</th>
+                  <th className="px-2 py-1.5">Stato</th>
+                  <th className="px-2 py-1.5">Data</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {orders.map(o => (
+                  <tr key={o.id} className="border-t border-n-border">
+                    <td className="px-2 py-2 font-mono font-semibold">{o.symbol}</td>
+                    <td className="px-2 py-2">{o.type}</td>
+                    <td className="px-2 py-2">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${o.side === 'buy' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                        {o.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-2 py-2 font-mono">{o.qty}</td>
+                    <td className="px-2 py-2 font-mono">{o.filledQty}</td>
+                    <td className="px-2 py-2 font-mono">{o.avgFillPrice ? `$${o.avgFillPrice.toLocaleString()}` : '—'}</td>
+                    <td className="px-2 py-2">
+                      <OrderStatusBadge status={o.status} />
+                    </td>
+                    <td className="px-2 py-2 text-n-dim" suppressHydrationWarning>
+                      {formatOrderDate(o.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ═══ QUICK ACTIONS ═══ */}
+      {activeBots === 0 && positions.length === 0 && (
+        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-6 text-center space-y-3">
+          <p className="text-sm text-n-text font-medium">Pronto per iniziare</p>
+          <p className="text-xs text-n-dim">Analizza gli asset con l&apos;AI, poi lancia un bot per operare automaticamente.</p>
           <div className="flex justify-center gap-3 pt-2">
-            <Link href="/analisi" className="rounded-xl bg-accent/10 px-4 py-2.5 text-xs font-semibold text-accent hover:bg-accent/20">Vai ad AI Analytics</Link>
-            <Link href="/bot" className="rounded-xl bg-n-bg-s px-4 py-2.5 text-xs font-semibold text-n-text hover:bg-n-border">Crea un Bot</Link>
+            <Link href="/analisi" className="rounded-xl bg-blue-500/10 px-4 py-2.5 text-xs font-semibold text-blue-400 hover:bg-blue-500/20 transition-all">AI Analytics</Link>
+            <Link href="/bot" className="rounded-xl bg-n-bg-s px-4 py-2.5 text-xs font-semibold text-n-text hover:bg-n-border transition-all">Lancia Bot</Link>
           </div>
         </div>
       )}
     </div>
   );
+}
+
+// ── Components ───────────────────────────────────────────────
+
+function StatCard({ label, value, icon: Icon, color }: {
+  label: string; value: string; icon: React.ElementType; color?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-n-border bg-n-card p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] text-n-dim uppercase tracking-wide">{label}</p>
+        <Icon size={14} className={color ?? 'text-n-dim'} />
+      </div>
+      <p className={`mt-1.5 font-mono text-lg font-bold ${color ?? 'text-n-text'}`} suppressHydrationWarning>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function OrderStatusBadge({ status }: { status: string }) {
+  const map: Record<string, { label: string; color: string }> = {
+    filled: { label: 'Eseguito', color: 'bg-green-500/15 text-green-400' },
+    partially_filled: { label: 'Parziale', color: 'bg-amber-500/15 text-amber-400' },
+    new: { label: 'In attesa', color: 'bg-blue-500/15 text-blue-400' },
+    accepted: { label: 'Accettato', color: 'bg-blue-500/15 text-blue-400' },
+    pending_new: { label: 'Pending', color: 'bg-n-bg-s text-n-dim' },
+    canceled: { label: 'Annullato', color: 'bg-n-bg-s text-n-dim' },
+    expired: { label: 'Scaduto', color: 'bg-n-bg-s text-n-dim' },
+    rejected: { label: 'Rifiutato', color: 'bg-red-500/15 text-red-400' },
+  };
+  const s = map[status] ?? { label: status, color: 'bg-n-bg-s text-n-dim' };
+  return <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${s.color}`}>{s.label}</span>;
+}
+
+function formatOrderDate(iso: string | null): string {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' }) + ' ' +
+      d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+  } catch { return '—'; }
 }

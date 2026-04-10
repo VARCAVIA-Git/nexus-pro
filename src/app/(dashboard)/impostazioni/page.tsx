@@ -122,6 +122,9 @@ export default function ImpostazioniPage() {
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
   const [connectingBroker, setConnectingBroker] = useState(false);
+  const [showDisconnect, setShowDisconnect] = useState(false);
+  const [disconnectPassword, setDisconnectPassword] = useState('');
+  const [disconnecting, setDisconnecting] = useState(false);
 
   // ── Load data ──
   useEffect(() => {
@@ -233,6 +236,41 @@ export default function ImpostazioniPage() {
     setConnectingBroker(false);
   };
 
+  // ── Disconnect broker: verify password → delete keys ──
+  const disconnectBroker = async () => {
+    if (!disconnectPassword) { showToast('Inserisci la password', false); return; }
+    setDisconnecting(true);
+    try {
+      // Verify password via login endpoint
+      const authRes = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password: disconnectPassword }),
+      });
+      if (!authRes.ok) {
+        showToast('Password non corretta', false);
+        setDisconnecting(false);
+        return;
+      }
+      // Password verified — delete broker keys
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ section: 'broker', liveKey: '', liveSecret: '', liveEnabled: false }),
+      });
+      setLiveKey('');
+      setLiveSecret('');
+      setLiveEnabled(false);
+      setLiveStatus(null);
+      setShowDisconnect(false);
+      setDisconnectPassword('');
+      showToast('API disconnesse', true);
+    } catch {
+      showToast('Errore durante la disconnessione', false);
+    }
+    setDisconnecting(false);
+  };
+
   // ── Mine engine toggle ──
   const toggleEngine = async (v: boolean) => {
     await fetch('/api/mine/engine', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: v ? 'start' : 'stop' }) }).catch(() => {});
@@ -338,9 +376,12 @@ export default function ImpostazioniPage() {
           {liveStatus && (
             <div className={`rounded-lg p-3 text-[11px] ${liveStatus.connected ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>
               {liveStatus.connected ? (
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 size={14} />
-                  <span>Broker connesso. Equity: <span className="font-mono font-bold">${liveStatus.equity?.toLocaleString('en-US')}</span></span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 size={14} />
+                    <span>Broker connesso. Equity: <span className="font-mono font-bold">${liveStatus.equity?.toLocaleString('en-US')}</span></span>
+                  </div>
+                  <button onClick={() => setShowDisconnect(true)} className="text-[10px] text-red-400 hover:underline">Disconnetti</button>
                 </div>
               ) : (
                 <div className="flex items-center gap-2">
@@ -348,6 +389,29 @@ export default function ImpostazioniPage() {
                   <span>{liveStatus.error ?? 'Keys non configurate'}</span>
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Disconnect confirmation dialog */}
+          {showDisconnect && (
+            <div className="rounded-lg border border-red-500/30 bg-red-500/5 p-4 space-y-3">
+              <p className="text-xs font-semibold text-red-400">Conferma disconnessione</p>
+              <p className="text-[10px] text-n-dim">Inserisci la password del tuo account per confermare la rimozione delle API keys.</p>
+              <input
+                type="password"
+                value={disconnectPassword}
+                onChange={e => setDisconnectPassword(e.target.value)}
+                placeholder="Password"
+                className="w-full rounded-lg border border-n-border bg-n-input px-3 py-2 text-xs text-n-text focus:border-red-500/50 focus:outline-none"
+              />
+              <div className="flex gap-2">
+                <button onClick={disconnectBroker} disabled={disconnecting} className="flex-1 rounded-lg bg-red-500/20 py-2 text-xs font-bold text-red-400 hover:bg-red-500/30 disabled:opacity-50">
+                  {disconnecting ? 'Disconnessione...' : 'Conferma disconnessione'}
+                </button>
+                <button onClick={() => { setShowDisconnect(false); setDisconnectPassword(''); }} className="rounded-lg border border-n-border px-4 py-2 text-xs text-n-dim hover:text-n-text">
+                  Annulla
+                </button>
+              </div>
             </div>
           )}
         </div>
