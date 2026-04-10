@@ -1,6 +1,7 @@
 'use client';
 
-import { Brain, TrendingUp, TrendingDown, Minus, Activity, Flame, Shield, BarChart3, Newspaper } from 'lucide-react';
+import { useEffect, useState, useCallback } from 'react';
+import { Brain, TrendingUp, TrendingDown, Minus, Activity, Flame, Shield, BarChart3, Newspaper, Zap, Target, BarChart, Radio } from 'lucide-react';
 
 interface AICData {
   status?: { price: number; regime: string; regime_confidence: number; active_tfs: string[]; confluence: any };
@@ -175,29 +176,131 @@ export function AICInsightsCard({ data, symbol }: { data: AICData | null; symbol
         </div>
       </div>
 
-      {/* AIC Strategies (backtester results) */}
-      {status.active_tfs?.length > 0 && (
-        <div className="rounded-2xl border border-n-border bg-n-card p-5">
-          <div className="flex items-center gap-2 mb-3">
-            <Activity size={14} className="text-accent" />
-            <h3 className="text-sm font-semibold text-n-text">Strategie AI in esecuzione</h3>
-            <span className="ml-auto text-[10px] text-n-dim">
-              {status.active_tfs.length} timeframe attivi · Backtest ogni ora
-            </span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {status.active_tfs.map(tf => (
-              <span key={tf} className="rounded-lg bg-accent/10 px-2.5 py-1 text-[11px] font-mono font-bold text-accent">
-                {tf}
-              </span>
-            ))}
-          </div>
-          <p className="mt-2 text-[10px] text-n-dim">
-            L&apos;AI sta testando 4 strategie (RSI+MACD, EMA Cross, BB+RSI Reversal, SuperTrend) su ogni timeframe.
-            I risultati alimentano la selezione automatica dei segnali per i bot.
-          </p>
+      {/* Live AI Activity Feed */}
+      <AIActivityFeed symbol={symbol} />
+    </div>
+  );
+}
+
+// ── Live Activity Feed ───────────────────────────────────────
+
+interface ActivityItem {
+  type: 'signal' | 'analysis' | 'backtest' | 'status';
+  time: string;
+  message: string;
+  detail?: string;
+  color?: 'green' | 'red' | 'blue' | 'amber' | 'dim';
+}
+
+const iconMap: Record<string, React.ElementType> = {
+  signal: Zap,
+  analysis: BarChart,
+  backtest: Target,
+  status: Radio,
+};
+
+const colorMap: Record<string, string> = {
+  green: 'text-emerald-400',
+  red: 'text-red-400',
+  blue: 'text-blue-400',
+  amber: 'text-amber-400',
+  dim: 'text-n-dim',
+};
+
+const bgColorMap: Record<string, string> = {
+  green: 'bg-emerald-500/10',
+  red: 'bg-red-500/10',
+  blue: 'bg-blue-500/10',
+  amber: 'bg-amber-500/10',
+  dim: 'bg-n-bg-s',
+};
+
+function AIActivityFeed({ symbol }: { symbol: string }) {
+  const [activities, setActivities] = useState<ActivityItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/aic/activity?symbol=${encodeURIComponent(symbol)}`);
+      if (res.ok) {
+        const d = await res.json();
+        setActivities(d.activities ?? []);
+      }
+    } catch {}
+    setLoading(false);
+  }, [symbol]);
+
+  useEffect(() => {
+    load();
+    const interval = setInterval(load, 15000); // refresh every 15s
+    return () => clearInterval(interval);
+  }, [load]);
+
+  if (loading) {
+    return (
+      <div className="rounded-2xl border border-n-border bg-n-card p-5">
+        <div className="flex items-center gap-2 mb-3">
+          <Activity size={14} className="text-accent animate-pulse" />
+          <h3 className="text-sm font-semibold text-n-text">AI Activity</h3>
+        </div>
+        <div className="space-y-2">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="h-8 rounded-lg bg-n-bg-s animate-pulse" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-n-border bg-n-card p-5">
+      <div className="flex items-center gap-2 mb-3">
+        <Activity size={14} className="text-accent" />
+        <h3 className="text-sm font-semibold text-n-text">AI Activity</h3>
+        <span className="ml-auto flex items-center gap-1 text-[9px] text-n-dim">
+          <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
+          live · aggiornato ogni 15s
+        </span>
+      </div>
+
+      {activities.length === 0 ? (
+        <p className="text-xs text-n-dim">Nessuna attività recente. L&apos;AI è in attesa del prossimo ciclo di analisi.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {activities.map((item, i) => {
+            const Icon = iconMap[item.type] ?? Activity;
+            const color = colorMap[item.color ?? 'dim'];
+            const bg = bgColorMap[item.color ?? 'dim'];
+            const timeAgo = formatTimeAgo(item.time);
+            return (
+              <div key={i} className={`flex items-start gap-2.5 rounded-lg ${bg} px-3 py-2`}>
+                <Icon size={13} className={`mt-0.5 shrink-0 ${color}`} />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className={`text-[11px] font-semibold ${color}`}>{item.message}</p>
+                    <span className="shrink-0 text-[9px] text-n-dim">{timeAgo}</span>
+                  </div>
+                  {item.detail && (
+                    <p className="mt-0.5 text-[10px] text-n-dim truncate">{item.detail}</p>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
+}
+
+function formatTimeAgo(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(ms) || ms < 0) return 'ora';
+  const sec = Math.floor(ms / 1000);
+  if (sec < 60) return `${sec}s fa`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m fa`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h fa`;
+  return `${Math.floor(hrs / 24)}g fa`;
 }
