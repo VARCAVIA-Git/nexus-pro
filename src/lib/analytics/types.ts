@@ -62,12 +62,47 @@ export interface AnalyticReport {
   recommendedTimeframe: '15m' | '1h' | '4h' | '1d';
   eventReactivity: EventReactivity[];
 
+  // Phase 4.6 — Full Backtest summary (top 5 ranked strategies)
+  backtestSummary?: BacktestSummary;
+
   // Phase 3 — Living Brain (tutti opzionali per retrocompat)
   liveContext?: LiveContext;
   newsDigest?: NewsDigest;
   eventImpacts?: EventImpactStat[];
   feedback?: FeedbackStats;
   trainingHistory?: TrainingHistoryEntry[];
+}
+
+export interface BacktestStrategySummary {
+  rank: number;
+  strategyId: string;
+  strategyName: string;
+  timeframe: string;
+  isMineRule: boolean;
+  conditions?: string[];
+  totalTrades: number;
+  winRate: number;
+  profitFactor: number;
+  netProfitPct: number;
+  maxDrawdownPct: number;
+  sharpe: number;
+  avgTpDistancePct: number;
+  avgSlDistancePct: number;
+  tpHitRate: number;
+  slHitRate: number;
+  avgHoldingHours: number;
+  optimalEntryTimeout: number;
+}
+
+export interface BacktestSummary {
+  generatedAt: number;
+  initialCapital: number;
+  tradeSize: number;
+  totalStrategiesTested: number;
+  totalTradesSimulated: number;
+  dateRange: { start: string; end: string };
+  /** Top strategies sorted by composite score */
+  rankings: BacktestStrategySummary[];
 }
 
 // ─── Phase 3: Living Brain types ──────────────────────────────

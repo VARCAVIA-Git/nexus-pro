@@ -43,6 +43,8 @@ import {
 import { computeIndicators } from '@/lib/core/indicators';
 import { strategyMap } from '@/lib/analytics/cognition/strategies';
 import { runMTFAnalysis } from '@/lib/analytics/perception/mtf-analysis';
+import { runFullBacktest } from '@/lib/analytics/backtester';
+import type { BacktestSummary, BacktestStrategySummary } from './types';
 import { notify } from '@/lib/analytics/action/notifications';
 import { updateJobProgress } from './analytic-queue';
 
@@ -57,6 +59,7 @@ const KEY_LIVE = (s: string) => `nexus:analytic:live:${s}`;
 // (che ora ospita il LiveContext object scritto da live-observer.ts).
 const KEY_LIVE_BUFFER = (s: string) => `nexus:analytic:live-buffer:${s}`;
 const KEY_ZONES = (s: string) => `nexus:analytic:zones:${s}`;
+const KEY_BACKTEST = (s: string) => `nexus:analytic:backtest:${s}`;
 const KEY_LIST = 'nexus:analytic:list';
 const KEY_QUEUE = 'nexus:analytic:queue';
 
@@ -119,6 +122,7 @@ export class AssetAnalytic {
       redisDel(KEY_LIVE(this.symbol)),
       redisDel(KEY_LIVE_BUFFER(this.symbol)),
       redisDel(KEY_ZONES(this.symbol)),
+      redisDel(KEY_BACKTEST(this.symbol)),
     ]);
     await redisSRem(KEY_LIST, this.symbol).catch(() => {});
     await redisLRem(KEY_QUEUE, 0, this.symbol).catch(() => {});
@@ -205,8 +209,62 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
   await updateJobProgress(symbol, 'profiling', 82, 'Indicator reactivity…');
   const indicatorReactivity = computeIndicatorReactivity(contexts);
 
-  await updateJobProgress(symbol, 'profiling', 86, 'Strategy fit…');
+  await updateJobProgress(symbol, 'profiling', 85, 'Strategy fit + Full Backtest…');
+  // Legacy strategy fit (kept for backward compat)
   const strategyFit = computeStrategyFit(history);
+
+  // Phase 4.6: Full Backtester — realistic simulation on all strategies + mined rules
+  let backtestSummary: BacktestSummary | undefined;
+  try {
+    await updateJobProgress(symbol, 'profiling', 86, 'Full backtest su tutte le strategie e TF…');
+    const backtestHistory: Partial<Record<'5m' | '15m' | '1h' | '4h', typeof history['1h']>> = {
+      '15m': history['15m'],
+      '1h': history['1h'],
+      '4h': history['4h'],
+    };
+    const fullReport = runFullBacktest(symbol, backtestHistory, rawRules);
+
+    // Save full report to separate Redis key (can be large)
+    await redisSet(KEY_BACKTEST(symbol), fullReport);
+
+    // Build lightweight summary for the AnalyticReport
+    const rankings: BacktestStrategySummary[] = fullReport.results
+      .filter(r => r.totalTrades >= 5)
+      .slice(0, 20)
+      .map((r, i) => ({
+        rank: i + 1,
+        strategyId: r.strategyId,
+        strategyName: r.strategyName,
+        timeframe: r.timeframe,
+        isMineRule: r.isMineRule,
+        conditions: r.conditions,
+        totalTrades: r.totalTrades,
+        winRate: r.winRate,
+        profitFactor: r.profitFactor,
+        netProfitPct: r.netProfitPct,
+        maxDrawdownPct: r.maxDrawdownPct,
+        sharpe: r.sharpe,
+        avgTpDistancePct: r.avgTpDistancePct,
+        avgSlDistancePct: r.avgSlDistancePct,
+        tpHitRate: r.tpHitRate,
+        slHitRate: r.slHitRate,
+        avgHoldingHours: r.avgHoldingHours,
+        optimalEntryTimeout: r.optimalEntryTimeout,
+      }));
+
+    backtestSummary = {
+      generatedAt: fullReport.generatedAt,
+      initialCapital: fullReport.config.initialCapital,
+      tradeSize: fullReport.config.tradeSize,
+      totalStrategiesTested: fullReport.globalStats.totalStrategiesTested,
+      totalTradesSimulated: fullReport.globalStats.totalTradesSimulated,
+      dateRange: fullReport.dateRange,
+      rankings,
+    };
+    console.log(`[analytic] ${symbol}: Full backtest done — ${fullReport.globalStats.totalStrategiesTested} strategy-TF combos, ${fullReport.globalStats.totalTradesSimulated} trades simulated`);
+  } catch (e) {
+    console.warn(`[analytic] ${symbol}: Full backtest failed (non-fatal): ${(e as Error).message}`);
+  }
 
   // Event reactivity: in Phase 2 placeholder (vedi spec sez. STEP 3)
   const eventReactivity: EventReactivity[] = [];
@@ -244,6 +302,7 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     recommendedOperationMode,
     recommendedTimeframe,
     eventReactivity,
+    backtestSummary,
     // Carry-over Phase 3 fields se presenti
     liveContext: previousReport?.liveContext,
     newsDigest: previousReport?.newsDigest,

@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import {
-  Shield, DollarSign, Gauge, Bell, Key, Pickaxe,
-  Save, RotateCcw, User, Globe, AlertTriangle, LogOut,
+  Bell, Key, Pickaxe,
+  Save, User, Globe, AlertTriangle, LogOut,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
@@ -196,8 +196,6 @@ export default function ImpostazioniPage() {
 
   // Notifications
   const [emailAlerts, setEmailAlerts] = useState(true);
-  const [telegramAlerts, setTelegramAlerts] = useState(false);
-  const [pushNotifications, setPushNotifications] = useState(true);
   const [tradeNotifications, setTradeNotifications] = useState(true);
   const [signalNotifications, setSignalNotifications] = useState(true);
 
@@ -226,8 +224,6 @@ export default function ImpostazioniPage() {
       if (d?.settings) {
         if (d.settings.timezone) setTimezone(d.settings.timezone);
         if (d.settings.emailAlerts !== undefined) setEmailAlerts(d.settings.emailAlerts);
-        if (d.settings.telegramAlerts !== undefined) setTelegramAlerts(d.settings.telegramAlerts);
-        if (d.settings.pushNotifications !== undefined) setPushNotifications(d.settings.pushNotifications);
       }
     }).catch(() => {});
   }, []);
@@ -237,7 +233,7 @@ export default function ImpostazioniPage() {
     try {
       const res = await fetch('/api/settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: displayName, email, timezone, emailAlerts, telegramAlerts, pushNotifications, tradeNotifications, signalNotifications }),
+        body: JSON.stringify({ name: displayName, email, timezone, emailAlerts, tradeNotifications, signalNotifications }),
       });
       setToast(res.ok ? { msg: 'Impostazioni salvate', ok: true } : { msg: 'Errore nel salvataggio', ok: false });
     } catch { setToast({ msg: 'Errore di connessione', ok: false }); }
@@ -259,14 +255,9 @@ export default function ImpostazioniPage() {
           <h1 className="text-xl font-bold text-n-text">Impostazioni</h1>
           <p className="text-xs text-n-dim">Profilo, notifiche, API keys e preferenze</p>
         </div>
-        <div className="flex gap-2">
-          <button className="flex items-center gap-1.5 rounded-lg border border-n-border px-3 py-1.5 text-xs text-n-dim hover:text-n-text transition-colors">
-            <RotateCcw size={13} /> Reset
-          </button>
-          <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-n-text px-4 py-1.5 text-xs font-semibold text-n-bg hover:opacity-90 transition-all disabled:opacity-50">
-            <Save size={13} /> {saving ? 'Salvataggio...' : 'Salva'}
-          </button>
-        </div>
+        <button onClick={handleSave} disabled={saving} className="flex items-center gap-1.5 rounded-lg bg-n-text px-4 py-2 text-xs font-semibold text-n-bg hover:opacity-90 transition-all disabled:opacity-50 min-h-[36px]">
+          <Save size={13} /> {saving ? 'Salvataggio...' : 'Salva'}
+        </button>
       </div>
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
@@ -297,8 +288,6 @@ export default function ImpostazioniPage() {
         <Section title="Notifiche" icon={Bell}>
           <div className="space-y-1">
             <Toggle label="Email Alerts" description="Ricevi avvisi via email per segnali e trade" checked={emailAlerts} onChange={setEmailAlerts} />
-            <Toggle label="Telegram Alerts" description="Notifiche tramite bot Telegram" checked={telegramAlerts} onChange={setTelegramAlerts} />
-            <Toggle label="Push Notifications" description="Notifiche browser in tempo reale" checked={pushNotifications} onChange={setPushNotifications} />
             <div className="my-2 border-t border-n-border" />
             <Toggle label="Notifiche Trade" description="Avvisi per apertura e chiusura posizioni" checked={tradeNotifications} onChange={setTradeNotifications} />
             <Toggle label="Notifiche Segnali" description="Avvisi per nuovi segnali generati" checked={signalNotifications} onChange={setSignalNotifications} />
@@ -368,35 +357,7 @@ export default function ImpostazioniPage() {
         {/* Mine Engine */}
         <MineEngineSettings />
 
-        {/* Preferences */}
-        <Section title="Preferenze" icon={Shield}>
-          <div className="space-y-3">
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-n-dim">Tema</label>
-              <div className="flex rounded-lg border border-n-border">
-                {(['dark', 'system'] as const).map((t) => (
-                  <button key={t} className={`flex-1 px-3 py-2 text-xs font-medium transition-colors ${t === 'dark' ? 'bg-n-accent-dim text-n-text' : 'text-n-dim hover:text-n-text'}`}>
-                    {t === 'dark' ? 'Dark' : 'System'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-n-dim">Lingua</label>
-              <select className="w-full rounded-lg border border-n-border bg-n-input px-3 py-2 text-xs text-n-text focus:border-n-border-b focus:outline-none">
-                <option value="it">Italiano</option>
-                <option value="en">English</option>
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-[10px] font-medium text-n-dim">Formato valuta</label>
-              <select className="w-full rounded-lg border border-n-border bg-n-input px-3 py-2 text-xs text-n-text focus:border-n-border-b focus:outline-none">
-                <option value="usd">USD ($)</option>
-                <option value="eur">EUR (&euro;)</option>
-              </select>
-            </div>
-          </div>
-        </Section>
+        {/* empty slot for grid balance */}
       </div>
 
       {/* Ticker assets */}

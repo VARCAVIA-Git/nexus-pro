@@ -40,6 +40,14 @@ export async function POST(request: Request) {
         maxDDWeekly: body.maxDDWeekly ?? 8,
         maxDDTotal: body.maxDDTotal ?? 20,
         operationMode: body.operationMode ?? 'intraday',
+        // Phase 4.6: AI-calibrated settings from backtest
+        backtestStrategyId: body.backtestStrategyId,
+        backtestTimeframe: body.backtestTimeframe,
+        calibratedTpPct: body.calibratedTpPct,
+        calibratedSlPct: body.calibratedSlPct,
+        entryTimeoutBars: body.entryTimeoutBars,
+        usesMineRules: body.usesMineRules,
+        mineRuleConditions: body.mineRuleConditions,
       });
       const result = await startBot(bot.id);
       return NextResponse.json({ ...result, botId: bot.id, bot }, { status: result.ok ? 200 : 400 });

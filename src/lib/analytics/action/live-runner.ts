@@ -16,6 +16,10 @@ import { redisLpush, redisSet, redisGet, KEYS } from '@/lib/db/redis';
 import { saveOutcome, buildOutcome } from '../learning/outcome-tracker';
 import { nanoid } from 'nanoid';
 import { calculateRiskParams } from '@/lib/config/assets';
+import { isAICHealthy, getLatestSignal, getConfluence } from '@/lib/mine/aic-client';
+import type { LiveContext, BacktestStrategySummary } from '@/lib/analytics/types';
+import { evaluateMineRule } from '@/lib/analytics/backtester/mine-rule-executor';
+import type { MinedRule } from '@/lib/research/deep-mapping/pattern-miner';
 
 // ── Re-export old types for backward compat ──────────────
 export type BotConfig = MultiBotConfig;
@@ -111,6 +115,95 @@ async function fetchCandles(symbol: string): Promise<OHLCV[]> {
   }
 }
 
+// ── AIC + Live Context Integration ───────────────────────
+
+async function fetchLiveContext(symbol: string): Promise<LiveContext | null> {
+  try {
+    return await redisGet<LiveContext>(`nexus:analytic:live:${symbol}`);
+  } catch { return null; }
+}
+
+/**
+ * Try AIC signal first for crypto assets. Returns a signal compatible with
+ * the existing pipeline, or null if AIC is offline / no signal.
+ */
+async function tryAICSignal(symbol: string): Promise<{
+  signal: 'BUY' | 'SELL' | 'NEUTRAL';
+  confidence: number;
+  strategy: string;
+  regime: string;
+} | null> {
+  try {
+    if (!symbol.includes('/')) return null; // AIC only for crypto
+    const healthy = await isAICHealthy(symbol);
+    if (!healthy) return null;
+
+    const sig = await getLatestSignal(symbol);
+    if (!sig || !sig.action) return null;
+
+    // Map AIC action to BUY/SELL
+    const signal: 'BUY' | 'SELL' | 'NEUTRAL' =
+      sig.action === 'LONG' ? 'BUY' :
+      sig.action === 'SHORT' ? 'SELL' : 'NEUTRAL';
+
+    // Boost confidence if confluence is aligned
+    let confidence = sig.confidence ?? 0.5;
+    const confluence = await getConfluence(symbol);
+    let regime = 'UNKNOWN';
+    if (confluence) {
+      regime = confluence.bias ?? 'UNKNOWN';
+      if ((confluence.bias === 'BULLISH' && signal === 'BUY') || (confluence.bias === 'BEARISH' && signal === 'SELL')) {
+        confidence = Math.min(1, confidence + 0.05);
+      } else if ((confluence.bias === 'BULLISH' && signal === 'SELL') || (confluence.bias === 'BEARISH' && signal === 'BUY')) {
+        confidence = Math.max(0, confidence - 0.10);
+      }
+    }
+
+    return {
+      signal,
+      confidence,
+      strategy: `aic_${sig.setup_name ?? 'signal'}`,
+      regime,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ── AI-Calibrated Signal (mined rules) ───────────────────
+
+async function fetchMineRulesForSymbol(symbol: string): Promise<MinedRule[]> {
+  try {
+    const report = await redisGet<any>(`nexus:analytic:report:${symbol}`);
+    return Array.isArray(report?.topRules) ? report.topRules : [];
+  } catch { return []; }
+}
+
+/**
+ * Try to generate signal from mined rules configured in the bot.
+ * Returns a signal only if the rule conditions are currently met.
+ */
+function tryMineRuleSignal(
+  conditions: string[],
+  allRules: MinedRule[],
+  candles: OHLCV[],
+  indicators: ReturnType<typeof computeIndicators>,
+  barIndex: number,
+): { signal: 'BUY' | 'SELL' | 'NEUTRAL'; confidence: number } | null {
+  // Find the rule that matches these conditions
+  const rule = allRules.find(r =>
+    r.conditions.length === conditions.length &&
+    r.conditions.every((c, i) => c === conditions[i]),
+  );
+  if (!rule) return null;
+
+  const result = evaluateMineRule(rule, candles, indicators, barIndex);
+  if (result.match) {
+    return { signal: result.direction, confidence: result.confidence };
+  }
+  return null;
+}
+
 // ── Per-Bot Tick ──────────────────────────────────────────
 
 async function tickBot(botId: string) {
@@ -151,13 +244,98 @@ async function tickBot(botId: string) {
         const lastIdx = candles.length - 1;
         const price = candles[lastIdx].close;
 
+        // ── AIC-first signal (crypto only) ──
+        const aicSig = await tryAICSignal(symbol);
+
         let bestSignal: ReturnType<typeof generateSignal> | null = null;
         let bestConf = -1;
-        for (const stratKey of rt.config.strategies as StrategyKey[]) {
-          const sig = generateSignal(candles, indicators, lastIdx, stratKey);
-          if (sig.confidence > bestConf) { bestConf = sig.confidence; bestSignal = sig; }
+
+        if (aicSig && aicSig.signal !== 'NEUTRAL' && aicSig.confidence >= 0.5) {
+          // Use AIC signal as primary source
+          const strengthMap: Record<string, import('@/types').SignalStrength> = {
+            BUY: aicSig.confidence >= 0.8 ? 'strong_buy' : 'buy',
+            SELL: aicSig.confidence >= 0.8 ? 'strong_sell' : 'sell',
+            NEUTRAL: 'neutral',
+          };
+          bestSignal = {
+            signal: aicSig.signal,
+            strength: strengthMap[aicSig.signal] ?? 'neutral',
+            confidence: aicSig.confidence,
+            strategy: aicSig.strategy as StrategyKey,
+            indicators: {},
+            patterns: [],
+            regime: 'NORMAL' as Regime,
+            timestamp: now,
+          };
+          bestConf = aicSig.confidence;
+          console.log(`  🤖 [${rt.config.name}] AIC signal: ${aicSig.signal} ${symbol} conf=${(aicSig.confidence * 100).toFixed(0)}% strategy=${aicSig.strategy}`);
+        } else if (rt.config.usesMineRules && rt.config.mineRuleConditions?.length) {
+          // Phase 4.6: Use specific mined rule conditions from AI backtest
+          const allRules = await fetchMineRulesForSymbol(symbol);
+          const mineSig = tryMineRuleSignal(rt.config.mineRuleConditions, allRules, candles, indicators, lastIdx);
+          if (mineSig && mineSig.signal !== 'NEUTRAL' && mineSig.confidence >= 0.5) {
+            const strengthMap: Record<string, import('@/types').SignalStrength> = {
+              BUY: mineSig.confidence >= 0.8 ? 'strong_buy' : 'buy',
+              SELL: mineSig.confidence >= 0.8 ? 'strong_sell' : 'sell',
+              NEUTRAL: 'neutral',
+            };
+            bestSignal = {
+              signal: mineSig.signal,
+              strength: strengthMap[mineSig.signal] ?? 'neutral',
+              confidence: mineSig.confidence,
+              strategy: 'combined_ai' as StrategyKey,
+              indicators: {},
+              patterns: [],
+              regime: 'NORMAL' as Regime,
+              timestamp: now,
+            };
+            bestConf = mineSig.confidence;
+            console.log(`  🎯 [${rt.config.name}] Mine rule signal: ${mineSig.signal} ${symbol} conf=${(mineSig.confidence * 100).toFixed(0)}% [${rt.config.mineRuleConditions.join(' + ')}]`);
+          } else {
+            // Mine rule not triggered — skip (don't fallback to generic strategies)
+            continue;
+          }
+        } else {
+          // Fallback to TS strategies
+          for (const stratKey of rt.config.strategies as StrategyKey[]) {
+            const sig = generateSignal(candles, indicators, lastIdx, stratKey);
+            if (sig.confidence > bestConf) { bestConf = sig.confidence; bestSignal = sig; }
+          }
         }
         if (!bestSignal) continue;
+
+        // ── Live Context enrichment ──
+        const liveCtx = await fetchLiveContext(symbol);
+        if (liveCtx && !aicSig) {
+          // Block entry signals against current regime
+          if (liveCtx.regime === 'DISTRIBUTION' && bestSignal.signal === 'BUY') {
+            bestSignal = { ...bestSignal, confidence: Math.max(0, bestSignal.confidence - 0.15) };
+          }
+          if (liveCtx.regime === 'ACCUMULATION' && bestSignal.signal === 'SELL') {
+            bestSignal = { ...bestSignal, confidence: Math.max(0, bestSignal.confidence - 0.15) };
+          }
+          // Boost if near strong zone with matching direction
+          if (liveCtx.nearestZones?.length) {
+            const nearZone = liveCtx.nearestZones[0];
+            if (Math.abs(nearZone.distancePct) < 0.02 && nearZone.pBounce > 0.7) {
+              if (nearZone.type === 'support' && bestSignal.signal === 'BUY') {
+                bestSignal = { ...bestSignal, confidence: Math.min(1, bestSignal.confidence + 0.05) };
+              }
+              if (nearZone.type === 'resistance' && bestSignal.signal === 'SELL') {
+                bestSignal = { ...bestSignal, confidence: Math.min(1, bestSignal.confidence + 0.05) };
+              }
+            }
+          }
+          // Override regime for logging (cast to Regime type, default NORMAL)
+          if (liveCtx.regime) {
+            const regimeMap: Record<string, Regime> = {
+              BULL: 'BULL_TREND', BEAR: 'BEAR_TREND', BULL_TREND: 'BULL_TREND',
+              BEAR_TREND: 'BEAR_TREND', HIGH_VOL: 'HIGH_VOL', LOW_VOL: 'LOW_VOL',
+              SIDEWAYS: 'SIDEWAYS', CHOP: 'SIDEWAYS', NORMAL: 'NORMAL',
+            };
+            bestSignal = { ...bestSignal, regime: regimeMap[liveCtx.regime] ?? 'NORMAL' };
+          }
+        }
 
         // ── Deep Mapping consultation ──
         // Build current context from already-computed indicators (no recompute)
@@ -345,13 +523,31 @@ async function tickBot(botId: string) {
 
             if (sizing.quantity > 0 && sizing.capitalUsed < cash * 0.95 && rt.positions.length < maxPosByMode) {
               const orderQty = parseFloat(sizing.quantity.toFixed(isCrypto(symbol) ? 6 : 0));
-              // Override TP/SL with Bollinger calibrated values if available
-              const slDist = bollingerOverride ? price * bollingerOverride.slDistPct : sizing.stopDist;
-              const tpDist = bollingerOverride ? price * bollingerOverride.tpDistPct : sizing.tpDist;
+
+              // TP/SL priority: backtest-calibrated > Bollinger > ATR default
+              let slDist: number;
+              let tpDist: number;
+              let tpslSource: string;
+
+              if (rt.config.calibratedSlPct && rt.config.calibratedTpPct) {
+                // Phase 4.6: use AI backtest-calibrated TP/SL from historical analysis
+                slDist = price * (rt.config.calibratedSlPct / 100);
+                tpDist = price * (rt.config.calibratedTpPct / 100);
+                tpslSource = `AI-calibrated TP=${rt.config.calibratedTpPct.toFixed(2)}% SL=${rt.config.calibratedSlPct.toFixed(2)}%`;
+              } else if (bollingerOverride) {
+                slDist = price * bollingerOverride.slDistPct;
+                tpDist = price * bollingerOverride.tpDistPct;
+                tpslSource = `BB-calibrated TP=${(bollingerOverride.tpDistPct*100).toFixed(2)}% SL=${(bollingerOverride.slDistPct*100).toFixed(2)}%`;
+              } else {
+                slDist = sizing.stopDist;
+                tpDist = sizing.tpDist;
+                tpslSource = `ATR TP=${capRules.takeProfitATR}xATR SL=${capRules.stopLossATR}xATR`;
+              }
+
               const stopLoss = side === 'LONG' ? price - slDist : price + slDist;
               const takeProfit = side === 'LONG' ? price + tpDist : price - tpDist;
 
-              console.log(`  📥 ENTER ${side} ${symbol} @ $${price.toFixed(2)} | ${bollingerOverride ? `BB-calibrated TP=${(bollingerOverride.tpDistPct*100).toFixed(2)}% SL=${(bollingerOverride.slDistPct*100).toFixed(2)}%` : `ATR TP=${capRules.takeProfitATR}xATR SL=${capRules.stopLossATR}xATR`}`);
+              console.log(`  📥 ENTER ${side} ${symbol} @ $${price.toFixed(2)} | ${tpslSource}`);
 
               try {
                 const order = await broker.placeOrder({ symbol, side, type: 'market', quantity: orderQty });

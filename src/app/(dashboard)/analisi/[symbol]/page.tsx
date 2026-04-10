@@ -11,7 +11,7 @@ import type {
   NewsDigest,
   MacroEvent,
 } from '@/lib/analytics/types';
-import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
@@ -38,6 +38,8 @@ export default function AssetDetailPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [explainMode, toggleExplain] = useExplainMode();
+  const [creatingBot, setCreatingBot] = useState(false);
+  const [botCreated, setBotCreated] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}`);
@@ -138,6 +140,94 @@ export default function AssetDetailPage() {
     }
   }
 
+  async function createBotFromAnalysis() {
+    if (!report) return;
+    setCreatingBot(true);
+    setBotCreated(null);
+    try {
+      // Phase 4.6: Use backtest summary if available (best ranked strategy)
+      const rankings = report.backtestSummary?.rankings ?? [];
+      const bestBacktest = rankings[0]; // top ranked from full backtest
+
+      let botConfig: Record<string, any>;
+
+      if (bestBacktest && bestBacktest.totalTrades >= 10) {
+        // Use AI-calibrated config from full backtester
+        const tfModeMap: Record<string, string> = { '5m': 'scalp', '15m': 'scalp', '1h': 'intraday', '4h': 'daily' };
+        const operationMode = tfModeMap[bestBacktest.timeframe] ?? 'intraday';
+
+        botConfig = {
+          name: `AI ${symbol} ${bestBacktest.strategyName.slice(0, 20)}`,
+          environment: 'real',
+          capitalPercent: 15,
+          assets: [symbol],
+          strategies: bestBacktest.isMineRule ? ['combined_ai'] : [bestBacktest.strategyId],
+          riskLevel: 5,
+          stopLossPercent: bestBacktest.avgSlDistancePct,
+          takeProfitPercent: bestBacktest.avgTpDistancePct,
+          useTrailingStop: true,
+          maxOpenPositions: 2,
+          maxDDDaily: 3,
+          maxDDWeekly: 8,
+          maxDDTotal: 15,
+          operationMode,
+          // AI-calibrated fields
+          backtestStrategyId: bestBacktest.strategyId,
+          backtestTimeframe: bestBacktest.timeframe,
+          calibratedTpPct: bestBacktest.avgTpDistancePct,
+          calibratedSlPct: bestBacktest.avgSlDistancePct,
+          entryTimeoutBars: bestBacktest.optimalEntryTimeout,
+          usesMineRules: bestBacktest.isMineRule,
+          mineRuleConditions: bestBacktest.conditions,
+        };
+      } else {
+        // Fallback to legacy strategy fit
+        const fits = (report.strategyFit ?? [])
+          .filter(f => f.totalTrades >= 10 && f.profitFactor > 1)
+          .sort((a, b) => {
+            const wA = Math.min(1, a.totalTrades / 30) * a.profitFactor;
+            const wB = Math.min(1, b.totalTrades / 30) * b.profitFactor;
+            return wB - wA;
+          });
+        const bestStrategies = fits.length > 0
+          ? [...new Set(fits.slice(0, 2).map(f => f.strategyName))]
+          : ['combined_ai'];
+        const modeMap: Record<string, string> = { scalp: 'scalp', intraday: 'intraday', daily: 'daily', swing: 'daily' };
+        const operationMode = modeMap[report.recommendedOperationMode] ?? 'intraday';
+        const vol1d = report.globalStats?.volatility?.['1d'] ?? 0;
+        const riskLevel = vol1d > 0.04 ? 3 : vol1d > 0.02 ? 5 : vol1d > 0.01 ? 6 : 7;
+
+        botConfig = {
+          name: `AI ${symbol} ${bestStrategies[0]}`,
+          environment: 'real',
+          capitalPercent: 15,
+          assets: [symbol],
+          strategies: bestStrategies,
+          riskLevel,
+          stopLossPercent: 2,
+          takeProfitPercent: 4,
+          useTrailingStop: true,
+          maxOpenPositions: 2,
+          maxDDDaily: 3,
+          maxDDWeekly: 8,
+          maxDDTotal: 15,
+          operationMode,
+        };
+      }
+
+      const res = await fetch('/api/bot/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(botConfig),
+      });
+      if (res.ok) {
+        const d = await res.json();
+        setBotCreated(d.botId ?? 'ok');
+      }
+    } catch {}
+    setCreatingBot(false);
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -194,7 +284,26 @@ export default function AssetDetailPage() {
               </p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            {isReady && report && (
+              botCreated ? (
+                <a
+                  href="/bot"
+                  className="flex items-center gap-2 rounded-lg bg-green-500/15 px-3 py-2 text-[11px] font-semibold text-green-400 hover:bg-green-500/25"
+                >
+                  <Bot size={12} /> Bot creato — Vai al Manager
+                </a>
+              ) : (
+                <button
+                  onClick={createBotFromAnalysis}
+                  disabled={creatingBot}
+                  className="flex items-center gap-2 rounded-lg bg-accent/15 px-3 py-2 text-[11px] font-semibold text-accent hover:bg-accent/25 disabled:opacity-50"
+                  title="Crea un bot pre-configurato con le migliori strategie trovate dall'AI"
+                >
+                  {creatingBot ? <Loader2 size={12} className="animate-spin" /> : <Bot size={12} />} Crea Bot da Analisi
+                </button>
+              )
+            )}
             <button
               onClick={toggleExplain}
               className={`flex items-center gap-2 rounded-lg px-3 py-2 text-[11px] font-semibold transition-all ${
@@ -606,6 +715,61 @@ function ReportView({
           </div>
         )}
       </div>
+
+      {/* Phase 4.6: Full Backtest Results */}
+      {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
+        <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5">
+          <h2 className="mb-1 text-sm font-semibold text-blue-300">Full Backtest — Classifica Strategie</h2>
+          <p className="mb-3 text-[10px] text-n-dim">
+            {report.backtestSummary.totalStrategiesTested} combo strategia-TF testate ·{' '}
+            {report.backtestSummary.totalTradesSimulated.toLocaleString()} trade simulati ·{' '}
+            ${(report.backtestSummary.initialCapital / 1000).toFixed(0)}k capitale · ${report.backtestSummary.tradeSize}/trade
+          </p>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-2 py-1.5">#</th>
+                  <th className="px-2 py-1.5">Strategia</th>
+                  <th className="px-2 py-1.5">TF</th>
+                  <th className="px-2 py-1.5">Trades</th>
+                  <th className="px-2 py-1.5">WR</th>
+                  <th className="px-2 py-1.5">PF</th>
+                  <th className="px-2 py-1.5">P&L %</th>
+                  <th className="px-2 py-1.5">Max DD</th>
+                  <th className="px-2 py-1.5">Sharpe</th>
+                  <th className="px-2 py-1.5">TP hit</th>
+                  <th className="px-2 py-1.5">SL hit</th>
+                  <th className="px-2 py-1.5">Avg hold</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {report.backtestSummary.rankings.slice(0, 10).map((r) => (
+                  <tr key={`${r.strategyId}-${r.timeframe}`} className="border-t border-n-border">
+                    <td className="px-2 py-1.5 font-mono">{r.rank}</td>
+                    <td className="px-2 py-1.5">
+                      {r.strategyName.length > 30 ? r.strategyName.slice(0, 30) + '...' : r.strategyName}
+                      {r.isMineRule && <span className="ml-1 rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI RULE</span>}
+                    </td>
+                    <td className="px-2 py-1.5 font-mono">{r.timeframe}</td>
+                    <td className="px-2 py-1.5">{r.totalTrades}</td>
+                    <td className="px-2 py-1.5">{r.winRate}%</td>
+                    <td className="px-2 py-1.5">{r.profitFactor}</td>
+                    <td className={`px-2 py-1.5 font-mono font-bold ${r.netProfitPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {r.netProfitPct >= 0 ? '+' : ''}{r.netProfitPct}%
+                    </td>
+                    <td className="px-2 py-1.5 text-red-300">{r.maxDrawdownPct}%</td>
+                    <td className="px-2 py-1.5">{r.sharpe}</td>
+                    <td className="px-2 py-1.5 text-green-300">{r.tpHitRate}%</td>
+                    <td className="px-2 py-1.5 text-red-300">{r.slHitRate}%</td>
+                    <td className="px-2 py-1.5 text-n-dim">{r.avgHoldingHours}h</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Indicator reactivity */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
