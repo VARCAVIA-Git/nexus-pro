@@ -30,8 +30,8 @@ export async function GET() {
   let savedLiveSecret = '';
   try {
     const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys');
-    if (savedKeys?.liveKey) savedLiveKey = decrypt(savedKeys.liveKey);
-    if (savedKeys?.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret);
+    if (savedKeys?.liveKey) savedLiveKey = String(savedKeys.liveKey);
+    if (savedKeys?.liveSecret) savedLiveSecret = String(savedKeys.liveSecret);
   } catch (e: any) {
     console.warn('[broker-status] Redis/decrypt error:', e.message);
   }
