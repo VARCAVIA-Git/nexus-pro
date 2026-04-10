@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redisGet } from '@/lib/db/redis';
+import { getAlpacaKeys, alpacaFetch } from '@/lib/broker/alpaca-keys';
 
 const TWELVE_DATA_URL = 'https://api.twelvedata.com';
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3';
@@ -37,12 +38,11 @@ export async function GET() {
     if (keys && Array.isArray(keys)) selectedAssets = keys;
   } catch {}
 
-  // Split into crypto and stocks — always include defaults if selection is empty
+  // Split into crypto and stocks — respect user selection exactly
   const allCrypto = Object.keys(COIN_ID_MAP);
-  const userCrypto = selectedAssets?.filter(a => allCrypto.includes(a)) ?? [];
-  const userStocks = selectedAssets?.filter(a => !allCrypto.includes(a)) ?? [];
-  const cryptoSymbols = userCrypto.length > 0 ? userCrypto : DEFAULT_CRYPTO;
-  const stockSymbols = userStocks.length > 0 ? userStocks : DEFAULT_STOCKS;
+  const hasSelection = selectedAssets && selectedAssets.length > 0;
+  const cryptoSymbols = hasSelection ? selectedAssets.filter(a => allCrypto.includes(a)) : DEFAULT_CRYPTO;
+  const stockSymbols = hasSelection ? selectedAssets.filter(a => !allCrypto.includes(a)) : DEFAULT_STOCKS;
 
   // ── Fetch crypto from CoinGecko ──
   try {
@@ -98,6 +98,27 @@ export async function GET() {
     } catch (err) {
       console.error('Twelve Data fetch error:', err);
     }
+  }
+
+  // ── Fallback: fetch missing stocks from Alpaca (works when market closed) ──
+  const fetchedStockSymbols = new Set(results.filter(r => r.type === 'stock').map(r => r.symbol));
+  const missingStocks = stockSymbols.filter(s => !fetchedStockSymbols.has(s));
+  if (missingStocks.length > 0) {
+    try {
+      const keys = await getAlpacaKeys();
+      if (keys) {
+        for (const sym of missingStocks.slice(0, 10)) {
+          const snap = await alpacaFetch<any>(`/v2/stocks/${sym}/snapshot`, keys);
+          if (snap?.latestTrade?.p) {
+            const price = snap.latestTrade.p;
+            const prevClose = snap.prevDailyBar?.c ?? price;
+            const change = price - prevClose;
+            const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+            results.push({ symbol: sym, price, change24h: change, changePct24h: changePct, type: 'stock' });
+          }
+        }
+      }
+    } catch {}
   }
 
   return NextResponse.json({
