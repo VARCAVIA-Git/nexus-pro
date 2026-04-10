@@ -294,47 +294,47 @@ export default function ImpostazioniPage() {
           </div>
         </Section>
 
-        {/* Broker: Alpaca Paper */}
-        <Section title="Broker — Paper Trading" icon={Key}>
-          <div className="space-y-3">
-            {brokerStatus?.paper.connected && (
-              <div className="flex items-center gap-2 rounded-lg bg-green-500/10 p-2.5">
-                <span className="h-2 w-2 rounded-full bg-green-400" />
-                <span className="text-[10px] font-semibold text-green-400">Connesso — Equity: ${brokerStatus.paper.equity?.toLocaleString('en-US') ?? '—'}</span>
+        {/* Broker: Alpaca — single section with both environments */}
+        <Section title="Broker Alpaca" icon={Key}>
+          <div className="space-y-4">
+            {/* Paper (active) */}
+            <div className="rounded-lg bg-n-bg/60 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-n-text">Ambiente Simulato (Paper)</p>
+                {brokerStatus?.paper.connected && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-green-400" />
+                    <span className="text-[10px] font-semibold text-green-400">${brokerStatus.paper.equity?.toLocaleString('en-US') ?? '—'}</span>
+                  </div>
+                )}
               </div>
-            )}
-            <InputField label="Paper API Key" value={alpacaKey} onChange={setAlpacaKey} placeholder="PK..." />
-            <InputField label="Paper Secret" value={alpacaSecret} onChange={setAlpacaSecret} type="password" placeholder="Secret Key" />
-            <p className="text-[9px] text-n-dim">paper-api.alpaca.markets — usato per /demo/*</p>
-          </div>
-        </Section>
-
-        {/* Broker: Alpaca Live */}
-        <Section title="Broker — Live Trading" icon={Key}>
-          <div className="space-y-3">
-            <div className="flex items-start gap-2 rounded-lg border border-red-500/30 bg-red-500/5 p-3">
-              <AlertTriangle size={14} className="text-red-400 mt-0.5 shrink-0" />
-              <p className="text-[10px] text-red-300/80">
-                Attenzione: il live trading usa fondi reali. Configura solo se sei pronto a operare con denaro vero.
-              </p>
+              <p className="text-[9px] text-n-dim">I bot operano qui con soldi virtuali. Nessun rischio reale.</p>
+              <InputField label="API Key" value={alpacaKey} onChange={setAlpacaKey} placeholder="PK..." />
+              <InputField label="Secret" value={alpacaSecret} onChange={setAlpacaSecret} type="password" placeholder="Secret Key" />
             </div>
 
-            {brokerStatus?.live.connected ? (
-              <div className="flex items-center gap-2 rounded-lg bg-blue-500/10 p-2.5">
-                <span className="h-2 w-2 rounded-full bg-blue-400" />
-                <span className="text-[10px] font-semibold text-blue-400">Connesso — Equity: ${brokerStatus.live.equity?.toLocaleString('en-US') ?? '—'}</span>
+            {/* Live (optional) */}
+            <div className="rounded-lg border border-red-500/20 bg-red-500/5 p-3 space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-[11px] font-semibold text-n-text">Fondi Reali (Live)</p>
+                {brokerStatus?.live.connected ? (
+                  <div className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-full bg-blue-400" />
+                    <span className="text-[10px] font-semibold text-blue-400">${brokerStatus.live.equity?.toLocaleString('en-US') ?? '—'}</span>
+                  </div>
+                ) : (
+                  <span className="text-[9px] text-n-dim">Non attivo</span>
+                )}
               </div>
-            ) : (
-              <div className="flex items-center gap-2 rounded-lg bg-n-bg/60 p-2.5">
-                <span className="h-2 w-2 rounded-full bg-n-dim" />
-                <span className="text-[10px] text-n-dim">{brokerStatus?.live.error ?? 'Non configurato'}</span>
+              <div className="flex items-start gap-2">
+                <AlertTriangle size={12} className="text-red-400 mt-0.5 shrink-0" />
+                <p className="text-[9px] text-red-300/80">Configura solo quando sei pronto a rischiare capitale reale.</p>
               </div>
-            )}
-
-            <InputField label="Live API Key" value={alpacaLiveKey} onChange={setAlpacaLiveKey} placeholder="AK..." />
-            <InputField label="Live Secret" value={alpacaLiveSecret} onChange={setAlpacaLiveSecret} type="password" placeholder="Secret Key" />
-            <Toggle label="Abilita Live Trading" description="Permette al bot di operare con fondi reali su /real/*" checked={liveEnabled} onChange={setLiveEnabled} />
-            <p className="text-[9px] text-n-dim">api.alpaca.markets — usato per /real/* | <a href="https://app.alpaca.markets" target="_blank" rel="noopener" className="text-blue-400 hover:underline">Gestisci fondi su Alpaca</a></p>
+              <InputField label="API Key" value={alpacaLiveKey} onChange={setAlpacaLiveKey} placeholder="AK..." />
+              <InputField label="Secret" value={alpacaLiveSecret} onChange={setAlpacaLiveSecret} type="password" placeholder="Secret Key" />
+              <Toggle label="Abilita Fondi Reali" description="I bot opereranno con denaro vero" checked={liveEnabled} onChange={setLiveEnabled} />
+              <p className="text-[9px] text-n-dim"><a href="https://app.alpaca.markets" target="_blank" rel="noopener" className="text-blue-400 hover:underline">Gestisci fondi su Alpaca</a></p>
+            </div>
           </div>
         </Section>
 
