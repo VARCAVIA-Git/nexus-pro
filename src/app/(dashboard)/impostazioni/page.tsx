@@ -45,8 +45,8 @@ function Toggle({ label, description, checked, onChange }: {
 // ── Ticker Settings (standalone save) ────────────────────────
 
 const ALL_TICKER = {
-  crypto: ['BTC', 'ETH', 'SOL', 'LINK', 'ADA', 'DOT', 'AVAX', 'MATIC', 'DOGE', 'XRP'],
-  stocks: ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD'],
+  crypto: ['BTC', 'ETH', 'SOL', 'LINK', 'ADA', 'DOT', 'AVAX', 'MATIC', 'DOGE', 'XRP', 'ATOM', 'UNI', 'AAVE', 'APT', 'ARB', 'OP', 'FIL', 'LTC', 'NEAR', 'INJ'],
+  stocks: ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD', 'NFLX', 'CRM', 'COIN', 'SQ', 'PLTR', 'UBER', 'ABNB', 'SNOW', 'MSTR', 'RIOT'],
 };
 
 function TickerSettings() {
@@ -63,7 +63,11 @@ function TickerSettings() {
   const toggle = (a: string) => { const s = new Set(selected); if (s.has(a)) s.delete(a); else s.add(a); setSelected(s); };
   const save = async () => {
     setSaving(true);
-    await fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets: Array.from(selected) }) }).catch(() => {});
+    const assets = Array.from(selected);
+    await Promise.all([
+      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets }) }),
+      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker_global', assets }) }),
+    ]).catch(() => {});
     setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
   };
 

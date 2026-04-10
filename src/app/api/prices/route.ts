@@ -1,14 +1,18 @@
 import { NextResponse } from 'next/server';
+import { redisGet } from '@/lib/db/redis';
 
 const TWELVE_DATA_URL = 'https://api.twelvedata.com';
 const COINGECKO_URL = 'https://api.coingecko.com/api/v3';
 
-const CRYPTO_SYMBOLS = ['BTC/USD', 'ETH/USD', 'SOL/USD', 'AVAX/USD', 'LINK/USD', 'DOT/USD'];
-const STOCK_SYMBOLS = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'AMZN', 'META'];
+const DEFAULT_CRYPTO = ['BTC', 'ETH', 'SOL', 'AVAX', 'LINK', 'DOT'];
+const DEFAULT_STOCKS = ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'AMZN', 'META'];
 
 const COIN_ID_MAP: Record<string, string> = {
-  'BTC/USD': 'bitcoin', 'ETH/USD': 'ethereum', 'SOL/USD': 'solana',
-  'AVAX/USD': 'avalanche-2', 'LINK/USD': 'chainlink', 'DOT/USD': 'polkadot',
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana',
+  AVAX: 'avalanche-2', LINK: 'chainlink', DOT: 'polkadot',
+  ADA: 'cardano', MATIC: 'matic-network', DOGE: 'dogecoin', XRP: 'ripple',
+  ATOM: 'cosmos', UNI: 'uniswap', AAVE: 'aave', APT: 'aptos', ARB: 'arbitrum',
+  OP: 'optimism', FIL: 'filecoin', LTC: 'litecoin', NEAR: 'near', INJ: 'injective-protocol',
 };
 
 export interface PriceData {
@@ -25,27 +29,45 @@ export const revalidate = 0;
 export async function GET() {
   const results: PriceData[] = [];
 
+  // Load user's ticker selection (any userId — we use global key for now)
+  let selectedAssets: string[] | null = null;
+  try {
+    // Try to find any user's ticker config
+    const keys = await redisGet<string[]>('nexus:global:ticker_assets');
+    if (keys && Array.isArray(keys)) selectedAssets = keys;
+  } catch {}
+
+  // Split into crypto and stocks
+  const allCrypto = Object.keys(COIN_ID_MAP);
+  const cryptoSymbols = selectedAssets
+    ? selectedAssets.filter(a => allCrypto.includes(a))
+    : DEFAULT_CRYPTO;
+  const stockSymbols = selectedAssets
+    ? selectedAssets.filter(a => !allCrypto.includes(a))
+    : DEFAULT_STOCKS;
+
   // ── Fetch crypto from CoinGecko ──
   try {
-    const ids = CRYPTO_SYMBOLS.map((s) => COIN_ID_MAP[s]).filter(Boolean).join(',');
-    const cgRes = await fetch(
-      `${COINGECKO_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-      { next: { revalidate: 30 } },
-    );
-
-    if (cgRes.ok) {
-      const data = await cgRes.json();
-      for (const symbol of CRYPTO_SYMBOLS) {
-        const id = COIN_ID_MAP[symbol];
-        const coin = data[id];
-        if (coin) {
-          results.push({
-            symbol,
-            price: coin.usd,
-            change24h: coin.usd * (coin.usd_24h_change / 100),
-            changePct24h: coin.usd_24h_change ?? 0,
-            type: 'crypto',
-          });
+    const ids = cryptoSymbols.map(s => COIN_ID_MAP[s]).filter(Boolean).join(',');
+    if (ids) {
+      const cgRes = await fetch(
+        `${COINGECKO_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
+        { next: { revalidate: 30 } },
+      );
+      if (cgRes.ok) {
+        const data = await cgRes.json();
+        for (const symbol of cryptoSymbols) {
+          const id = COIN_ID_MAP[symbol];
+          const coin = data[id];
+          if (coin) {
+            results.push({
+              symbol: `${symbol}/USD`,
+              price: coin.usd,
+              change24h: coin.usd * ((coin.usd_24h_change ?? 0) / 100),
+              changePct24h: coin.usd_24h_change ?? 0,
+              type: 'crypto',
+            });
+          }
         }
       }
     }
@@ -55,14 +77,13 @@ export async function GET() {
 
   // ── Fetch stocks from Twelve Data ──
   const tdKey = process.env.TWELVE_DATA_API_KEY;
-  if (tdKey) {
+  if (tdKey && stockSymbols.length > 0) {
     try {
-      const joined = STOCK_SYMBOLS.join(',');
+      const joined = stockSymbols.join(',');
       const tdRes = await fetch(
         `${TWELVE_DATA_URL}/quote?symbol=${joined}&apikey=${tdKey}`,
         { next: { revalidate: 60 } },
       );
-
       if (tdRes.ok) {
         const raw = await tdRes.json();
         const items = Array.isArray(raw) ? raw : [raw];

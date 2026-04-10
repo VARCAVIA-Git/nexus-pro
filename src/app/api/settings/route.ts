@@ -52,6 +52,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
+  if (body.section === 'ticker_global') {
+    // Global ticker config readable by /api/prices without auth
+    await redisSet('nexus:global:ticker_assets', body.assets ?? []);
+    return NextResponse.json({ ok: true });
+  }
+
   if (body.section === 'broker') {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const current = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
