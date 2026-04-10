@@ -30,8 +30,8 @@ export async function GET() {
 
   let savedLiveKey = '';
   let savedLiveSecret = '';
-  try { if (savedKeys.liveKey) savedLiveKey = decrypt(savedKeys.liveKey); } catch {}
-  try { if (savedKeys.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret); } catch {}
+  try { if (savedKeys.liveKey) savedLiveKey = decrypt(savedKeys.liveKey); } catch (e: any) { console.warn('[broker-status] decrypt liveKey failed:', e.message); }
+  try { if (savedKeys.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret); } catch (e: any) { console.warn('[broker-status] decrypt liveSecret failed:', e.message); }
 
   const paperKey = process.env.ALPACA_API_KEY || '';
   const paperSecret = process.env.ALPACA_API_SECRET || '';
