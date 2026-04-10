@@ -100,25 +100,31 @@ export async function GET() {
     }
   }
 
-  // ── Fallback: fetch missing stocks from Alpaca (works when market closed) ──
+  // ── Fallback: fetch missing stocks from Alpaca Data API (works when market closed) ──
   const fetchedStockSymbols = new Set(results.filter(r => r.type === 'stock').map(r => r.symbol));
   const missingStocks = stockSymbols.filter(s => !fetchedStockSymbols.has(s));
   if (missingStocks.length > 0) {
-    try {
-      const keys = await getAlpacaKeys();
-      if (keys) {
-        for (const sym of missingStocks.slice(0, 10)) {
-          const snap = await alpacaFetch<any>(`/v2/stocks/${sym}/snapshot`, keys);
-          if (snap?.latestTrade?.p) {
-            const price = snap.latestTrade.p;
-            const prevClose = snap.prevDailyBar?.c ?? price;
-            const change = price - prevClose;
-            const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
-            results.push({ symbol: sym, price, change24h: change, changePct24h: changePct, type: 'stock' });
+    const alpacaKey = process.env.ALPACA_API_KEY ?? '';
+    const alpacaSecret = process.env.ALPACA_API_SECRET ?? '';
+    if (alpacaKey) {
+      for (const sym of missingStocks.slice(0, 15)) {
+        try {
+          const res = await fetch(`https://data.alpaca.markets/v2/stocks/${sym}/snapshot`, {
+            headers: { 'APCA-API-KEY-ID': alpacaKey, 'APCA-API-SECRET-KEY': alpacaSecret },
+          });
+          if (res.ok) {
+            const snap = await res.json();
+            if (snap?.latestTrade?.p) {
+              const price = snap.latestTrade.p;
+              const prevClose = snap.prevDailyBar?.c ?? price;
+              const change = price - prevClose;
+              const changePct = prevClose > 0 ? (change / prevClose) * 100 : 0;
+              results.push({ symbol: sym, price, change24h: change, changePct24h: changePct, type: 'stock' });
+            }
           }
-        }
+        } catch {}
       }
-    } catch {}
+    }
   }
 
   return NextResponse.json({
