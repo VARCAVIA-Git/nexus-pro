@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { ASSETS, STRATEGIES, calculateRiskParams, type AssetConfig, type StrategyConfig } from '@/lib/config/assets';
 import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
 import type { MultiBotConfig } from '@/types/bot';
@@ -20,7 +21,16 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
   );
 }
 
-export default function StrategyPage() {
+export default function BotPageWrapper() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center py-20"><RefreshCw size={24} className="animate-spin text-n-dim" /></div>}>
+      <StrategyPage />
+    </Suspense>
+  );
+}
+
+function StrategyPage() {
+  const searchParams = useSearchParams();
   const [allBots, setAllBots] = useState<MultiBotConfig[]>([]);
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [accountEquity, setAccountEquity] = useState(0);
@@ -55,6 +65,42 @@ export default function StrategyPage() {
 
   const riskParams = calculateRiskParams(formRisk);
   const riskLabels = ['', 'Ultra Safe', 'Very Low', 'Low', 'Moderate-Low', 'Moderate', 'Moderate-High', 'High', 'Very High', 'Aggressive', 'Max Risk'];
+
+  // Auto-open form with pre-selected strategy from URL (coming from analisi page)
+  useEffect(() => {
+    const urlSymbol = searchParams.get('symbol');
+    const urlStrategy = searchParams.get('strategy');
+    const urlTf = searchParams.get('tf');
+    if (urlSymbol && urlStrategy && urlTf) {
+      setShowCreate(true);
+      setCreateMode('ai');
+      setRankingsSymbol(urlSymbol);
+      // Build pre-selected ranking from URL params
+      const preSelected: BacktestStrategySummary = {
+        rank: 1,
+        strategyId: urlStrategy,
+        strategyName: searchParams.get('strategyName') ?? urlStrategy,
+        timeframe: urlTf,
+        isMineRule: searchParams.get('isMine') === '1',
+        conditions: searchParams.get('conditions')?.split(',').filter(Boolean),
+        totalTrades: 0,
+        winRate: parseFloat(searchParams.get('wr') ?? '0'),
+        profitFactor: parseFloat(searchParams.get('pf') ?? '0'),
+        netProfitPct: 0,
+        maxDrawdownPct: 0,
+        sharpe: 0,
+        avgTpDistancePct: parseFloat(searchParams.get('tp') ?? '0'),
+        avgSlDistancePct: parseFloat(searchParams.get('sl') ?? '0'),
+        tpHitRate: 0,
+        slHitRate: 0,
+        avgHoldingHours: 0,
+        optimalEntryTimeout: parseInt(searchParams.get('timeout') ?? '12'),
+      };
+      setSelectedRanking(preSelected);
+      // Also load the full rankings in background
+      loadRankings(urlSymbol);
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const fetchStatus = useCallback(async () => {
     try {

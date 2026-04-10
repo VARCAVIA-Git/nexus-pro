@@ -11,7 +11,7 @@ import type {
   NewsDigest,
   MacroEvent,
 } from '@/lib/analytics/types';
-import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot, Rocket } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
@@ -725,10 +725,25 @@ function ReportView({
                   <th className="px-2 py-1.5">TP ok</th>
                   <th className="px-2 py-1.5">SL ok</th>
                   <th className="px-2 py-1.5">Durata</th>
+                  <th className="px-2 py-1.5"></th>
                 </tr>
               </thead>
               <tbody className="text-n-text">
-                {report.backtestSummary.rankings.slice(0, 10).map((r) => (
+                {report.backtestSummary.rankings.slice(0, 10).map((r) => {
+                  const botParams = new URLSearchParams({
+                    symbol,
+                    strategy: r.strategyId,
+                    strategyName: r.strategyName,
+                    tf: r.timeframe,
+                    tp: String(r.avgTpDistancePct || ''),
+                    sl: String(r.avgSlDistancePct || ''),
+                    timeout: String(r.optimalEntryTimeout || ''),
+                    isMine: r.isMineRule ? '1' : '',
+                    conditions: r.conditions?.join(',') ?? '',
+                    wr: String(r.winRate),
+                    pf: String(r.profitFactor),
+                  });
+                  return (
                   <tr key={`${r.strategyId}-${r.timeframe}`} className="border-t border-n-border">
                     <td className="px-2 py-1.5 font-mono">{r.rank}</td>
                     <td className="px-2 py-1.5">
@@ -747,8 +762,17 @@ function ReportView({
                     <td className="px-2 py-1.5 text-green-300">{r.tpHitRate}%</td>
                     <td className="px-2 py-1.5 text-red-300">{r.slHitRate}%</td>
                     <td className="px-2 py-1.5 text-n-dim">{r.avgHoldingHours}h</td>
+                    <td className="px-2 py-1.5">
+                      <a
+                        href={`/bot?${botParams.toString()}`}
+                        className="flex items-center gap-1 rounded-lg bg-blue-500/15 px-2 py-1 text-[10px] font-bold text-blue-400 hover:bg-blue-500/25 transition-all whitespace-nowrap"
+                      >
+                        <Rocket size={10} /> Lancia Bot
+                      </a>
+                    </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
