@@ -39,7 +39,7 @@ export interface AnalyticReport {
   symbol: string;
   generatedAt: number;
   datasetCoverage: {
-    timeframes: Array<'15m' | '1h' | '4h' | '1d'>;
+    timeframes: Array<'5m' | '15m' | '1h' | '4h' | '1d'>;
     candleCounts: Record<string, number>;
     rangeStart: number;
     rangeEnd: number;

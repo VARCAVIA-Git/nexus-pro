@@ -8,7 +8,7 @@ import type { OHLCV } from '@/types';
 const ALPACA_DATA = 'https://data.alpaca.markets';
 
 const TF_MAP: Record<string, string> = {
-  '15m': '15Min', '1h': '1Hour', '4h': '4Hour', '1d': '1Day',
+  '5m': '5Min', '15m': '15Min', '1h': '1Hour', '4h': '4Hour', '1d': '1Day',
 };
 
 function isCrypto(asset: string): boolean { return asset.includes('/') || asset === 'BTC' || asset === 'ETH' || asset === 'SOL' || asset === 'AVAX' || asset === 'LINK' || asset === 'DOT'; }
@@ -93,6 +93,7 @@ async function downloadTimeframe(asset: string, tfKey: string, years = 4): Promi
 }
 
 export interface DeepHistory {
+  '5m'?: OHLCV[];
   '15m': OHLCV[];
   '1h': OHLCV[];
   '4h': OHLCV[];
@@ -100,12 +101,19 @@ export interface DeepHistory {
 }
 
 export async function downloadCompleteHistory(asset: string, onProgress?: (msg: string, pct: number) => void): Promise<DeepHistory> {
-  const tfs: (keyof DeepHistory)[] = ['15m', '1h', '4h', '1d'];
+  // Download 5 timeframes: 5m (1 year), 15m-1d (4 years)
+  const tfs: Array<{ key: keyof DeepHistory; years: number }> = [
+    { key: '5m', years: 1 },   // 5m: 1 year (~105k candles, capped later)
+    { key: '15m', years: 4 },
+    { key: '1h', years: 4 },
+    { key: '4h', years: 4 },
+    { key: '1d', years: 4 },
+  ];
   const result: any = {};
   let i = 0;
-  for (const tf of tfs) {
-    onProgress?.(`Downloading ${tf}...`, (i / tfs.length) * 100);
-    result[tf] = await downloadTimeframe(asset, tf, 4);
+  for (const { key, years } of tfs) {
+    onProgress?.(`Downloading ${key}...`, (i / tfs.length) * 100);
+    result[key] = await downloadTimeframe(asset, key, years);
     i++;
   }
   onProgress?.('Download complete', 100);

@@ -68,8 +68,8 @@ const PERSIST_CANDLES_PER_TF = 500; // tetto storage Redis
 const LIVE_BUFFER_MAX = 100;
 const OBSERVE_TIMEOUT_MS = 1500; // 200ms è troppo stretto per fetch reali — cap a 1.5s
 
-type Timeframe = '15m' | '1h' | '4h' | '1d';
-const TIMEFRAMES: Timeframe[] = ['15m', '1h', '4h', '1d'];
+type Timeframe = '5m' | '15m' | '1h' | '4h' | '1d';
+const TIMEFRAMES: Timeframe[] = ['5m', '15m', '1h', '4h', '1d'];
 
 // ── AssetAnalytic class ───────────────────────────────────
 
@@ -165,11 +165,18 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     throw new Error(`Download fallito: ${(e as Error).message}`);
   }
 
-  // Cap RAM: 5000 candele per timeframe
+  // Cap RAM: limits per timeframe based on data density
+  // 5m:  1 year = ~105k candles → cap 50000 (~6 months)
+  // 15m: 4 years = ~140k candles → cap 35000 (~1 year)
+  // 1h:  4 years = ~35k candles → cap 17500 (~2 years)
+  // 4h:  4 years = ~8700 candles → keep all
+  // 1d:  4 years = ~1460 candles → keep all
+  const TF_CAP: Record<string, number> = { '5m': 50000, '15m': 35000, '1h': 17500, '4h': 9000, '1d': 1500 };
   for (const tf of TIMEFRAMES) {
     const arr = history[tf];
-    if (Array.isArray(arr) && arr.length > 5000) {
-      history[tf] = arr.slice(-5000);
+    const cap = TF_CAP[tf] ?? 10000;
+    if (Array.isArray(arr) && arr.length > cap) {
+      history[tf] = arr.slice(-cap);
     }
   }
   const candleCounts: Record<string, number> = {};
@@ -218,6 +225,7 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
   try {
     await updateJobProgress(symbol, 'profiling', 86, 'Full backtest su tutte le strategie e TF…');
     const backtestHistory: Partial<Record<'5m' | '15m' | '1h' | '4h', typeof history['1h']>> = {
+      '5m': history['5m'],
       '15m': history['15m'],
       '1h': history['1h'],
       '4h': history['4h'],

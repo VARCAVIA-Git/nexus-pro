@@ -448,8 +448,17 @@ function ReportView({
   explainMode: boolean;
 }) {
   const tfCounts = report.datasetCoverage?.candleCounts ?? {};
-  const datasetSummary = ['15m', '1h', '4h', '1d']
-    .map((tf) => `${tfCounts[tf] ?? 0} ${tf}`)
+  // Show human-readable time spans
+  const tfToMonths: Record<string, (n: number) => string> = {
+    '5m': (n) => `${Math.round(n * 5 / 60 / 24 / 30)}m`,
+    '15m': (n) => `${Math.round(n * 15 / 60 / 24 / 30)}m`,
+    '1h': (n) => `${Math.round(n / 24 / 30)}m`,
+    '4h': (n) => `${Math.round(n * 4 / 24 / 30)}m`,
+    '1d': (n) => `${Math.round(n / 30)}m`,
+  };
+  const datasetSummary = ['5m', '15m', '1h', '4h', '1d']
+    .filter((tf) => (tfCounts[tf] ?? 0) > 0)
+    .map((tf) => `${tf}: ${tfCounts[tf]} candele (~${tfToMonths[tf]?.(tfCounts[tf]) ?? '?'} di storico)`)
     .join(' · ');
   const generated = new Date(report.generatedAt).toLocaleString();
 
