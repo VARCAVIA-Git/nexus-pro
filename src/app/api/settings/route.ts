@@ -17,12 +17,24 @@ export async function GET(request: Request) {
   const userId = await getUserId();
 
   if (section === 'ticker') {
-    // Ticker assets — works without auth (uses default if no user)
     if (userId) {
       const assets = await redisGet<string[]>(`nexus:${userId}:ticker_assets`);
       if (assets) return NextResponse.json({ assets });
     }
-    return NextResponse.json({ assets: null }); // null = use defaults
+    return NextResponse.json({ assets: null });
+  }
+
+  if (section === 'broker') {
+    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const keys = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
+    // Mask secrets: show only first 4 chars
+    return NextResponse.json({
+      paperKey: keys.paperKey ? keys.paperKey.slice(0, 4) + '...' : '',
+      liveKey: keys.liveKey ? keys.liveKey.slice(0, 4) + '...' : '',
+      hasPaperSecret: !!keys.paperSecret,
+      hasLiveSecret: !!keys.liveSecret,
+      liveEnabled: keys.liveEnabled ?? false,
+    });
   }
 
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
@@ -37,6 +49,31 @@ export async function POST(request: Request) {
   if (body.section === 'ticker') {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     await redisSet(`nexus:${userId}:ticker_assets`, body.assets ?? []);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.section === 'broker') {
+    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const current = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
+    const updated: Record<string, any> = { ...current };
+    if (body.paperKey) updated.paperKey = body.paperKey;
+    if (body.paperSecret) updated.paperSecret = body.paperSecret;
+    if (body.liveKey) updated.liveKey = body.liveKey;
+    if (body.liveSecret) updated.liveSecret = body.liveSecret;
+    if (body.liveEnabled !== undefined) updated.liveEnabled = body.liveEnabled;
+    updated.updatedAt = new Date().toISOString();
+    await redisSet('nexus:broker:keys', updated);
+    return NextResponse.json({ ok: true });
+  }
+
+  if (body.section === 'market_data') {
+    if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    const current = await redisGet<Record<string, any>>('nexus:market_data:keys') ?? {};
+    const updated: Record<string, any> = { ...current };
+    if (body.twelveDataKey) updated.twelveDataKey = body.twelveDataKey;
+    if (body.coinGeckoKey) updated.coinGeckoKey = body.coinGeckoKey;
+    updated.updatedAt = new Date().toISOString();
+    await redisSet('nexus:market_data:keys', updated);
     return NextResponse.json({ ok: true });
   }
 

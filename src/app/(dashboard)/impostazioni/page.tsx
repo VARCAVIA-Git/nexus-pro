@@ -226,16 +226,63 @@ export default function ImpostazioniPage() {
         if (d.settings.emailAlerts !== undefined) setEmailAlerts(d.settings.emailAlerts);
       }
     }).catch(() => {});
+    // Load saved broker keys (masked)
+    fetch('/api/settings?section=broker').then(r => r.ok ? r.json() : null).then(d => {
+      if (d) {
+        if (d.paperKey) setAlpacaKey(d.paperKey);
+        if (d.liveKey) setAlpacaLiveKey(d.liveKey);
+        if (d.liveEnabled !== undefined) setLiveEnabled(d.liveEnabled);
+      }
+    }).catch(() => {});
   }, []);
 
   const handleSave = async () => {
     setSaving(true);
+    const errors: string[] = [];
     try {
+      // 1. Save profile & notifications
       const res = await fetch('/api/settings', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: displayName, email, timezone, emailAlerts, tradeNotifications, signalNotifications }),
       });
-      setToast(res.ok ? { msg: 'Impostazioni salvate', ok: true } : { msg: 'Errore nel salvataggio', ok: false });
+      if (!res.ok) errors.push('profilo');
+
+      // 2. Save broker keys (only if user entered them)
+      if (alpacaKey || alpacaSecret || alpacaLiveKey || alpacaLiveSecret) {
+        const brokerRes = await fetch('/api/settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            section: 'broker',
+            paperKey: alpacaKey || undefined,
+            paperSecret: alpacaSecret || undefined,
+            liveKey: alpacaLiveKey || undefined,
+            liveSecret: alpacaLiveSecret || undefined,
+            liveEnabled,
+          }),
+        });
+        if (!brokerRes.ok) errors.push('broker');
+      }
+
+      // 3. Save market data keys
+      if (twelveDataKey || coinGeckoKey) {
+        const dataRes = await fetch('/api/settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            section: 'market_data',
+            twelveDataKey: twelveDataKey || undefined,
+            coinGeckoKey: coinGeckoKey || undefined,
+          }),
+        });
+        if (!dataRes.ok) errors.push('market data');
+      }
+
+      if (errors.length === 0) {
+        setToast({ msg: 'Impostazioni salvate', ok: true });
+        // Refresh broker status
+        fetch('/api/broker/status').then(r => r.json()).then(setBrokerStatus).catch(() => {});
+      } else {
+        setToast({ msg: `Errore nel salvataggio: ${errors.join(', ')}`, ok: false });
+      }
     } catch { setToast({ msg: 'Errore di connessione', ok: false }); }
     setSaving(false);
     setTimeout(() => setToast(null), 3000);
