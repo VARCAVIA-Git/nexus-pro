@@ -71,13 +71,19 @@ describe('findNearestZones — Phase 3.6 fallback', () => {
     expect(result).toHaveLength(2);
   });
 
-  it('falls back to 2 nearest outside range when nothing within ±3%', () => {
+  it('falls back to nearby zones outside range but within ±20%', () => {
+    // 70k (-5.4%) and 80k (+8.1%) are within ±20% fallback; 20k (-73%) is not
+    const zones = [zone(70_000), zone(80_000, 'resistance'), zone(20_000)];
+    const result = findNearestZones(zones, 74_000, 3, 0.03);
+    expect(result).toHaveLength(2);
+    expect(result.map((z) => z.level).sort((a, b) => a - b)).toEqual([70_000, 80_000]);
+  });
+
+  it('returns empty when all zones are far beyond ±20%', () => {
     const zones = [zone(50_000), zone(100_000, 'resistance'), zone(20_000)];
     const result = findNearestZones(zones, 74_000, 3, 0.03);
-    // None within ±3% → fallback returns 2 closest by absolute distance
-    expect(result).toHaveLength(2);
-    // 50_000 is closer than 20_000; 100_000 is closer than 20_000 → expect [50k, 100k]
-    expect(result.map((z) => z.level).sort((a, b) => a - b)).toEqual([50_000, 100_000]);
+    // All beyond ±20% fallback → empty
+    expect(result).toHaveLength(0);
   });
 
   it('returns empty when no zones at all', () => {

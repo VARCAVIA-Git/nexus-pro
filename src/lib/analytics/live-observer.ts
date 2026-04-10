@@ -268,8 +268,11 @@ export function findNearestZones(zones: ReactionZone[], price: number, max: numb
     .sort((a, b) => Math.abs(a.distancePct) - Math.abs(b.distancePct));
   const inside = all.filter((z) => Math.abs(z.distancePct) <= maxDistancePct);
   if (inside.length > 0) return inside.slice(0, max);
-  // Phase 3.6: fallback — nessuna zona dentro il range, mostra le 2 più vicine fuori range
-  return all.slice(0, Math.min(2, max));
+  // Phase 3.6: fallback — nessuna zona dentro il range, mostra le 2 più vicine
+  // ma solo se entro ±20% (evita zone storiche irrilevanti a -60%)
+  const fallbackMax = 0.20;
+  const nearby = all.filter((z) => Math.abs(z.distancePct) <= fallbackMax);
+  return nearby.slice(0, Math.min(2, max));
 }
 
 function round2(n: number): number {

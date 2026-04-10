@@ -528,9 +528,16 @@ function computeReactionZones(candles1h: OHLCV[], contexts: CandleContext[]): Re
     });
   }
 
+  // Filtra zone troppo lontane dal prezzo corrente (>15%)
+  const lastPrice = candles1h[candles1h.length - 1]?.close;
+  const maxDist = 0.15;
+  const relevant = lastPrice && lastPrice > 0
+    ? zones.filter((z) => Math.abs(z.priceLevel - lastPrice) / lastPrice <= maxDist)
+    : zones;
+
   // Top 30 per touchCount
-  zones.sort((a, b) => b.touchCount - a.touchCount);
-  return zones.slice(0, 30);
+  relevant.sort((a, b) => b.touchCount - a.touchCount);
+  return relevant.slice(0, 30);
 }
 
 /** Indicator reactivity: per ogni indicatore principale, performance dei suoi segnali. */
