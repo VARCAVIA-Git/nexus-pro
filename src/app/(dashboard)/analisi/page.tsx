@@ -194,7 +194,7 @@ function AssetsPageInner() {
                     </button>
                   ) : (
                     <Link
-                      href={`/assets/${encodeURIComponent(a.symbol)}`}
+                      href={`/analisi/${encodeURIComponent(a.symbol)}`}
                       className="flex-1 rounded-lg bg-n-bg-s px-3 py-2 text-center text-[11px] font-semibold text-n-text hover:bg-n-border"
                     >
                       {isReady ? 'Apri' : 'Dettaglio'}

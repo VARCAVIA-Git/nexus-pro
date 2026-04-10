@@ -8,6 +8,12 @@ const nextConfig = {
       { protocol: 'https', hostname: '*.supabase.co' },
     ],
   },
+  redirects: async () => [
+    { source: '/assets', destination: '/analisi', permanent: true },
+    { source: '/assets/:path*', destination: '/analisi/:path*', permanent: true },
+    { source: '/strategy', destination: '/bot', permanent: true },
+    { source: '/mines', destination: '/bot', permanent: true },
+  ],
   headers: async () => [
     {
       source: '/api/:path*',

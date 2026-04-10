@@ -13,7 +13,7 @@
 //      tutto il mercato).
 //   3. Badge "IMMINENTE" rosso se l'evento è < 2h di distanza.
 //
-// Renderizzata sopra alla sezione Top Rules nella pagina /assets/[symbol].
+// Renderizzata sopra alla sezione Top Rules nella pagina /analisi/[symbol].
 // ═══════════════════════════════════════════════════════════════
 
 import type { MacroEvent, EventImpactStat } from '@/lib/analytics/types';

@@ -128,7 +128,7 @@ export default function StrategyPage() {
             <p className="text-n-dim">
               Ogni Strategy userà le AI Analytic dei tuoi asset.{' '}
               <a href="/analisi" className="font-semibold text-blue-300 underline-offset-2 hover:underline">
-                Vai su /assets
+                Vai su AI Analytics
               </a>{' '}
               per assegnarle.
             </p>
