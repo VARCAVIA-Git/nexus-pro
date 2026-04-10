@@ -89,8 +89,10 @@ export async function redisSet(key: string, value: unknown, exSeconds?: number):
 }
 
 export async function redisGet<T = any>(key: string): Promise<T | null> {
-  const raw = await redis<string | null>(['GET', key]);
+  const raw = await redis<string | object | null>(['GET', key]);
   if (!raw) return null;
+  // Upstash REST may return already-parsed objects or JSON strings
+  if (typeof raw === 'object') return raw as T;
   try { return JSON.parse(raw); } catch { return null; }
 }
 

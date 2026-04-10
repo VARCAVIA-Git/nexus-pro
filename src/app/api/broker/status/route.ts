@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { redisGet, redisGetRaw } from '@/lib/db/redis';
+import { redisGet } from '@/lib/db/redis';
 import { decrypt } from '@/lib/utils/encryption';
 
 export const dynamic = 'force-dynamic';
@@ -29,26 +29,9 @@ export async function GET() {
   let savedLiveKey = '';
   let savedLiveSecret = '';
   try {
-    // redisGet does JSON.parse which may fail if Upstash already parsed. Try both.
-    let savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys');
-    if (!savedKeys) {
-      const raw = await redisGetRaw('nexus:broker:keys');
-      console.log('[broker-status] raw type:', typeof raw, 'len:', raw?.length);
-      if (raw && typeof raw === 'string') {
-        try { savedKeys = JSON.parse(raw); } catch {}
-      } else if (raw && typeof raw === 'object') {
-        savedKeys = raw as any;
-      }
-    }
-    console.log('[broker-status] savedKeys type:', typeof savedKeys, 'keys:', savedKeys ? Object.keys(savedKeys) : 'null');
-    if (savedKeys?.liveKey) {
-      console.log('[broker-status] liveKey type:', typeof savedKeys.liveKey, 'len:', savedKeys.liveKey.length);
-      savedLiveKey = decrypt(savedKeys.liveKey);
-      console.log('[broker-status] decrypt OK, key starts with:', savedLiveKey.slice(0, 4));
-    }
-    if (savedKeys?.liveSecret) {
-      savedLiveSecret = decrypt(savedKeys.liveSecret);
-    }
+    const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys');
+    if (savedKeys?.liveKey) savedLiveKey = decrypt(savedKeys.liveKey);
+    if (savedKeys?.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret);
   } catch (e: any) {
     console.warn('[broker-status] Redis/decrypt error:', e.message);
   }
