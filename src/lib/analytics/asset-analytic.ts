@@ -232,8 +232,12 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     };
     const fullReport = runFullBacktest(symbol, backtestHistory, rawRules);
 
-    // Save full report to separate Redis key (can be large)
-    await redisSet(KEY_BACKTEST(symbol), fullReport);
+    // Save report to Redis — strip equity curves to keep payload small (Upstash limit)
+    const slimReport = {
+      ...fullReport,
+      results: fullReport.results.map(r => ({ ...r, equityCurve: [] })),
+    };
+    await redisSet(KEY_BACKTEST(symbol), slimReport);
 
     // Build lightweight summary for the AnalyticReport
     const rankings: BacktestStrategySummary[] = fullReport.results

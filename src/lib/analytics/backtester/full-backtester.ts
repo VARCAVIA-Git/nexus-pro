@@ -310,8 +310,9 @@ export function backtestStrategy(
       }
     }
 
-    // Record equity curve (sample every 10 bars to save memory)
-    if (i % 10 === 0) {
+    // Record equity curve (sample every N bars, max ~200 points total)
+    const sampleInterval = Math.max(10, Math.floor((candles.length - startBar) / 200));
+    if ((i - startBar) % sampleInterval === 0) {
       // Mark-to-market: capital + unrealized P&L
       let unrealized = 0;
       for (const pos of openPositions) {
