@@ -47,7 +47,7 @@ function StrategyPage() {
   const [rankings, setRankings] = useState<BacktestStrategySummary[]>([]);
   const [rankingsSymbol, setRankingsSymbol] = useState('BTC/USD');
   const [rankingsLoading, setRankingsLoading] = useState(false);
-  const [selectedRanking, setSelectedRanking] = useState<BacktestStrategySummary | null>(null);
+  const [selectedRankings, setSelectedRankings] = useState<BacktestStrategySummary[]>([]);
 
   // Create form state
   const [formName, setFormName] = useState('');
@@ -96,7 +96,7 @@ function StrategyPage() {
         avgHoldingHours: 0,
         optimalEntryTimeout: parseInt(searchParams.get('timeout') ?? '12'),
       };
-      setSelectedRanking(preSelected);
+      setSelectedRankings([preSelected]);
       // Also load the full rankings in background
       loadRankings(urlSymbol);
     }
@@ -188,7 +188,7 @@ function StrategyPage() {
   const loadRankings = async (symbol: string) => {
     setRankingsLoading(true);
     setRankingsSymbol(symbol);
-    setSelectedRanking(null);
+    setSelectedRankings([]);
     try {
       const res = await fetch(`/api/analytics/${encodeURIComponent(symbol)}/backtest?summary=1`);
       if (res.ok) {
@@ -211,41 +211,55 @@ function StrategyPage() {
   };
 
   const handleCreateFromAI = async () => {
-    if (!selectedRanking) return;
+    if (selectedRankings.length === 0) return;
     setCreating(true);
-    const r = selectedRanking;
     const tfModeMap: Record<string, string> = { '5m': 'scalp', '15m': 'scalp', '1h': 'intraday', '4h': 'daily' };
+
+    // Use the best ranking for primary config, combine all strategies
+    const primary = selectedRankings[0];
+    const allStrategyIds = [...new Set(selectedRankings.map(r => r.isMineRule ? 'combined_ai' : r.strategyId))];
+    const hasMineRules = selectedRankings.some(r => r.isMineRule);
+    const allConditions = selectedRankings.filter(r => r.isMineRule && r.conditions).flatMap(r => r.conditions!);
+
+    // Average TP/SL from all selected
+    const avgTp = selectedRankings.reduce((s, r) => s + (r.avgTpDistancePct || 0), 0) / selectedRankings.length;
+    const avgSl = selectedRankings.reduce((s, r) => s + (r.avgSlDistancePct || 0), 0) / selectedRankings.length;
+
+    const nameparts = selectedRankings.length === 1
+      ? primary.strategyName.slice(0, 15)
+      : `${selectedRankings.length} strategie`;
+
     try {
       const res = await fetch('/api/bot/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: `AI ${rankingsSymbol.replace('/USD', '')} ${r.strategyName.slice(0, 15)}`,
+          name: `AI ${rankingsSymbol.replace('/USD', '')} ${nameparts}`,
           environment: 'real',
           capitalPercent: formCapital,
           assets: [rankingsSymbol],
-          strategies: r.isMineRule ? ['combined_ai'] : [r.strategyId],
+          strategies: allStrategyIds,
           riskLevel: 5,
-          stopLossPercent: r.avgSlDistancePct || 2,
-          takeProfitPercent: r.avgTpDistancePct || 4,
+          stopLossPercent: avgSl || 2,
+          takeProfitPercent: avgTp || 4,
           useTrailingStop: true,
-          maxOpenPositions: 2,
+          maxOpenPositions: selectedRankings.length + 1,
           maxDDDaily: 3,
           maxDDWeekly: 8,
           maxDDTotal: 15,
-          operationMode: tfModeMap[r.timeframe] ?? 'intraday',
-          backtestStrategyId: r.strategyId,
-          backtestTimeframe: r.timeframe,
-          calibratedTpPct: r.avgTpDistancePct || undefined,
-          calibratedSlPct: r.avgSlDistancePct || undefined,
-          entryTimeoutBars: r.optimalEntryTimeout || undefined,
-          usesMineRules: r.isMineRule || undefined,
-          mineRuleConditions: r.conditions || undefined,
+          operationMode: tfModeMap[primary.timeframe] ?? 'intraday',
+          backtestStrategyId: primary.strategyId,
+          backtestTimeframe: primary.timeframe,
+          calibratedTpPct: avgTp || undefined,
+          calibratedSlPct: avgSl || undefined,
+          entryTimeoutBars: primary.optimalEntryTimeout || undefined,
+          usesMineRules: hasMineRules || undefined,
+          mineRuleConditions: allConditions.length > 0 ? allConditions : undefined,
         }),
       });
       if (res.ok) {
         setShowCreate(false);
-        setSelectedRanking(null);
+        setSelectedRankings([]);
         await fetchStatus();
       }
     } catch {}
@@ -506,7 +520,7 @@ function StrategyPage() {
                     <table className="w-full text-left text-[11px]">
                       <thead className="text-n-dim">
                         <tr>
-                          <th className="px-2 py-1.5">#</th>
+                          <th className="px-2 py-1.5 w-8"></th>
                           <th className="px-2 py-1.5">Strategia</th>
                           <th className="px-2 py-1.5">TF</th>
                           <th className="px-2 py-1.5">Trades</th>
@@ -520,12 +534,21 @@ function StrategyPage() {
                       </thead>
                       <tbody className="text-n-text">
                         {rankings.slice(0, 15).map((r) => {
-                          const isSelected = selectedRanking?.strategyId === r.strategyId && selectedRanking?.timeframe === r.timeframe;
+                          const isSelected = selectedRankings.some(s => s.strategyId === r.strategyId && s.timeframe === r.timeframe);
+                          const toggleSelect = () => {
+                            if (isSelected) {
+                              setSelectedRankings(prev => prev.filter(s => !(s.strategyId === r.strategyId && s.timeframe === r.timeframe)));
+                            } else {
+                              setSelectedRankings(prev => [...prev, r]);
+                            }
+                          };
                           return (
                             <tr key={`${r.strategyId}-${r.timeframe}`}
-                              onClick={() => setSelectedRanking(r)}
+                              onClick={toggleSelect}
                               className={`cursor-pointer border-t border-n-border transition-all ${isSelected ? 'bg-blue-500/10' : 'hover:bg-n-bg/60'}`}>
-                              <td className="px-2 py-2 font-mono">{r.rank}</td>
+                              <td className="px-2 py-2">
+                                <input type="checkbox" checked={isSelected} onChange={toggleSelect} onClick={e => e.stopPropagation()} className="h-3.5 w-3.5 accent-blue-500" />
+                              </td>
                               <td className="px-2 py-2">
                                 <span className="font-semibold">{r.strategyName.length > 25 ? r.strategyName.slice(0, 25) + '...' : r.strategyName}</span>
                                 {r.isMineRule && <span className="ml-1 rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI RULE</span>}
@@ -551,29 +574,59 @@ function StrategyPage() {
                 </div>
               )}
 
-              {/* Selected strategy details */}
-              {selectedRanking && (
+              {/* Selected strategies details */}
+              {selectedRankings.length > 0 && (
                 <div className="rounded-lg border border-blue-500/30 bg-blue-500/5 p-4 space-y-3">
-                  <div className="flex items-center gap-2">
-                    <Crosshair size={14} className="text-blue-400" />
-                    <span className="text-xs font-bold text-blue-400">Strategia selezionata</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Crosshair size={14} className="text-blue-400" />
+                      <span className="text-xs font-bold text-blue-400">
+                        {selectedRankings.length === 1 ? 'Strategia selezionata' : `${selectedRankings.length} strategie selezionate`}
+                      </span>
+                    </div>
+                    <button onClick={() => setSelectedRankings([])} className="text-[10px] text-n-dim hover:text-n-text">Deseleziona tutto</button>
                   </div>
+
+                  {/* List selected strategies */}
+                  <div className="space-y-1.5">
+                    {selectedRankings.map((r, i) => (
+                      <div key={`${r.strategyId}-${r.timeframe}`} className="flex items-center justify-between rounded-lg bg-n-bg/60 px-3 py-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold text-blue-400">#{i + 1}</span>
+                          <span className="text-[11px] font-semibold text-n-text">{r.strategyName.length > 30 ? r.strategyName.slice(0, 30) + '...' : r.strategyName}</span>
+                          <span className="font-mono text-[10px] text-n-dim">{r.timeframe}</span>
+                          {r.isMineRule && <span className="rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI</span>}
+                        </div>
+                        <div className="flex items-center gap-3 text-[10px]">
+                          <span className="text-n-dim">WR {r.winRate}%</span>
+                          <span className="text-n-dim">PF {r.profitFactor}</span>
+                          <button onClick={(e) => { e.stopPropagation(); setSelectedRankings(prev => prev.filter(s => !(s.strategyId === r.strategyId && s.timeframe === r.timeframe))); }} className="text-n-dim hover:text-red-400">×</button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Summary stats */}
                   <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                     <div>
-                      <p className="text-[9px] text-n-dim">Strategia</p>
-                      <p className="text-xs font-semibold text-n-text">{selectedRanking.strategyName}</p>
+                      <p className="text-[9px] text-n-dim">Strategie combinate</p>
+                      <p className="text-xs font-semibold text-n-text">{selectedRankings.length}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-n-dim">Timeframe</p>
-                      <p className="text-xs font-semibold text-n-text">{selectedRanking.timeframe}</p>
+                      <p className="text-[9px] text-n-dim">Timeframe primario</p>
+                      <p className="text-xs font-semibold text-n-text">{selectedRankings[0].timeframe}</p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-n-dim">TP medio storico</p>
-                      <p className="text-xs font-semibold text-green-400">{selectedRanking.avgTpDistancePct > 0 ? `${selectedRanking.avgTpDistancePct}%` : 'auto'}</p>
+                      <p className="text-[9px] text-n-dim">TP medio combinato</p>
+                      <p className="text-xs font-semibold text-green-400">
+                        {(() => { const avg = selectedRankings.reduce((s, r) => s + (r.avgTpDistancePct || 0), 0) / selectedRankings.length; return avg > 0 ? `${avg.toFixed(2)}%` : 'auto'; })()}
+                      </p>
                     </div>
                     <div>
-                      <p className="text-[9px] text-n-dim">SL medio storico</p>
-                      <p className="text-xs font-semibold text-red-400">{selectedRanking.avgSlDistancePct > 0 ? `${selectedRanking.avgSlDistancePct}%` : 'auto'}</p>
+                      <p className="text-[9px] text-n-dim">SL medio combinato</p>
+                      <p className="text-xs font-semibold text-red-400">
+                        {(() => { const avg = selectedRankings.reduce((s, r) => s + (r.avgSlDistancePct || 0), 0) / selectedRankings.length; return avg > 0 ? `${avg.toFixed(2)}%` : 'auto'; })()}
+                      </p>
                     </div>
                   </div>
 
@@ -591,7 +644,7 @@ function StrategyPage() {
                     disabled={creating}
                     className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-blue-500 text-white hover:bg-blue-600"
                   >
-                    {creating ? <><RefreshCw size={16} className="animate-spin" /> Creazione...</> : <><Rocket size={16} /> Lancia Bot AI-Calibrato</>}
+                    {creating ? <><RefreshCw size={16} className="animate-spin" /> Creazione...</> : <><Rocket size={16} /> Lancia Bot con {selectedRankings.length} {selectedRankings.length === 1 ? 'strategia' : 'strategie'}</>}
                   </button>
                 </div>
               )}
