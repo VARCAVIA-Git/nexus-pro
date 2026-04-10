@@ -183,8 +183,10 @@ export default function ImpostazioniPage() {
 
       if (errors.length === 0) {
         showToast('Impostazioni salvate', true);
-        // Refresh broker status after save
-        testBrokerConnection();
+        // Refresh broker status from server (reads saved keys)
+        fetch('/api/broker/status').then(r => r.ok ? r.json() : null).then(d => {
+          if (d) { setLiveStatus(d.live ?? null); setPaperStatus(d.paper ?? null); }
+        }).catch(() => {});
       } else {
         showToast(`Errore: ${errors.join(', ')}`, false);
       }
@@ -197,17 +199,32 @@ export default function ImpostazioniPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Test broker connection ──
+  // ── Test broker connection (uses keys from input fields directly) ──
   const testBrokerConnection = async () => {
+    if (!liveKey || !liveSecret) {
+      showToast('Inserisci API Key e Secret Key prima di testare', false);
+      return;
+    }
     setTestingBroker(true);
     try {
-      const res = await fetch('/api/broker/status');
+      const res = await fetch('/api/broker/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: liveKey, secret: liveSecret }),
+      });
       if (res.ok) {
         const d = await res.json();
-        setLiveStatus(d.live ?? null);
-        setPaperStatus(d.paper ?? null);
+        if (d.connected) {
+          setLiveStatus({ connected: true, equity: d.equity });
+          showToast(`Broker connesso! Equity: $${d.equity?.toLocaleString('en-US')} (${d.accountType})`, true);
+        } else {
+          setLiveStatus({ connected: false, error: d.error });
+          showToast(d.error || 'Connessione fallita', false);
+        }
       }
-    } catch {}
+    } catch {
+      showToast('Errore di rete nel test connessione', false);
+    }
     setTestingBroker(false);
   };
 
