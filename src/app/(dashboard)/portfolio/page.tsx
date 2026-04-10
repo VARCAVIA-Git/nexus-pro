@@ -20,22 +20,20 @@ interface PortfolioData {
 }
 
 export default function PortfolioPage() {
-  const mode = 'real';
   const [data, setData] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`/api/portfolio?env=${mode}`).then(r => r.ok ? r.json() : null).then(setData).catch(() => {}).finally(() => setLoading(false));
-  }, [mode]);
+    fetch('/api/portfolio?env=real').then(r => r.ok ? r.json() : null).then(setData).catch(() => {}).finally(() => setLoading(false));
+  }, []);
 
   if (loading) return <div className="flex items-center justify-center py-20"><RefreshCw size={24} className="animate-spin text-n-dim" /></div>;
 
-  const isReal = mode === 'real';
-  const accent = isReal ? '#3b82f6' : '#f59e0b';
+  const accent = '#3b82f6';
 
   // Real mode: check if live broker is connected
-  if (isReal && data && (data as any).connected === false) {
+  if (true && data && (data as any).connected === false) {
     return (
       <div className="space-y-6">
         <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
@@ -64,7 +62,7 @@ export default function PortfolioPage() {
 
   return (
     <div className="space-y-6 stagger">
-      {isReal && (
+      {true && (
         <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
           <AlertTriangle size={16} className="text-blue-400 shrink-0" />
           <p className="text-sm text-blue-300">Capitale reale — procedi con cautela</p>

@@ -14,7 +14,6 @@ interface BotStatusData { running: boolean; tickCount: number; positions: any[];
 interface PerfData { totalTrades: number; wins: number; losses: number; winRate: number; totalPnl: number; dailyPnl: number; weeklyPnl: number; monthlyPnl: number; sharpeRatio: number; equityCurve: { date: string; equity: number }[] }
 
 export default function DashboardPage() {
-  const mode = 'real';
   const [bot, setBot] = useState<BotStatusData | null>(null);
   const [perf, setPerf] = useState<PerfData | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -24,10 +23,10 @@ export default function DashboardPage() {
 
   const fetchAll = async () => {
     const [bRes, pRes, portRes, trRes] = await Promise.allSettled([
-      fetch(`/api/bot/status?mode=${mode}`),
+      fetch(`/api/bot/status?mode=real`),
       fetch('/api/performance'),
-      fetch(`/api/portfolio?env=${mode}`),
-      fetch(`/api/trades?env=${mode}&limit=5`),
+      fetch(`/api/portfolio?env=real`),
+      fetch(`/api/trades?env=real&limit=5`),
     ]);
     if (bRes.status === 'fulfilled' && bRes.value.ok) setBot(await bRes.value.json());
     if (pRes.status === 'fulfilled' && pRes.value.ok) setPerf(await pRes.value.json());
@@ -43,13 +42,13 @@ export default function DashboardPage() {
     setLoading(false);
   };
 
-  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, [mode]);
+  useEffect(() => { fetchAll(); const i = setInterval(fetchAll, 30000); return () => clearInterval(i); }, []);
 
   const equity = brokerConnected ? balance : 0;
   const totalPnl = perf?.totalPnl ?? 0;
   const dailyPnl = perf?.dailyPnl ?? 0;
   const activeBots = bot?.bots?.filter(b => b.status === 'running').length ?? 0;
-  const accent = mode === 'real' ? '#3b82f6' : '#f59e0b';
+  const accent = '#3b82f6';
 
   return (
     <div className="space-y-6 stagger">
@@ -157,8 +156,13 @@ export default function DashboardPage() {
 
       {/* Empty state */}
       {!bot?.running && (!bot?.bots || bot.bots.length === 0) && !loading && (
-        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-6 text-center">
-          <p className="text-sm text-n-dim">Crea il tuo primo bot → <Link href="/bot" className="text-accent hover:underline">Strategy</Link></p>
+        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center space-y-3">
+          <p className="text-sm text-n-text font-medium">Inizia configurando le AI Analytics</p>
+          <p className="text-xs text-n-dim">Le AI Analytics analizzano gli asset 24/7 e preparano le strategie per i bot.</p>
+          <div className="flex justify-center gap-3 pt-2">
+            <Link href="/analisi" className="rounded-xl bg-accent/10 px-4 py-2.5 text-xs font-semibold text-accent hover:bg-accent/20">Vai ad AI Analytics</Link>
+            <Link href="/bot" className="rounded-xl bg-n-bg-s px-4 py-2.5 text-xs font-semibold text-n-text hover:bg-n-border">Crea un Bot</Link>
+          </div>
         </div>
       )}
     </div>

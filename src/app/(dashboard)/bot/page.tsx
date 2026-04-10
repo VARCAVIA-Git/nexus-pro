@@ -18,7 +18,6 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function StrategyPage() {
-  const mode = 'real';
   const [allBots, setAllBots] = useState<MultiBotConfig[]>([]);
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [accountEquity, setAccountEquity] = useState(0);
@@ -27,7 +26,7 @@ export default function StrategyPage() {
 
   // Create form state
   const [formName, setFormName] = useState('');
-  const [formEnv, setFormEnv] = useState<'demo' | 'real'>(mode);
+  const [formEnv, setFormEnv] = useState<'demo' | 'real'>('real');
   const [formCapital, setFormCapital] = useState(20);
   const [formAssets, setFormAssets] = useState<Set<string>>(new Set(['BTC/USD', 'ETH/USD', 'AAPL']));
   const [formStrategies, setFormStrategies] = useState<Set<string>>(new Set(['combined_ai', 'trend']));
@@ -44,7 +43,7 @@ export default function StrategyPage() {
 
   const fetchStatus = useCallback(async () => {
     try {
-      const res = await fetch(`/api/bot/status?mode=${mode}`);
+      const res = await fetch('/api/bot/status?mode=real');
       if (res.ok) {
         const d = await res.json();
         setAllBots(d.bots ?? []);
