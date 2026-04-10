@@ -16,7 +16,6 @@ import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
 import { RelevantEventsCard } from '@/components/analytics/RelevantEventsCard';
-import { PlainLanguageSummary } from '@/components/analytics/PlainLanguageSummary';
 import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
 import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
@@ -359,15 +358,6 @@ export default function AssetDetailPage() {
 
       {isReady && (
         <>
-          {/* Phase 3.7: riassunto in italiano naturale generato dall'AI Analytic */}
-          <PlainLanguageSummary
-            symbol={symbol}
-            report={report}
-            liveContext={live}
-            newsDigest={news}
-            macroEvents={events}
-            eventImpacts={report?.eventImpacts}
-          />
           <AICInsightsCard data={aicData} symbol={symbol} />
           <LiveContextCard context={live} />
           <div className="grid gap-5 lg:grid-cols-2">
@@ -514,46 +504,34 @@ function ReportView({
         </p>
       </div>
 
-      {/* Raccomandazione */}
+      {/* Come operare */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-1 text-sm font-semibold text-n-text">Raccomandazione</h2>
-        {explainMode && (
-          <p className="mb-3 text-[10px] italic text-n-dim">
-            Lo stile operativo e timeframe migliore secondo i backtest, e i regimi di mercato in
-            cui questo asset è stato storicamente più forte al rialzo o ribasso.
-          </p>
-        )}
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Come operare su {symbol}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Operation mode" value={report.recommendedOperationMode} />
-          <Stat label="Best timeframe" value={report.recommendedTimeframe} />
-          <Stat
-            label="Best regime LONG"
-            value={regimeLabel(report.globalStats?.bestRegimeForLong)}
-          />
-          <Stat
-            label="Best regime SHORT"
-            value={regimeLabel(report.globalStats?.bestRegimeForShort)}
-          />
+          <Stat label="Stile consigliato" value={report.recommendedOperationMode === 'scalp' ? 'Scalping (veloce)' : report.recommendedOperationMode === 'intraday' ? 'Intraday (giornata)' : report.recommendedOperationMode === 'daily' ? 'Swing (multi-day)' : 'Position'} />
+          <Stat label="Timeframe migliore" value={report.recommendedTimeframe} />
+          <Stat label="Miglior momento per comprare" value={regimeLabel(report.globalStats?.bestRegimeForLong)} />
+          <Stat label="Miglior momento per vendere" value={regimeLabel(report.globalStats?.bestRegimeForShort)} />
         </div>
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Max gain 24h" value={fmtPct(report.globalStats?.maxGainObserved)} />
-          <Stat label="Max loss 24h" value={fmtPct(report.globalStats?.maxLossObserved)} />
-          <Stat label="Vol 1h" value={fmtPct(report.globalStats?.volatility?.['1h'], 3)} />
-          <Stat label="Vol 1d" value={fmtPct(report.globalStats?.volatility?.['1d'], 3)} />
+          <Stat label="Max rialzo storico 24h" value={fmtPct(report.globalStats?.maxGainObserved)} />
+          <Stat label="Max ribasso storico 24h" value={fmtPct(report.globalStats?.maxLossObserved)} />
+          <Stat label="Volatilità oraria" value={fmtPct(report.globalStats?.volatility?.['1h'], 3)} />
+          <Stat label="Volatilità giornaliera" value={fmtPct(report.globalStats?.volatility?.['1d'], 3)} />
         </div>
       </div>
 
-      {/* Top rules */}
+      {/* Segnali storici */}
       <div className="grid gap-5 lg:grid-cols-2">
         <RuleTable
-          title="Top 10 regole BUY"
+          title="Segnali di acquisto"
           rules={buyRules}
           dir="long"
           symbol={symbol}
           explainMode={explainMode}
         />
         <RuleTable
-          title="Top 10 regole SELL"
+          title="Segnali di vendita"
           rules={sellRules}
           dir="short"
           symbol={symbol}
@@ -649,14 +627,10 @@ function ReportView({
 
       {/* Strategy fit */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-1 text-sm font-semibold text-n-text">Strategy fit</h2>
-        {explainMode && (
-          <p className="mb-3 text-[10px] italic text-n-dim">
-            Le strategie classiche backtestate su {symbol}, ordinate per qualità complessiva
-            (PF pesato per numero di trade). Le righe &quot;low sample&quot; hanno meno di 10
-            trade e non sono affidabili statisticamente.
-          </p>
-        )}
+        <h2 className="mb-1 text-sm font-semibold text-n-text">Strategie testate (base)</h2>
+        <p className="mb-3 text-[10px] text-n-dim">
+          Strategie classiche testate sullo storico di {symbol}. Le righe &quot;low sample&quot; hanno pochi trade e servono più dati.
+        </p>
         {fits.length === 0 ? (
           <p className="text-xs text-n-dim">Nessun fit calcolato.</p>
         ) : (
@@ -719,11 +693,12 @@ function ReportView({
       {/* Phase 4.6: Full Backtest Results */}
       {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
         <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5">
-          <h2 className="mb-1 text-sm font-semibold text-blue-300">Full Backtest — Classifica Strategie</h2>
+          <h2 className="mb-1 text-sm font-semibold text-blue-300">Classifica Strategie — Simulazione Completa</h2>
           <p className="mb-3 text-[10px] text-n-dim">
-            {report.backtestSummary.totalStrategiesTested} combo strategia-TF testate ·{' '}
-            {report.backtestSummary.totalTradesSimulated.toLocaleString()} trade simulati ·{' '}
-            ${(report.backtestSummary.initialCapital / 1000).toFixed(0)}k capitale · ${report.backtestSummary.tradeSize}/trade
+            L&apos;AI ha testato {report.backtestSummary.totalStrategiesTested} combinazioni strategia+timeframe
+            simulando {report.backtestSummary.totalTradesSimulated.toLocaleString()} operazioni reali.
+            Le righe <span className="rounded bg-purple-500/15 px-1 text-purple-400">AI RULE</span> sono
+            regole scoperte dall&apos;AI, specifiche per questo asset.
           </p>
           <div className="overflow-x-auto">
             <table className="w-full text-left text-[11px]">
@@ -732,15 +707,15 @@ function ReportView({
                   <th className="px-2 py-1.5">#</th>
                   <th className="px-2 py-1.5">Strategia</th>
                   <th className="px-2 py-1.5">TF</th>
-                  <th className="px-2 py-1.5">Trades</th>
-                  <th className="px-2 py-1.5">WR</th>
-                  <th className="px-2 py-1.5">PF</th>
-                  <th className="px-2 py-1.5">P&L %</th>
-                  <th className="px-2 py-1.5">Max DD</th>
-                  <th className="px-2 py-1.5">Sharpe</th>
-                  <th className="px-2 py-1.5">TP hit</th>
-                  <th className="px-2 py-1.5">SL hit</th>
-                  <th className="px-2 py-1.5">Avg hold</th>
+                  <th className="px-2 py-1.5">Operazioni</th>
+                  <th className="px-2 py-1.5">Vincite</th>
+                  <th className="px-2 py-1.5">Profitto/Perdita</th>
+                  <th className="px-2 py-1.5">Rendimento</th>
+                  <th className="px-2 py-1.5">Rischio max</th>
+                  <th className="px-2 py-1.5">Qualità</th>
+                  <th className="px-2 py-1.5">TP ok</th>
+                  <th className="px-2 py-1.5">SL ok</th>
+                  <th className="px-2 py-1.5">Durata</th>
                 </tr>
               </thead>
               <tbody className="text-n-text">
@@ -773,7 +748,8 @@ function ReportView({
 
       {/* Indicator reactivity */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-n-text">Indicator reactivity</h2>
+        <h2 className="mb-1 text-sm font-semibold text-n-text">Efficacia degli indicatori</h2>
+        <p className="mb-3 text-[10px] text-n-dim">Quanto spesso ogni indicatore ha predetto correttamente il movimento successivo.</p>
         {indicators.length === 0 ? (
           <p className="text-xs text-n-dim">Nessun indicatore con segnali sufficienti.</p>
         ) : (
