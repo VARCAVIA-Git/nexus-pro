@@ -37,14 +37,12 @@ export async function GET() {
     if (keys && Array.isArray(keys)) selectedAssets = keys;
   } catch {}
 
-  // Split into crypto and stocks
+  // Split into crypto and stocks — always include defaults if selection is empty
   const allCrypto = Object.keys(COIN_ID_MAP);
-  const cryptoSymbols = selectedAssets
-    ? selectedAssets.filter(a => allCrypto.includes(a))
-    : DEFAULT_CRYPTO;
-  const stockSymbols = selectedAssets
-    ? selectedAssets.filter(a => !allCrypto.includes(a))
-    : DEFAULT_STOCKS;
+  const userCrypto = selectedAssets?.filter(a => allCrypto.includes(a)) ?? [];
+  const userStocks = selectedAssets?.filter(a => !allCrypto.includes(a)) ?? [];
+  const cryptoSymbols = userCrypto.length > 0 ? userCrypto : DEFAULT_CRYPTO;
+  const stockSymbols = userStocks.length > 0 ? userStocks : DEFAULT_STOCKS;
 
   // ── Fetch crypto from CoinGecko ──
   try {
