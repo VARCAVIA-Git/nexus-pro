@@ -26,12 +26,15 @@ async function checkAlpaca(baseUrl: string, key: string, secret: string) {
 
 export async function GET() {
   // Try env vars first, then fall back to Redis-saved keys (encrypted)
-  const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys').catch(() => null) ?? {};
-
   let savedLiveKey = '';
   let savedLiveSecret = '';
-  try { if (savedKeys.liveKey) savedLiveKey = decrypt(savedKeys.liveKey); } catch (e: any) { console.warn('[broker-status] decrypt liveKey failed:', e.message); }
-  try { if (savedKeys.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret); } catch (e: any) { console.warn('[broker-status] decrypt liveSecret failed:', e.message); }
+  try {
+    const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
+    if (savedKeys.liveKey) savedLiveKey = decrypt(savedKeys.liveKey);
+    if (savedKeys.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret);
+  } catch (e: any) {
+    console.warn('[broker-status] Redis/decrypt error:', e.message);
+  }
 
   const paperKey = process.env.ALPACA_API_KEY || '';
   const paperSecret = process.env.ALPACA_API_SECRET || '';
