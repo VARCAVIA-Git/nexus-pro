@@ -17,6 +17,7 @@ import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
 import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
 import { RelevantEventsCard } from '@/components/analytics/RelevantEventsCard';
 import { PlainLanguageSummary } from '@/components/analytics/PlainLanguageSummary';
+import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
 import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
 import { useExplainMode } from '@/hooks/useExplainMode';
@@ -33,6 +34,7 @@ export default function AssetDetailPage() {
   const [live, setLive] = useState<LiveContext | null>(null);
   const [news, setNews] = useState<NewsDigest | null>(null);
   const [events, setEvents] = useState<MacroEvent[]>([]);
+  const [aicData, setAicData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [explainMode, toggleExplain] = useExplainMode();
@@ -68,10 +70,25 @@ export default function AssetDetailPage() {
     }
   }, [symbol]);
 
+  const loadAIC = useCallback(async () => {
+    try {
+      const [sRes, rRes, cRes] = await Promise.allSettled([
+        fetch(`/api/aic/status?symbol=${encodeURIComponent(symbol)}`),
+        fetch(`/api/aic/research?symbol=${encodeURIComponent(symbol)}`),
+        fetch(`/api/aic/confluence?symbol=${encodeURIComponent(symbol)}`),
+      ]);
+      const status = sRes.status === 'fulfilled' && sRes.value.ok ? await sRes.value.json() : null;
+      const research = rRes.status === 'fulfilled' && rRes.value.ok ? await rRes.value.json() : null;
+      const confluence = cRes.status === 'fulfilled' && cRes.value.ok ? await cRes.value.json() : null;
+      setAicData({ status, research, confluence: confluence?.confluence ?? status?.confluence });
+    } catch { /* AIC may be offline */ }
+  }, [symbol]);
+
   useEffect(() => {
     load();
     loadLive();
-  }, [load, loadLive]);
+    loadAIC();
+  }, [load, loadLive, loadAIC]);
 
   // Polling job status while training
   useEffect(() => {
@@ -85,15 +102,16 @@ export default function AssetDetailPage() {
     return () => clearInterval(id);
   }, [analytic, loadJob, load]);
 
-  // Auto-refresh live context every 30s when ready
+  // Auto-refresh live context + AIC every 30s when ready
   useEffect(() => {
     if (!analytic || analytic.status !== 'ready') return;
     const id = setInterval(() => {
       loadLive();
+      loadAIC();
       load();
     }, 30000);
     return () => clearInterval(id);
-  }, [analytic, loadLive, load]);
+  }, [analytic, loadLive, loadAIC, load]);
 
   async function refresh() {
     setBusy(true);
@@ -237,6 +255,7 @@ export default function AssetDetailPage() {
             macroEvents={events}
             eventImpacts={report?.eventImpacts}
           />
+          <AICInsightsCard data={aicData} symbol={symbol} />
           <LiveContextCard context={live} />
           <div className="grid gap-5 lg:grid-cols-2">
             <NewsPulseCard digest={news} symbol={symbol} onRefresh={loadLive} />
