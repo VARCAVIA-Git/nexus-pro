@@ -27,7 +27,6 @@ export async function GET() {
     cash: parseFloat(acc.cash),
     buyingPower: parseFloat(acc.buying_power),
     portfolioValue: parseFloat(acc.portfolio_value ?? acc.equity),
-    lastEquity: parseFloat(acc.last_equity),
     lastEquity: parseFloat(acc.last_equity) || parseFloat(acc.equity),
     dailyChange: parseFloat(acc.last_equity) > 0 ? parseFloat(acc.equity) - parseFloat(acc.last_equity) : 0,
     dailyChangePct: parseFloat(acc.last_equity) > 0
