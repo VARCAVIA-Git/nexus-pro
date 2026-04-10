@@ -64,11 +64,24 @@ function TickerSettings() {
   const save = async () => {
     setSaving(true);
     const assets = Array.from(selected);
-    await Promise.all([
-      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets }) }),
-      fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker_global', assets }) }),
-    ]).catch(() => {});
-    setSaving(false); setSaved(true); setTimeout(() => setSaved(false), 2000);
+    try {
+      const [r1, r2] = await Promise.all([
+        fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets }) }),
+        fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker_global', assets }) }),
+      ]);
+      if (r1.ok && r2.ok) {
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+        // Force browser to reload ticker by refreshing the page after a short delay
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        setSaved(false);
+        alert('Errore nel salvataggio ticker. Riprova.');
+      }
+    } catch {
+      alert('Errore di connessione.');
+    }
+    setSaving(false);
   };
 
   return (

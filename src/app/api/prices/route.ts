@@ -50,7 +50,6 @@ export async function GET() {
     if (ids) {
       const cgRes = await fetch(
         `${COINGECKO_URL}/simple/price?ids=${ids}&vs_currencies=usd&include_24hr_change=true`,
-        { next: { revalidate: 30 } },
       );
       if (cgRes.ok) {
         const data = await cgRes.json();
@@ -80,7 +79,6 @@ export async function GET() {
       const joined = stockSymbols.join(',');
       const tdRes = await fetch(
         `${TWELVE_DATA_URL}/quote?symbol=${joined}&apikey=${tdKey}`,
-        { next: { revalidate: 60 } },
       );
       if (tdRes.ok) {
         const raw = await tdRes.json();
