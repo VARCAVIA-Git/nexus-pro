@@ -1,10 +1,20 @@
+import { cookies } from 'next/headers';
+import { redisGet } from '@/lib/db/redis';
 import { NextResponse } from 'next/server';
 import { redisLrange, KEYS } from '@/lib/db/redis';
 import type { TradeRecord } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
+async function requireSession() {
+  const sessionId = cookies().get('nexus-session')?.value;
+  if (!sessionId) return null;
+  return redisGet(`nexus:session:${sessionId}`);
+}
+
 export async function GET(request: Request) {
+  const session = await requireSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   const { searchParams } = new URL(request.url);
   const env = searchParams.get('env') ?? 'demo'; // 'demo' or 'real'
   const limit = Math.min(parseInt(searchParams.get('limit') ?? '100'), 500);

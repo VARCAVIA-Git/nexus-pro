@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { redisGet, redisSet } from '@/lib/db/redis';
 import { cookies } from 'next/headers';
+import { encrypt, decrypt } from '@/lib/utils/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -27,11 +28,11 @@ export async function GET(request: Request) {
   if (section === 'broker') {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const keys = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
-    // Mask secrets: show only first 4 chars
+    // Decrypt and mask for display
+    let liveKeyDisplay = '';
+    try { liveKeyDisplay = keys.liveKey ? decrypt(keys.liveKey).slice(0, 4) + '...' : ''; } catch { liveKeyDisplay = keys.liveKey?.slice?.(0, 4) + '...' || ''; }
     return NextResponse.json({
-      paperKey: keys.paperKey ? keys.paperKey.slice(0, 4) + '...' : '',
-      liveKey: keys.liveKey ? keys.liveKey.slice(0, 4) + '...' : '',
-      hasPaperSecret: !!keys.paperSecret,
+      liveKey: liveKeyDisplay,
       hasLiveSecret: !!keys.liveSecret,
       liveEnabled: keys.liveEnabled ?? false,
     });
@@ -56,10 +57,9 @@ export async function POST(request: Request) {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const current = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
     const updated: Record<string, any> = { ...current };
-    if (body.paperKey) updated.paperKey = body.paperKey;
-    if (body.paperSecret) updated.paperSecret = body.paperSecret;
-    if (body.liveKey) updated.liveKey = body.liveKey;
-    if (body.liveSecret) updated.liveSecret = body.liveSecret;
+    // Encrypt sensitive keys before storing
+    if (body.liveKey) updated.liveKey = encrypt(body.liveKey);
+    if (body.liveSecret) updated.liveSecret = encrypt(body.liveSecret);
     if (body.liveEnabled !== undefined) updated.liveEnabled = body.liveEnabled;
     updated.updatedAt = new Date().toISOString();
     await redisSet('nexus:broker:keys', updated);

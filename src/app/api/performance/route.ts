@@ -1,10 +1,20 @@
+import { cookies } from 'next/headers';
+import { redisGet } from '@/lib/db/redis';
 import { NextResponse } from 'next/server';
 import { redisLrange, KEYS } from '@/lib/db/redis';
 import type { TradeRecord } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
+async function requireSession() {
+  const sessionId = cookies().get('nexus-session')?.value;
+  if (!sessionId) return null;
+  return redisGet(`nexus:session:${sessionId}`);
+}
+
 export async function GET() {
+  const session = await requireSession();
+  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   // Load trades from Redis
   const trades = await redisLrange<TradeRecord>(KEYS.trades, 0, 499);
   const closed = trades.filter((t) => t.status === 'closed' && t.netPnl !== undefined);

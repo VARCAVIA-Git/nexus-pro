@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { redisGet } from '@/lib/db/redis';
+import { decrypt } from '@/lib/utils/encryption';
 
 export const dynamic = 'force-dynamic';
 
@@ -24,13 +25,18 @@ async function checkAlpaca(baseUrl: string, key: string, secret: string) {
 }
 
 export async function GET() {
-  // Try env vars first, then fall back to Redis-saved keys
+  // Try env vars first, then fall back to Redis-saved keys (encrypted)
   const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys').catch(() => null) ?? {};
 
-  const paperKey = process.env.ALPACA_API_KEY || savedKeys.paperKey || '';
-  const paperSecret = process.env.ALPACA_API_SECRET || savedKeys.paperSecret || '';
-  const liveKey = process.env.ALPACA_LIVE_API_KEY || savedKeys.liveKey || '';
-  const liveSecret = process.env.ALPACA_LIVE_SECRET_KEY || savedKeys.liveSecret || '';
+  let savedLiveKey = '';
+  let savedLiveSecret = '';
+  try { if (savedKeys.liveKey) savedLiveKey = decrypt(savedKeys.liveKey); } catch {}
+  try { if (savedKeys.liveSecret) savedLiveSecret = decrypt(savedKeys.liveSecret); } catch {}
+
+  const paperKey = process.env.ALPACA_API_KEY || '';
+  const paperSecret = process.env.ALPACA_API_SECRET || '';
+  const liveKey = process.env.ALPACA_LIVE_API_KEY || savedLiveKey || '';
+  const liveSecret = process.env.ALPACA_LIVE_SECRET_KEY || savedLiveSecret || '';
 
   const paper = paperKey ? await checkAlpaca('https://paper-api.alpaca.markets', paperKey, paperSecret) : { connected: false, error: 'No keys' };
   const live = liveKey && liveSecret ? await checkAlpaca('https://api.alpaca.markets', liveKey, liveSecret) : { connected: false, error: 'Live keys not configured' };

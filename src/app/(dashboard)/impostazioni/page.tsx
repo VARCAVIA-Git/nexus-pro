@@ -121,7 +121,7 @@ export default function ImpostazioniPage() {
   // UI state
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [saving, setSaving] = useState(false);
-  const [testingBroker, setTestingBroker] = useState(false);
+  const [connectingBroker, setConnectingBroker] = useState(false);
 
   // ── Load data ──
   useEffect(() => {
@@ -169,24 +169,10 @@ export default function ImpostazioniPage() {
       });
       if (!r1.ok) errors.push('profilo');
 
-      // Broker keys — only send real values (not masked "AKYQ...")
-      const isReal = (v: string) => v.length > 8 && !v.endsWith('...');
-      const brokerBody: Record<string, any> = { section: 'broker', liveEnabled };
-      if (isReal(liveKey)) brokerBody.liveKey = liveKey;
-      if (isReal(liveSecret)) brokerBody.liveSecret = liveSecret;
-
-      const r2 = await fetch('/api/settings', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(brokerBody),
-      });
-      if (!r2.ok) errors.push('broker');
+      // Note: broker keys are saved separately via "Collega Broker" button
 
       if (errors.length === 0) {
         showToast('Impostazioni salvate', true);
-        // Refresh broker status from server (reads saved keys)
-        fetch('/api/broker/status').then(r => r.ok ? r.json() : null).then(d => {
-          if (d) { setLiveStatus(d.live ?? null); setPaperStatus(d.paper ?? null); }
-        }).catch(() => {});
       } else {
         showToast(`Errore: ${errors.join(', ')}`, false);
       }
@@ -199,33 +185,52 @@ export default function ImpostazioniPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ── Test broker connection (uses keys from input fields directly) ──
-  const testBrokerConnection = async () => {
+  // ── Connect broker: test keys → save to Redis (encrypted) → update status ──
+  const connectBroker = async () => {
     if (!liveKey || !liveSecret) {
-      showToast('Inserisci API Key e Secret Key prima di testare', false);
+      showToast('Inserisci API Key e Secret Key', false);
       return;
     }
-    setTestingBroker(true);
+    setConnectingBroker(true);
     try {
-      const res = await fetch('/api/broker/test', {
+      // Step 1: Test the keys
+      const testRes = await fetch('/api/broker/test', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ key: liveKey, secret: liveSecret }),
       });
-      if (res.ok) {
-        const d = await res.json();
-        if (d.connected) {
-          setLiveStatus({ connected: true, equity: d.equity });
-          showToast(`Broker connesso! Equity: $${d.equity?.toLocaleString('en-US')} (${d.accountType})`, true);
-        } else {
-          setLiveStatus({ connected: false, error: d.error });
-          showToast(d.error || 'Connessione fallita', false);
-        }
+      const testData = await testRes.json();
+
+      if (!testData.connected) {
+        setLiveStatus({ connected: false, error: testData.error });
+        showToast(testData.error || 'Keys non valide', false);
+        setConnectingBroker(false);
+        return;
+      }
+
+      // Step 2: Keys work — save them (encrypted) to Redis
+      const saveRes = await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          section: 'broker',
+          liveKey,
+          liveSecret,
+          liveEnabled: true,
+        }),
+      });
+
+      if (saveRes.ok) {
+        setLiveStatus({ connected: true, equity: testData.equity });
+        setLiveEnabled(true);
+        showToast(`Broker connesso! Equity: $${testData.equity?.toLocaleString('en-US')} (${testData.accountType})`, true);
+      } else {
+        showToast('Connessione OK ma errore nel salvataggio', false);
       }
     } catch {
-      showToast('Errore di rete nel test connessione', false);
+      showToast('Errore di rete', false);
     }
-    setTestingBroker(false);
+    setConnectingBroker(false);
   };
 
   // ── Mine engine toggle ──
@@ -320,33 +325,31 @@ export default function ImpostazioniPage() {
             </div>
           </div>
 
-          {/* Test connection */}
+          {/* Connect button — saves keys + tests + enables */}
           <button
-            onClick={testBrokerConnection}
-            disabled={testingBroker}
-            className="flex items-center gap-2 rounded-lg border border-n-border px-3 py-2 text-[11px] font-medium text-n-dim hover:text-n-text hover:border-n-border-b transition-all disabled:opacity-50"
+            onClick={connectBroker}
+            disabled={connectingBroker || !liveKey || !liveSecret}
+            className="flex w-full items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold transition-all disabled:opacity-30 disabled:cursor-not-allowed bg-blue-500 text-white hover:bg-blue-600"
           >
-            {testingBroker ? <Loader2 size={12} className="animate-spin" /> : <Wifi size={12} />}
-            Testa connessione
+            {connectingBroker ? <><Loader2 size={16} className="animate-spin" /> Connessione...</> : <><Wifi size={16} /> Collega Broker</>}
           </button>
 
           {/* Connection status detail */}
           {liveStatus && (
-            <div className={`rounded-lg p-3 text-[10px] ${liveStatus.connected ? 'bg-green-500/5 text-green-300' : 'bg-red-500/5 text-red-300'}`}>
+            <div className={`rounded-lg p-3 text-[11px] ${liveStatus.connected ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-red-500/10 border border-red-500/30 text-red-300'}`}>
               {liveStatus.connected ? (
-                <>Broker connesso. Equity: <span className="font-mono font-bold">${liveStatus.equity?.toLocaleString('en-US')}</span></>
+                <div className="flex items-center gap-2">
+                  <CheckCircle2 size={14} />
+                  <span>Broker connesso. Equity: <span className="font-mono font-bold">${liveStatus.equity?.toLocaleString('en-US')}</span></span>
+                </div>
               ) : (
-                <>Connessione fallita: {liveStatus.error ?? 'Keys non configurate'}</>
+                <div className="flex items-center gap-2">
+                  <XCircle size={14} />
+                  <span>{liveStatus.error ?? 'Keys non configurate'}</span>
+                </div>
               )}
             </div>
           )}
-
-          <Toggle
-            label="Abilita Trading Reale"
-            description="I bot opereranno con fondi reali quando attivato"
-            checked={liveEnabled}
-            onChange={setLiveEnabled}
-          />
         </div>
       </Section>
 
