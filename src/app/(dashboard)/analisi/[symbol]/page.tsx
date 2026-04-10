@@ -77,10 +77,14 @@ export default function AssetDetailPage() {
         fetch(`/api/aic/research?symbol=${encodeURIComponent(symbol)}`),
         fetch(`/api/aic/confluence?symbol=${encodeURIComponent(symbol)}`),
       ]);
-      const status = sRes.status === 'fulfilled' && sRes.value.ok ? await sRes.value.json() : null;
-      const research = rRes.status === 'fulfilled' && rRes.value.ok ? await rRes.value.json() : null;
-      const confluence = cRes.status === 'fulfilled' && cRes.value.ok ? await cRes.value.json() : null;
-      setAicData({ status, research, confluence: confluence?.confluence ?? status?.confluence });
+      const sData = sRes.status === 'fulfilled' && sRes.value.ok ? await sRes.value.json() : null;
+      const rData = rRes.status === 'fulfilled' && rRes.value.ok ? await rRes.value.json() : null;
+      const cData = cRes.status === 'fulfilled' && cRes.value.ok ? await cRes.value.json() : null;
+      // Unwrap API wrappers: { status: {...} } → {...}, { research: {...} } → {...}
+      const status = sData?.status ?? sData;
+      const research = rData?.research ?? rData;
+      const confluence = cData?.confluence ?? status?.confluence;
+      setAicData({ status, research, confluence });
     } catch { /* AIC may be offline */ }
   }, [symbol]);
 
