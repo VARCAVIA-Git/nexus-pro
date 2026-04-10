@@ -3,7 +3,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ASSETS, STRATEGIES, calculateRiskParams, type AssetConfig, type StrategyConfig } from '@/lib/config/assets';
 import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
-import { useModeStore } from '@/stores/mode-store';
 import type { MultiBotConfig } from '@/types/bot';
 import {
   Bot, Rocket, TrendingUp, Shield, Search, Plus, Play, Square,
@@ -19,7 +18,7 @@ function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean
 }
 
 export default function StrategyPage() {
-  const mode = useModeStore((s) => s.mode);
+  const mode = 'real';
   const [allBots, setAllBots] = useState<MultiBotConfig[]>([]);
   const [disabledIds, setDisabledIds] = useState<Set<string>>(new Set());
   const [accountEquity, setAccountEquity] = useState(0);
@@ -128,7 +127,7 @@ export default function StrategyPage() {
             <div className="mb-1 font-semibold text-blue-300">Strategy V2 in arrivo</div>
             <p className="text-n-dim">
               Ogni Strategy userà le AI Analytic dei tuoi asset.{' '}
-              <a href="/assets" className="font-semibold text-blue-300 underline-offset-2 hover:underline">
+              <a href="/analisi" className="font-semibold text-blue-300 underline-offset-2 hover:underline">
                 Vai su /assets
               </a>{' '}
               per assegnarle.

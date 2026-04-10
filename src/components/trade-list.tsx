@@ -53,7 +53,7 @@ export function TradeList({ trades: allTrades, title, env, showWarning }: {
           <Rocket size={28} className="text-n-dim mb-3" />
           <p className="text-sm font-semibold text-n-text-s">Nessun trade eseguito</p>
           <p className="mt-1 text-xs text-n-dim text-center px-4">Avvia il bot dalla pagina Strategy.</p>
-          <Link href="/strategy" className="mt-4 rounded-lg bg-n-accent-dim px-4 py-2.5 text-xs font-semibold text-accent min-h-[44px] flex items-center">Vai a Strategy</Link>
+          <Link href="/bot" className="mt-4 rounded-lg bg-n-accent-dim px-4 py-2.5 text-xs font-semibold text-accent min-h-[44px] flex items-center">Vai a Strategy</Link>
         </div>
       </div>
     );

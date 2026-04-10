@@ -110,7 +110,7 @@ export default function AssetDetailPage() {
     setBusy(true);
     try {
       await fetch(`/api/analytics/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
-      router.push('/assets');
+      router.push('/analisi');
     } finally {
       setBusy(false);
     }
@@ -127,7 +127,7 @@ export default function AssetDetailPage() {
   if (!analytic) {
     return (
       <div className="space-y-4">
-        <Link href="/assets" className="inline-flex items-center gap-2 text-xs text-n-dim hover:text-n-text">
+        <Link href="/analisi" className="inline-flex items-center gap-2 text-xs text-n-dim hover:text-n-text">
           <ArrowLeft size={14} /> Assets
         </Link>
         <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-8 text-center text-sm text-n-dim">
@@ -147,7 +147,7 @@ export default function AssetDetailPage() {
 
   return (
     <div className="space-y-5">
-      <Link href="/assets" className="inline-flex items-center gap-2 text-xs text-n-dim hover:text-n-text">
+      <Link href="/analisi" className="inline-flex items-center gap-2 text-xs text-n-dim hover:text-n-text">
         <ArrowLeft size={14} /> Assets
       </Link>
 

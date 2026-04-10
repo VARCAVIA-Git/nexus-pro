@@ -1,12 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useModeStore } from '@/stores/mode-store';
 import { RefreshCw, AlertTriangle } from 'lucide-react';
 import { TradeList } from '@/components/trade-list';
 
 export default function OperazioniPage() {
-  const mode = useModeStore((s) => s.mode);
+  const mode = 'real';
   const [trades, setTrades] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useModeStore } from '@/stores/mode-store';
 import { fmtDollar, fmtPnl } from '@/lib/utils/format';
 import Link from 'next/link';
 import {
@@ -15,7 +14,7 @@ interface BotStatusData { running: boolean; tickCount: number; positions: any[];
 interface PerfData { totalTrades: number; wins: number; losses: number; winRate: number; totalPnl: number; dailyPnl: number; weeklyPnl: number; monthlyPnl: number; sharpeRatio: number; equityCurve: { date: string; equity: number }[] }
 
 export default function DashboardPage() {
-  const mode = useModeStore((s) => s.mode);
+  const mode = 'real';
   const [bot, setBot] = useState<BotStatusData | null>(null);
   const [perf, setPerf] = useState<PerfData | null>(null);
   const [balance, setBalance] = useState<number>(0);
@@ -54,13 +53,7 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6 stagger">
-      {mode === 'demo' && (
-        <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-4 py-2.5 text-center text-xs text-amber-400">
-          Stai usando il simulatore — i dati non sono reali
-        </div>
-      )}
-
-      {mode === 'real' && !brokerConnected && !loading && (
+      {!brokerConnected && !loading && (
         <div className="rounded-xl bg-blue-500/5 border border-blue-500/20 px-4 py-3 text-sm text-blue-300">
           Conto live non collegato. <Link href="/connections" className="underline font-medium">Configura le API keys live →</Link>
         </div>
@@ -76,7 +69,7 @@ export default function DashboardPage() {
               <p className="text-xs text-n-dim" suppressHydrationWarning>Tick #{bot.tickCount} · {bot.positions.length} posizioni · {bot.closedTrades.length} trades</p>
             </div>
           </div>
-          <Link href="/strategy" className="rounded-xl border border-green-500/20 px-3 py-2 text-xs font-medium text-n-green hover:bg-green-500/10 min-h-[40px] flex items-center gap-1.5"><Bot size={13} /> Gestisci</Link>
+          <Link href="/bot" className="rounded-xl border border-green-500/20 px-3 py-2 text-xs font-medium text-n-green hover:bg-green-500/10 min-h-[40px] flex items-center gap-1.5"><Bot size={13} /> Gestisci</Link>
         </div>
       )}
 
@@ -165,7 +158,7 @@ export default function DashboardPage() {
       {/* Empty state */}
       {!bot?.running && (!bot?.bots || bot.bots.length === 0) && !loading && (
         <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 p-6 text-center">
-          <p className="text-sm text-n-dim">Crea il tuo primo bot → <Link href="/strategy" className="text-accent hover:underline">Strategy</Link></p>
+          <p className="text-sm text-n-dim">Crea il tuo primo bot → <Link href="/bot" className="text-accent hover:underline">Strategy</Link></p>
         </div>
       )}
     </div>

@@ -3,24 +3,28 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { clsx } from 'clsx';
-import { useModeStore } from '@/stores/mode-store';
 import {
-  LayoutDashboard, Brain, Target, Activity, Wallet, Pickaxe,
-  Settings, Plug, HeartPulse, Menu, X, Rocket, ArrowRightLeft, LogOut,
+  LayoutDashboard, Brain, Bot, Activity, Wallet,
+  Settings, Plug, HeartPulse, Menu, X, Rocket, LogOut,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState, useEffect } from 'react';
 
-const MAIN_NAV = [
+const SUPERVISIONE_NAV = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/assets', label: 'Assets', icon: Brain },
-  { href: '/mines', label: 'Mines', icon: Pickaxe },
-  { href: '/strategy', label: 'Strategy', icon: Target },
+];
+
+const ANALISI_NAV = [
+  { href: '/analisi', label: 'AI Analytics', icon: Brain },
+];
+
+const BOT_NAV = [
+  { href: '/bot', label: 'Bot', icon: Bot },
   { href: '/operazioni', label: 'Operazioni', icon: Activity },
   { href: '/portfolio', label: 'Portfolio', icon: Wallet },
 ];
 
-const SYSTEM_NAV = [
+const SISTEMA_NAV = [
   { href: '/impostazioni', label: 'Impostazioni', icon: Settings },
   { href: '/connections', label: 'Connessioni', icon: Plug },
   { href: '/status', label: 'Status', icon: HeartPulse },
@@ -29,7 +33,7 @@ const SYSTEM_NAV = [
 function NavLink({ href, label, icon: Icon, pathname, onClick }: {
   href: string; label: string; icon: React.ElementType; pathname: string; onClick?: () => void;
 }) {
-  const active = pathname === href;
+  const active = pathname === href || pathname.startsWith(href + '/');
   return (
     <Link href={href} onClick={onClick} className={clsx('flex items-center gap-3 rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all', active ? 'bg-n-accent-dim text-accent' : 'text-n-dim hover:bg-n-card hover:text-n-text')}>
       <Icon size={18} strokeWidth={active ? 2 : 1.6} />
@@ -40,8 +44,6 @@ function NavLink({ href, label, icon: Icon, pathname, onClick }: {
 
 function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate?: () => void }) {
   const router = useRouter();
-  const { mode, toggle } = useModeStore();
-  const isDemo = mode === 'demo';
 
   const [botRunning, setBotRunning] = useState(false);
   useEffect(() => {
@@ -51,41 +53,48 @@ function SidebarContent({ pathname, onNavigate }: { pathname: string; onNavigate
   }, []);
 
   return (
-    <aside className={clsx('flex h-full w-[240px] flex-col bg-n-bg-s', isDemo ? 'border-r-2 border-r-amber-500/50' : 'border-r-2 border-r-blue-500/50')}>
+    <aside className="flex h-full w-[240px] flex-col bg-n-bg-s border-r border-n-border">
       {/* Logo */}
       <div className="flex h-16 items-center gap-3 px-5">
-        <div className={clsx('flex h-9 w-9 items-center justify-center rounded-xl', isDemo ? 'bg-amber-500/15' : 'bg-blue-500/15')}>
-          <Rocket size={18} className={isDemo ? 'text-amber-400' : 'text-blue-400'} />
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent/15">
+          <Rocket size={18} className="text-accent" />
         </div>
-        <div>
-          <span className="text-[15px] font-semibold tracking-tight text-n-text">NEXUS PRO</span>
-          {isDemo && <span className="ml-1.5 text-[9px] font-medium text-amber-400">DEMO</span>}
-        </div>
+        <span className="text-[15px] font-semibold tracking-tight text-n-text">NEXUS PRO</span>
       </div>
 
       {/* Nav sections */}
-      <nav className="flex-1 space-y-6 px-3 pt-2 overflow-y-auto">
+      <nav className="flex-1 space-y-5 px-3 pt-2 overflow-y-auto">
         <div>
-          <p className="label px-3 mb-1.5">Principale</p>
+          <p className="label px-3 mb-1.5">Supervisione</p>
           <div className="space-y-0.5">
-            {MAIN_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+            {SUPERVISIONE_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+          </div>
+        </div>
+
+        <div>
+          <p className="label px-3 mb-1.5">Analisi</p>
+          <div className="space-y-0.5">
+            {ANALISI_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+          </div>
+        </div>
+
+        <div>
+          <p className="label px-3 mb-1.5">Bot</p>
+          <div className="space-y-0.5">
+            {BOT_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
           </div>
         </div>
 
         <div>
           <p className="label px-3 mb-1.5">Sistema</p>
           <div className="space-y-0.5">
-            {SYSTEM_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
+            {SISTEMA_NAV.map(item => <NavLink key={item.href} {...item} pathname={pathname} onClick={onNavigate} />)}
           </div>
         </div>
       </nav>
 
-      {/* Mode switch + engine status */}
+      {/* Engine status + logout */}
       <div className="border-t border-n-border p-3 space-y-2">
-        <button onClick={() => { toggle(); onNavigate?.(); }} className={clsx('flex w-full items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition-all min-h-[44px]', isDemo ? 'bg-blue-500/10 text-blue-400 hover:bg-blue-500/20' : 'bg-amber-500/10 text-amber-400 hover:bg-amber-500/20')}>
-          <ArrowRightLeft size={14} />
-          {isDemo ? 'Passa a REAL' : 'Passa a DEMO'}
-        </button>
         <div className="flex items-center justify-between px-2">
           <span className="text-[10px] text-n-dim">Engine</span>
           <span className={clsx('font-mono text-[10px] font-medium', botRunning ? 'text-n-green' : 'text-n-dim')}>{botRunning ? 'active' : 'idle'}</span>

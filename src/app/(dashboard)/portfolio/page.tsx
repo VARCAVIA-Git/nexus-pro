@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useModeStore } from '@/stores/mode-store';
 import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -21,7 +20,7 @@ interface PortfolioData {
 }
 
 export default function PortfolioPage() {
-  const mode = useModeStore((s) => s.mode);
+  const mode = 'real';
   const [data, setData] = useState<PortfolioData | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -96,7 +95,7 @@ export default function PortfolioPage() {
           <Rocket size={32} className="text-n-dim mb-4" />
           <p className="text-base font-medium text-n-text-s">Nessun trade eseguito</p>
           <p className="mt-1 text-sm text-n-dim">Avvia il bot dalla pagina Strategy.</p>
-          <Link href="/strategy" className="mt-5 rounded-xl bg-n-accent-dim px-6 py-3 text-sm font-medium text-accent min-h-[44px]">Vai a Strategy</Link>
+          <Link href="/bot" className="mt-5 rounded-xl bg-n-accent-dim px-6 py-3 text-sm font-medium text-accent min-h-[44px]">Vai a Strategy</Link>
         </div>
       ) : (
         <>
