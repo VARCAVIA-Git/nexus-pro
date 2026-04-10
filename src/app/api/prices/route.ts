@@ -40,9 +40,9 @@ export async function GET() {
 
   // Split into crypto and stocks — respect user selection exactly
   const allCrypto = Object.keys(COIN_ID_MAP);
-  const hasSelection = selectedAssets && selectedAssets.length > 0;
-  const cryptoSymbols = hasSelection ? selectedAssets.filter(a => allCrypto.includes(a)) : DEFAULT_CRYPTO;
-  const stockSymbols = hasSelection ? selectedAssets.filter(a => !allCrypto.includes(a)) : DEFAULT_STOCKS;
+  const hasSelection = Array.isArray(selectedAssets) && selectedAssets.length > 0;
+  const cryptoSymbols = hasSelection ? selectedAssets!.filter(a => allCrypto.includes(a)) : DEFAULT_CRYPTO;
+  const stockSymbols = hasSelection ? selectedAssets!.filter(a => !allCrypto.includes(a)) : DEFAULT_STOCKS;
 
   // ── Fetch crypto from CoinGecko ──
   try {
