@@ -38,9 +38,9 @@ function Toggle({ label, description, checked, onChange }: {
   );
 }
 
-function InputField({ label, value, onChange, type = 'text', placeholder }: {
+function InputField({ label, value, onChange, type = 'text', placeholder, autoComplete }: {
   label: string; value: string; onChange: (v: string) => void;
-  type?: string; placeholder?: string;
+  type?: string; placeholder?: string; autoComplete?: string;
 }) {
   return (
     <div>
@@ -50,6 +50,7 @@ function InputField({ label, value, onChange, type = 'text', placeholder }: {
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
+        autoComplete={autoComplete ?? 'off'}
         className="w-full rounded-lg border border-n-border bg-n-input px-3 py-2 font-mono text-xs text-n-text placeholder:text-n-dim focus:border-n-border-b focus:outline-none"
       />
     </div>
@@ -247,18 +248,17 @@ export default function ImpostazioniPage() {
       });
       if (!res.ok) errors.push('profilo');
 
-      // 2. Save broker keys (only if user entered them)
-      if (alpacaKey || alpacaSecret || alpacaLiveKey || alpacaLiveSecret) {
+      // 2. Save broker keys (only if user entered real values, skip masked/empty)
+      const isRealKey = (v: string) => v.length > 5 && !v.includes('...');
+      const brokerPayload: Record<string, any> = { section: 'broker', liveEnabled };
+      if (isRealKey(alpacaKey)) brokerPayload.paperKey = alpacaKey;
+      if (isRealKey(alpacaSecret)) brokerPayload.paperSecret = alpacaSecret;
+      if (isRealKey(alpacaLiveKey)) brokerPayload.liveKey = alpacaLiveKey;
+      if (isRealKey(alpacaLiveSecret)) brokerPayload.liveSecret = alpacaLiveSecret;
+      {
         const brokerRes = await fetch('/api/settings', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            section: 'broker',
-            paperKey: alpacaKey || undefined,
-            paperSecret: alpacaSecret || undefined,
-            liveKey: alpacaLiveKey || undefined,
-            liveSecret: alpacaLiveSecret || undefined,
-            liveEnabled,
-          }),
+          body: JSON.stringify(brokerPayload),
         });
         if (!brokerRes.ok) errors.push('broker');
       }
@@ -356,8 +356,8 @@ export default function ImpostazioniPage() {
                 )}
               </div>
               <p className="text-[9px] text-n-dim">I bot operano qui con soldi virtuali. Nessun rischio reale.</p>
-              <InputField label="API Key" value={alpacaKey} onChange={setAlpacaKey} placeholder="PK..." />
-              <InputField label="Secret" value={alpacaSecret} onChange={setAlpacaSecret} type="password" placeholder="Secret Key" />
+              <InputField label="API Key" value={alpacaKey} onChange={setAlpacaKey} placeholder="Inserisci Paper API Key" autoComplete="off" />
+              <InputField label="Secret" value={alpacaSecret} onChange={setAlpacaSecret} placeholder="Inserisci Paper Secret Key" autoComplete="new-password" />
             </div>
 
             {/* Live (optional) */}
@@ -377,8 +377,8 @@ export default function ImpostazioniPage() {
                 <AlertTriangle size={12} className="text-red-400 mt-0.5 shrink-0" />
                 <p className="text-[9px] text-red-300/80">Configura solo quando sei pronto a rischiare capitale reale.</p>
               </div>
-              <InputField label="API Key" value={alpacaLiveKey} onChange={setAlpacaLiveKey} placeholder="AK..." />
-              <InputField label="Secret" value={alpacaLiveSecret} onChange={setAlpacaLiveSecret} type="password" placeholder="Secret Key" />
+              <InputField label="API Key" value={alpacaLiveKey} onChange={setAlpacaLiveKey} placeholder="Inserisci Live API Key" autoComplete="off" />
+              <InputField label="Secret" value={alpacaLiveSecret} onChange={setAlpacaLiveSecret} placeholder="Inserisci Live Secret Key" autoComplete="new-password" />
               <Toggle label="Abilita Fondi Reali" description="I bot opereranno con denaro vero" checked={liveEnabled} onChange={setLiveEnabled} />
               <p className="text-[9px] text-n-dim"><a href="https://app.alpaca.markets" target="_blank" rel="noopener" className="text-blue-400 hover:underline">Gestisci fondi su Alpaca</a></p>
             </div>
