@@ -42,74 +42,6 @@ function Toggle({ label, description, checked, onChange }: {
   );
 }
 
-// ── Ticker Settings (standalone save) ────────────────────────
-
-const ALL_TICKER = {
-  crypto: ['BTC', 'ETH', 'SOL', 'LINK', 'ADA', 'DOT', 'AVAX', 'MATIC', 'DOGE', 'XRP', 'ATOM', 'UNI', 'AAVE', 'APT', 'ARB', 'OP', 'FIL', 'LTC', 'NEAR', 'INJ'],
-  stocks: ['AAPL', 'NVDA', 'TSLA', 'MSFT', 'GOOGL', 'AMZN', 'META', 'SPY', 'QQQ', 'AMD', 'NFLX', 'CRM', 'COIN', 'SQ', 'PLTR', 'UBER', 'ABNB', 'SNOW', 'MSTR', 'RIOT'],
-};
-
-function TickerSettings() {
-  const [selected, setSelected] = useState<Set<string>>(new Set(['BTC', 'ETH', 'SOL', 'AAPL', 'NVDA', 'SPY']));
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/settings?section=ticker').then(r => r.ok ? r.json() : null).then(d => {
-      if (d?.assets && Array.isArray(d.assets)) setSelected(new Set(d.assets));
-    }).catch(() => {});
-  }, []);
-
-  const toggle = (a: string) => { const s = new Set(selected); if (s.has(a)) s.delete(a); else s.add(a); setSelected(s); };
-  const save = async () => {
-    setSaving(true);
-    const assets = Array.from(selected);
-    try {
-      const [r1, r2] = await Promise.all([
-        fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker', assets }) }),
-        fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ section: 'ticker_global', assets }) }),
-      ]);
-      if (r1.ok && r2.ok) {
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-        // Force browser to reload ticker by refreshing the page after a short delay
-        setTimeout(() => window.location.reload(), 1500);
-      } else {
-        setSaved(false);
-        alert('Errore nel salvataggio ticker. Riprova.');
-      }
-    } catch {
-      alert('Errore di connessione.');
-    }
-    setSaving(false);
-  };
-
-  return (
-    <div className="rounded-xl border border-n-border bg-n-card p-5 space-y-3">
-      <div className="flex items-center justify-between">
-        <h3 className="text-sm font-bold text-n-text">Ticker</h3>
-        <button onClick={save} disabled={saving} className="rounded-lg bg-n-text px-3 py-1.5 text-xs font-medium text-n-bg disabled:opacity-50">
-          {saved ? 'Salvato' : saving ? '...' : 'Salva'}
-        </button>
-      </div>
-      <div className="space-y-2">
-        <p className="text-[10px] text-n-dim">Crypto</p>
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_TICKER.crypto.map(a => (
-            <button key={a} onClick={() => toggle(a)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${selected.has(a) ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-n-border text-n-dim'}`}>{a}</button>
-          ))}
-        </div>
-        <p className="text-[10px] text-n-dim">Stocks</p>
-        <div className="flex flex-wrap gap-1.5">
-          {ALL_TICKER.stocks.map(a => (
-            <button key={a} onClick={() => toggle(a)} className={`rounded-lg border px-2.5 py-1 text-[11px] font-medium transition-all ${selected.has(a) ? 'border-green-500/30 bg-green-500/10 text-green-400' : 'border-n-border text-n-dim'}`}>{a}</button>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Main Page ────────────────────────────────────────────────
 
 export default function ImpostazioniPage() {
@@ -509,8 +441,6 @@ export default function ImpostazioniPage() {
           </div>
         </Section>
 
-        {/* ═══ TICKER ═══ */}
-        <TickerSettings />
       </div>
 
       {/* ═══ ACCOUNT ═══ */}
