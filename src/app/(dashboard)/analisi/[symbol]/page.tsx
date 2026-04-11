@@ -14,10 +14,8 @@ import type {
 } from '@/lib/analytics/types';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot, Rocket } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
-import { NewsPulseCard } from '@/components/analytics/NewsPulseCard';
-import { MacroEventsCard } from '@/components/analytics/MacroEventsCard';
-import { RelevantEventsCard } from '@/components/analytics/RelevantEventsCard';
 import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
+import { AssetIntelCard } from '@/components/analytics/AssetIntelCard';
 import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
 import { useExplainMode } from '@/hooks/useExplainMode';
@@ -361,19 +359,7 @@ export default function AssetDetailPage() {
         <>
           <AICInsightsCard data={aicData} symbol={symbol} />
           <LiveContextCard context={live} symbol={symbol} />
-          <div className="grid gap-5 lg:grid-cols-2">
-            <NewsPulseCard digest={news} symbol={symbol} onRefresh={loadLive} />
-            <MacroEventsCard
-              events={events}
-              eventImpacts={report?.eventImpacts}
-              symbol={symbol}
-            />
-          </div>
-          <RelevantEventsCard
-            events={events}
-            eventImpacts={report?.eventImpacts}
-            symbol={symbol}
-          />
+          <AssetIntelCard symbol={symbol} />
         </>
       )}
 
