@@ -232,15 +232,7 @@ function StockProfileCard({ profile, recommendation, financials, earnings }: any
 
 function MacroEventsList({ events }: { events: any[] }) {
   if (events.length === 0) {
-    return (
-      <div className="rounded-xl border border-n-border bg-n-card p-5">
-        <div className="flex items-center gap-2 mb-2">
-          <Calendar size={14} className="text-blue-400" />
-          <h3 className="text-sm font-bold text-n-text">Calendario Macro</h3>
-        </div>
-        <p className="text-xs text-n-dim">Nessun evento macro disponibile al momento.</p>
-      </div>
-    );
+    return null; // Hide entirely when no events to keep page clean
   }
 
   // Trading Economics format: importance is 1/2/3, not "High"/"Medium"/"Low"

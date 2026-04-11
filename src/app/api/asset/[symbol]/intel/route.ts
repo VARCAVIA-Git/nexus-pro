@@ -77,14 +77,19 @@ export async function GET(_req: Request, { params }: { params: { symbol: string 
       global: unwrap(cmcGlobal, null),
       news: (() => {
         const digest = unwrap(newsDigest, null) as any;
-        if (!digest?.items) return [];
-        return digest.items.slice(0, 8).map((item: any) => ({
+        const items = digest?.topItems ?? digest?.items ?? [];
+        if (!Array.isArray(items)) return [];
+        return items.slice(0, 8).map((item: any) => ({
           id: item.id ?? Math.random(),
           title: item.title,
           url: item.url,
           source: item.source,
           publishedAt: item.publishedAt ?? new Date(item.timestamp ?? Date.now()).toISOString(),
-          votes: { positive: item.sentimentScore > 0.1 ? Math.round(item.sentimentScore * 10) : 0, negative: item.sentimentScore < -0.1 ? Math.round(-item.sentimentScore * 10) : 0, important: 0 },
+          votes: {
+            positive: (item.sentimentScore ?? 0) > 0.1 ? Math.round((item.sentimentScore ?? 0) * 10) : 0,
+            negative: (item.sentimentScore ?? 0) < -0.1 ? Math.round(-(item.sentimentScore ?? 0) * 10) : 0,
+            important: 0,
+          },
           kind: 'news',
         }));
       })(),
