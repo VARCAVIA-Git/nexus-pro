@@ -1,7 +1,8 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import type { LiveContext } from '@/lib/analytics/types';
-import { Activity, TrendingUp, TrendingDown, Minus, Zap } from 'lucide-react';
+import { Activity, TrendingUp, TrendingDown, Minus, Zap, RadioTower } from 'lucide-react';
 
 function fmtPct(v: number, digits = 2): string {
   if (v === undefined || v === null || Number.isNaN(v)) return '—';
@@ -16,11 +17,36 @@ function fmtNum(v: number, digits = 2): string {
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'ora';
+  if (mins < 1) return 'pochi sec fa';
   if (mins < 60) return `${mins} min fa`;
   const hours = Math.floor(mins / 60);
   if (hours < 24) return `${hours}h fa`;
   return `${Math.floor(hours / 24)}g fa`;
+}
+
+/** Hook to fetch live price for a specific symbol every 15s */
+function useLivePrice(symbol: string): { price: number | null; updatedAt: number | null } {
+  const [data, setData] = useState<{ price: number | null; updatedAt: number | null }>({ price: null, updatedAt: null });
+
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const sym = symbol.replace('/', '%2F');
+        const res = await fetch(`/api/prices/symbol?symbol=${sym}`);
+        if (res.ok) {
+          const d = await res.json();
+          if (typeof d.price === 'number') {
+            setData({ price: d.price, updatedAt: Date.now() });
+          }
+        }
+      } catch {}
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 15000);
+    return () => clearInterval(interval);
+  }, [symbol]);
+
+  return data;
 }
 
 function MomentumBadge({ score }: { score: number }) {
@@ -47,7 +73,9 @@ function LiveContextPlaceholder({ msg }: { msg: string }) {
   );
 }
 
-export function LiveContextCard({ context }: { context: LiveContext | null | undefined }) {
+export function LiveContextCard({ context, symbol }: { context: LiveContext | null | undefined; symbol?: string }) {
+  const livePrice = useLivePrice(symbol ?? '');
+
   if (!context) {
     return <LiveContextPlaceholder msg="In attesa di dati live (verrà popolato al prossimo tick)." />;
   }
@@ -65,23 +93,42 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
     return <LiveContextPlaceholder msg="Live context in formato legacy. Sarà aggiornato al prossimo tick." />;
   }
 
+  // Use live price if available, fallback to context price
+  const displayPrice = livePrice.price ?? context.price;
+  const priceIsLive = livePrice.price !== null;
+  const regimeLabels: Record<string, string> = {
+    TRENDING_UP: 'Trend rialzista', TRENDING_DOWN: 'Trend ribassista',
+    RANGING: 'Laterale', VOLATILE: 'Volatile',
+  };
+
   return (
     <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
-          <Activity size={16} /> Live Context
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-blue-300">
+            <RadioTower size={16} className="animate-pulse" /> AI Live Monitor
+          </div>
+          <span className="flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[9px] font-bold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            ATTIVA
+          </span>
         </div>
-        <span className="text-[10px] text-n-dim">aggiornato {context.updatedAt ? timeAgo(context.updatedAt) : '—'}</span>
+        <span className="text-[10px] text-n-dim">
+          Snapshot {context.updatedAt ? timeAgo(context.updatedAt) : '—'}
+        </span>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="rounded-xl bg-n-bg-s p-3">
-          <div className="text-[10px] uppercase tracking-wide text-n-dim">Prezzo</div>
-          <div className="mt-1 font-mono text-sm font-semibold text-n-text">{fmtNum(context.price, 2)}</div>
+          <div className="flex items-center justify-between">
+            <div className="text-[10px] uppercase tracking-wide text-n-dim">Prezzo {priceIsLive ? 'live' : 'snapshot'}</div>
+            {priceIsLive && <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />}
+          </div>
+          <div className="mt-1 font-mono text-sm font-semibold text-n-text">${fmtNum(displayPrice, 2)}</div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
-          <div className="text-[10px] uppercase tracking-wide text-n-dim">Regime</div>
-          <div className="mt-1 text-sm font-semibold text-n-text">{context.regime}</div>
+          <div className="text-[10px] uppercase tracking-wide text-n-dim">Andamento</div>
+          <div className="mt-1 text-sm font-semibold text-n-text">{regimeLabels[context.regime] ?? context.regime}</div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
           <div className="text-[10px] uppercase tracking-wide text-n-dim">Momentum</div>
@@ -90,8 +137,8 @@ export function LiveContextCard({ context }: { context: LiveContext | null | und
           </div>
         </div>
         <div className="rounded-xl bg-n-bg-s p-3">
-          <div className="text-[10px] uppercase tracking-wide text-n-dim">Vol percentile</div>
-          <div className="mt-1 text-sm font-semibold text-n-text">{context.volatilityPercentile ?? 0}%</div>
+          <div className="text-[10px] uppercase tracking-wide text-n-dim">Volatilità</div>
+          <div className="mt-1 text-sm font-semibold text-n-text">{context.volatilityPercentile ?? 0}<span className="text-[10px] text-n-dim">/100</span></div>
         </div>
       </div>
 

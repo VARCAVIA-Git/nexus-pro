@@ -360,7 +360,7 @@ export default function AssetDetailPage() {
       {isReady && (
         <>
           <AICInsightsCard data={aicData} symbol={symbol} />
-          <LiveContextCard context={live} />
+          <LiveContextCard context={live} symbol={symbol} />
           <div className="grid gap-5 lg:grid-cols-2">
             <NewsPulseCard digest={news} symbol={symbol} onRefresh={loadLive} />
             <MacroEventsCard

@@ -28,15 +28,16 @@ function authorized(req: Request): boolean {
   return req.headers.get('x-cron-secret') === required;
 }
 
-async function nextSymbolRoundRobin(): Promise<string | null> {
+/** Process ALL ready symbols on each tick, not round-robin. */
+async function getAllReadySymbols(): Promise<string[]> {
   const members = await redisSMembers(KEY_LIST);
-  if (!members || members.length === 0) return null;
-  const sorted = [...members].sort();
-  const cursor = await redisGet<{ idx: number }>(KEY_CURSOR);
-  const idx = cursor?.idx ?? 0;
-  const symbol = sorted[idx % sorted.length];
-  await redisSet(KEY_CURSOR, { idx: (idx + 1) % sorted.length });
-  return symbol;
+  if (!members || members.length === 0) return [];
+  const ready: string[] = [];
+  for (const sym of members) {
+    const state = await redisGet<AssetAnalytic>(KEY_STATE(sym));
+    if (state?.status === 'ready') ready.push(sym);
+  }
+  return ready;
 }
 
 export async function POST(req: Request) {
@@ -49,41 +50,36 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, skipped: 'training-lock-held', elapsedMs: Date.now() - start });
   }
 
-  const symbol = await nextSymbolRoundRobin();
-  if (!symbol) {
+  const symbols = await getAllReadySymbols();
+  if (symbols.length === 0) {
     return NextResponse.json({ ok: true, skipped: 'no-symbols', elapsedMs: Date.now() - start });
   }
 
-  const state = await redisGet<AssetAnalytic>(KEY_STATE(symbol));
-  if (!state || state.status !== 'ready') {
-    return NextResponse.json({
-      ok: true,
-      skipped: `not-ready:${state?.status ?? 'missing'}`,
-      symbol,
-      elapsedMs: Date.now() - start,
-    });
-  }
+  // Process all symbols in parallel with budget guard
+  const BUDGET_MS = 25_000;
+  const results = await Promise.allSettled(
+    symbols.map(async sym => {
+      if (Date.now() - start > BUDGET_MS) return { symbol: sym, skipped: 'budget' };
+      try {
+        const ctx = await computeLiveContext(sym);
+        return {
+          symbol: sym,
+          regime: ctx.regime,
+          momentumScore: ctx.momentumScore,
+          activeRules: ctx.activeRules.length,
+        };
+      } catch (e: any) {
+        return { symbol: sym, error: e?.message ?? String(e), code: e?.code };
+      }
+    }),
+  );
 
-  try {
-    const ctx = await computeLiveContext(symbol);
-    return NextResponse.json({
-      ok: true,
-      symbol,
-      regime: ctx.regime,
-      momentumScore: ctx.momentumScore,
-      activeRules: ctx.activeRules.length,
-      nearestZones: ctx.nearestZones.length,
-      elapsedMs: Date.now() - start,
-    });
-  } catch (e: any) {
-    return NextResponse.json({
-      ok: false,
-      symbol,
-      error: e?.message ?? String(e),
-      code: e?.code,
-      elapsedMs: Date.now() - start,
-    });
-  }
+  return NextResponse.json({
+    ok: true,
+    processed: symbols.length,
+    results: results.map(r => r.status === 'fulfilled' ? r.value : { error: r.reason?.message }),
+    elapsedMs: Date.now() - start,
+  });
 }
 
 export async function GET(req: Request) {
