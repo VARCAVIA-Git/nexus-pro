@@ -10,6 +10,7 @@ import type {
   LiveContext,
   NewsDigest,
   MacroEvent,
+  BacktestStrategySummary,
 } from '@/lib/analytics/types';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot, Rocket } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
@@ -502,16 +503,48 @@ function ReportView({
   void eventImpacts;
   void trainingHistory;
 
+  // Calculate total candles analyzed and date range
+  const totalCandles = Object.values(tfCounts).reduce((sum: number, n: any) => sum + (Number(n) || 0), 0);
+  const rangeStart = report.datasetCoverage?.rangeStart ? new Date(report.datasetCoverage.rangeStart) : null;
+  const rangeEnd = report.datasetCoverage?.rangeEnd ? new Date(report.datasetCoverage.rangeEnd) : null;
+  const yearsAnalyzed = rangeStart && rangeEnd ? ((rangeEnd.getTime() - rangeStart.getTime()) / (365 * 24 * 60 * 60 * 1000)).toFixed(1) : '?';
+
+  // Find best strategy from backtest summary
+  const bestStrategy = report.backtestSummary?.rankings?.[0];
+
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
-        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
-          <CheckCircle2 size={16} /> AI Analytic pronta
+      {/* ═══ HERO: COSA ABBIAMO ANALIZZATO ═══ */}
+      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-6">
+        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300 mb-2">
+          <CheckCircle2 size={16} /> Analisi AI completata su {symbol}
         </div>
-        <p className="mt-2 text-xs text-n-dim">
-          Report generato il <span className="font-mono">{generated}</span> · dataset: {datasetSummary}
+        <p className="text-xs text-n-dim mb-4">
+          Generata il <span className="font-mono text-n-text">{generated}</span>
         </p>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-xl bg-n-bg/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Dati analizzati</p>
+            <p className="text-2xl font-bold text-n-text">{totalCandles.toLocaleString()}</p>
+            <p className="text-[10px] text-n-dim">candele su 5 timeframe ({yearsAnalyzed} anni di storico)</p>
+          </div>
+          <div className="rounded-xl bg-n-bg/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Strategie testate</p>
+            <p className="text-2xl font-bold text-n-text">{report.backtestSummary?.totalStrategiesTested ?? 0}</p>
+            <p className="text-[10px] text-n-dim">combinazioni strategia + timeframe</p>
+          </div>
+          <div className="rounded-xl bg-n-bg/60 p-4">
+            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Operazioni simulate</p>
+            <p className="text-2xl font-bold text-n-text">{(report.backtestSummary?.totalTradesSimulated ?? 0).toLocaleString()}</p>
+            <p className="text-[10px] text-n-dim">trade calcolati sullo storico reale</p>
+          </div>
+        </div>
       </div>
+
+      {/* ═══ SIMULAZIONE TRADING — $1000 → ? ═══ */}
+      {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
+        <TradingSimulator rankings={report.backtestSummary.rankings} symbol={symbol} />
+      )}
 
       {/* Come operare */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
@@ -819,6 +852,152 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
     <div className="rounded-xl bg-n-bg-s p-3">
       <div className="text-[10px] uppercase tracking-wide text-n-dim">{label}</div>
       <div className="mt-1 text-sm font-semibold text-n-text">{value ?? '—'}</div>
+    </div>
+  );
+}
+
+// ─── Trading Simulator Component ───────────────────────────
+// Recalculates each strategy's results with $1000 initial capital and $10/trade
+// Original backtest used $100k/$100 (0.1% sizing), new = $10/$1000 (1% sizing)
+// Same number of trades, profit in $ = (netProfitPct * 100000 / 100) / 10 = netProfitPct * 100
+
+function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySummary[]; symbol: string }) {
+  const INITIAL_CAPITAL = 1000;
+  const TRADE_SIZE = 10;
+
+  // Take top 6 strategies with at least 10 trades for meaningful simulation
+  const reliable = rankings.filter(r => r.totalTrades >= 10).slice(0, 6);
+  const lowSample = rankings.filter(r => r.totalTrades < 10 && r.totalTrades > 0).slice(0, 3);
+  const allToShow = [...reliable, ...lowSample];
+
+  if (allToShow.length === 0) return null;
+
+  // Strategy descriptions in plain language
+  const strategyDescriptions: Record<string, string> = {
+    trend: 'Compra quando il prezzo è in tendenza forte rialzista (EMA, ADX, MACD allineati)',
+    reversion: 'Compra in ipervenduto sulle bande di Bollinger inferiori con volume in aumento',
+    breakout: 'Compra alla rottura del massimo a 20 periodi con volume sopra la media',
+    momentum: 'Compra quando RSI > 50, MACD cross up, Stocastico cross up',
+    pattern: 'Compra su pattern candlestick rialzisti (engulfing, hammer, ecc.)',
+    combined_ai: 'Combina i segnali di tutte le strategie e opera quando 4+ sono concordi',
+  };
+
+  return (
+    <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-emerald-500/5 p-6">
+      <div className="mb-4">
+        <h2 className="text-base font-bold text-blue-300 mb-1">
+          Simulazione Trading: ${INITIAL_CAPITAL.toLocaleString()} → ?
+        </h2>
+        <p className="text-xs text-n-dim">
+          Quanto avresti guadagnato (o perso) iniziando con <span className="font-mono text-n-text">${INITIAL_CAPITAL}</span>{' '}
+          e aprendo operazioni da <span className="font-mono text-n-text">${TRADE_SIZE}</span> ciascuna?
+          Risultati basati sulle operazioni reali simulate sullo storico di {symbol}.
+        </p>
+      </div>
+
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+        {allToShow.map((r, i) => {
+          // Scale: original was $100/$100k (0.1%), we want $10/$1000 (1%)
+          // Per-trade profit ratio is 10x (sizing relative to capital is 10x)
+          // Total profit in $ = (netProfitPct * 100000 / 100) / 10 = netProfitPct * 100
+          const simulatedProfit = r.netProfitPct * 100;
+          const finalCapital = INITIAL_CAPITAL + simulatedProfit;
+          const isProfit = simulatedProfit >= 0;
+          const isLowSample = r.totalTrades < 10;
+
+          // Calculate per-trade avg
+          const avgPerTrade = r.totalTrades > 0 ? simulatedProfit / r.totalTrades : 0;
+
+          // Get description
+          const description = r.isMineRule
+            ? `Regola scoperta dall'AI: opera quando si verificano queste condizioni: ${r.conditions?.join(' + ') ?? '—'}`
+            : strategyDescriptions[r.strategyId] ?? 'Strategia tecnica avanzata';
+
+          // TF in plain language
+          const tfLabel: Record<string, string> = {
+            '5m': 'ogni 5 minuti', '15m': 'ogni 15 minuti', '1h': 'ogni ora', '4h': 'ogni 4 ore', '1d': 'ogni giorno',
+          };
+
+          return (
+            <div
+              key={`${r.strategyId}-${r.timeframe}-${i}`}
+              className={`rounded-xl border p-4 transition-all ${
+                isLowSample ? 'border-n-border bg-n-bg/40 opacity-70' :
+                isProfit ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'
+              }`}
+            >
+              {/* Header */}
+              <div className="mb-3">
+                <div className="flex items-baseline justify-between gap-2 mb-1">
+                  <span className="text-[10px] font-bold text-n-dim">#{i + 1}</span>
+                  {isLowSample && (
+                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">POCO TESTATO</span>
+                  )}
+                  {r.isMineRule && (
+                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-400">AI RULE</span>
+                  )}
+                </div>
+                <p className="text-xs font-bold text-n-text">
+                  {r.strategyName.length > 35 ? r.strategyName.slice(0, 35) + '…' : r.strategyName}
+                </p>
+                <p className="text-[10px] text-n-dim mt-0.5">
+                  Timeframe {r.timeframe} · controlla {tfLabel[r.timeframe] ?? r.timeframe}
+                </p>
+              </div>
+
+              {/* Capital result — BIG */}
+              <div className="mb-3 rounded-lg bg-n-bg/60 p-3">
+                <p className="text-[9px] text-n-dim mb-0.5">Capitale finale</p>
+                <p className={`font-mono text-2xl font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                  ${finalCapital.toFixed(2)}
+                </p>
+                <p className={`text-[10px] font-semibold ${isProfit ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {isProfit ? '+' : ''}${simulatedProfit.toFixed(2)} ({isProfit ? '+' : ''}{((simulatedProfit / INITIAL_CAPITAL) * 100).toFixed(2)}%)
+                </p>
+              </div>
+
+              {/* Description */}
+              <p className="text-[10px] text-n-dim italic mb-3 line-clamp-2">{description}</p>
+
+              {/* Stats grid */}
+              <div className="grid grid-cols-2 gap-2 text-[10px]">
+                <div>
+                  <p className="text-n-dim">Operazioni</p>
+                  <p className="font-mono font-bold text-n-text">{r.totalTrades}</p>
+                </div>
+                <div>
+                  <p className="text-n-dim">Vincite</p>
+                  <p className="font-mono font-bold text-n-text">{r.winRate}%</p>
+                </div>
+                <div>
+                  <p className="text-n-dim">Media per trade</p>
+                  <p className={`font-mono font-bold ${avgPerTrade >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {avgPerTrade >= 0 ? '+' : ''}${avgPerTrade.toFixed(3)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-n-dim">Durata media</p>
+                  <p className="font-mono font-bold text-n-text">{r.avgHoldingHours.toFixed(1)}h</p>
+                </div>
+              </div>
+
+              {/* TP/SL info */}
+              {r.avgTpDistancePct > 0 && (
+                <div className="mt-3 pt-3 border-t border-n-border flex justify-between text-[9px]">
+                  <span className="text-n-dim">TP medio: <span className="text-emerald-400 font-mono">+{r.avgTpDistancePct.toFixed(2)}%</span></span>
+                  <span className="text-n-dim">SL medio: <span className="text-red-400 font-mono">-{r.avgSlDistancePct.toFixed(2)}%</span></span>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Disclaimer */}
+      <p className="mt-4 text-[10px] text-n-dim italic">
+        ⓘ I risultati sono basati su dati storici reali. Performance passate non garantiscono risultati futuri.
+        Le strategie marcate &quot;POCO TESTATO&quot; hanno meno di 10 operazioni — i numeri sono indicativi e poco affidabili.
+      </p>
     </div>
   );
 }
