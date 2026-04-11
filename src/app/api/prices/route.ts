@@ -33,11 +33,25 @@ export interface PriceData {
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
+// In-memory cache to avoid rate limits (CoinGecko free tier = ~10 req/min)
+let cache: { data: PriceData[]; total: number; timestamp: number } | null = null;
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
 /**
  * Fetch all crypto and stocks from the pool, then return top 15 movers
  * (by absolute % change) — mix of biggest gainers and losers.
  */
 export async function GET() {
+  // Serve from cache if fresh
+  if (cache && Date.now() - cache.timestamp < CACHE_TTL_MS) {
+    return NextResponse.json({
+      prices: cache.data,
+      total: cache.total,
+      timestamp: new Date(cache.timestamp).toISOString(),
+      cached: true,
+    });
+  }
+
   const allPrices: PriceData[] = [];
 
   // ── Fetch all crypto from CoinGecko (single batched call) ──
@@ -100,6 +114,9 @@ export async function GET() {
     Math.abs(b.changePct24h) - Math.abs(a.changePct24h)
   );
   const topMovers = sorted.slice(0, 15);
+
+  // Update cache
+  cache = { data: topMovers, total: allPrices.length, timestamp: Date.now() };
 
   return NextResponse.json({
     prices: topMovers,
