@@ -236,15 +236,20 @@ function MacroEventsList({ events }: { events: any[] }) {
       <div className="rounded-xl border border-n-border bg-n-card p-5">
         <div className="flex items-center gap-2 mb-2">
           <Calendar size={14} className="text-blue-400" />
-          <h3 className="text-sm font-bold text-n-text">Calendario Macro (30gg)</h3>
+          <h3 className="text-sm font-bold text-n-text">Calendario Macro</h3>
         </div>
-        <p className="text-xs text-n-dim">Nessun evento. Configura FMP_API_KEY per vedere eventi macro futuri.</p>
+        <p className="text-xs text-n-dim">Nessun evento macro disponibile al momento.</p>
       </div>
     );
   }
 
-  const highImpact = events.filter((e: any) => e.impact === 'High').slice(0, 8);
+  // Trading Economics format: importance is 1/2/3, not "High"/"Medium"/"Low"
+  // Country is full name, currency is in `currency` field
+  const highImpact = events.filter((e: any) => (e.importance ?? 0) >= 3).slice(0, 8);
   const toShow = highImpact.length > 0 ? highImpact : events.slice(0, 8);
+
+  const importanceLabel = (n: number) => n >= 3 ? 'High' : n >= 2 ? 'Med' : 'Low';
+  const importanceColor = (n: number) => n >= 3 ? 'bg-red-500/15 text-red-400' : n >= 2 ? 'bg-amber-500/15 text-amber-400' : 'bg-n-bg-s text-n-dim';
 
   return (
     <div className="rounded-xl border border-n-border bg-n-card p-5">
@@ -252,28 +257,32 @@ function MacroEventsList({ events }: { events: any[] }) {
         <div className="flex items-center gap-2">
           <Calendar size={14} className="text-blue-400" />
           <h3 className="text-sm font-bold text-n-text">Calendario Macro</h3>
+          <span className="text-[10px] text-n-dim">via Trading Economics</span>
         </div>
-        <span className="text-[10px] text-n-dim">{events.length} eventi · prossimi 30gg</span>
+        <span className="text-[10px] text-n-dim">{events.length} eventi futuri</span>
       </div>
       <div className="space-y-1.5">
-        {toShow.map((e: any, i: number) => (
-          <div key={i} className="flex items-center justify-between rounded-lg bg-n-bg/60 px-3 py-2 text-[11px]">
-            <div className="flex items-center gap-2 min-w-0">
-              <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${
-                e.impact === 'High' ? 'bg-red-500/15 text-red-400' :
-                e.impact === 'Medium' ? 'bg-amber-500/15 text-amber-400' :
-                'bg-n-bg-s text-n-dim'
-              }`}>
-                {e.country}
-              </span>
-              <span className="truncate text-n-text">{e.event}</span>
+        {toShow.map((e: any, i: number) => {
+          const date = new Date(e.date);
+          const isToday = date.toDateString() === new Date().toDateString();
+          return (
+            <div key={i} className="flex items-center justify-between rounded-lg bg-n-bg/60 px-3 py-2 text-[11px]">
+              <div className="flex items-center gap-2 min-w-0">
+                <span className={`shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold ${importanceColor(e.importance ?? 0)}`}>
+                  {importanceLabel(e.importance ?? 0)}
+                </span>
+                <span className="shrink-0 text-[9px] font-mono text-n-dim">{e.currency || e.country?.slice(0, 3).toUpperCase()}</span>
+                <span className="truncate text-n-text">{e.event}</span>
+              </div>
+              <div className="flex items-center gap-2 shrink-0 text-n-dim text-[10px]">
+                {e.forecast && <span>est: <span className="font-mono text-n-text-s">{e.forecast}{e.unit}</span></span>}
+                <span className={`font-mono ${isToday ? 'text-emerald-400 font-bold' : ''}`}>
+                  {isToday ? 'OGGI' : date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0 text-n-dim">
-              {e.estimate != null && <span>est: {e.estimate}{e.unit}</span>}
-              <span className="font-mono">{new Date(e.date).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}</span>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

@@ -6,10 +6,11 @@
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { redisGet } from '@/lib/db/redis';
-import { getEconomicCalendar, getEarningsCalendar, getAnalystRating } from '@/lib/data-providers/fmp';
-import { getCryptoNews } from '@/lib/data-providers/cryptopanic';
+import { getEarningsCalendar, getAnalystRating } from '@/lib/data-providers/fmp';
 import { getCmcQuote, getCmcGlobalMetrics } from '@/lib/data-providers/coinmarketcap';
 import { getCompanyProfile, getRecommendation, getCompanyNews, getBasicFinancials } from '@/lib/data-providers/finnhub';
+import { getEconomicEvents } from '@/lib/data-providers/trading-economics';
+import { getNewsDigest } from '@/lib/analytics/news/news-aggregator';
 
 export const dynamic = 'force-dynamic';
 
@@ -39,8 +40,8 @@ export async function GET(_req: Request, { params }: { params: { symbol: string 
 
   // Run all providers in parallel
   const [
-    economicCalendar,
-    cryptoNews,
+    economicEvents,
+    newsDigest,
     cmcQuote,
     cmcGlobal,
     earnings,
@@ -50,8 +51,8 @@ export async function GET(_req: Request, { params }: { params: { symbol: string 
     companyNews,
     financials,
   ] = await Promise.allSettled([
-    getEconomicCalendar(30),
-    isCrypto ? getCryptoNews(symbol, 8) : Promise.resolve([]),
+    getEconomicEvents(),
+    isCrypto ? getNewsDigest(symbol) : Promise.resolve(null),
     isCrypto ? getCmcQuote(symbol) : Promise.resolve(null),
     isCrypto ? getCmcGlobalMetrics() : Promise.resolve(null),
     !isCrypto ? getEarningsCalendar(symbol) : Promise.resolve([]),
@@ -69,12 +70,24 @@ export async function GET(_req: Request, { params }: { params: { symbol: string 
     symbol,
     type: isCrypto ? 'crypto' : 'stock',
     macro: {
-      events: unwrap(economicCalendar, [] as any[]),
+      events: unwrap(economicEvents, [] as any[]),
     },
     crypto: isCrypto ? {
       quote: unwrap(cmcQuote, null),
       global: unwrap(cmcGlobal, null),
-      news: unwrap(cryptoNews, [] as any[]),
+      news: (() => {
+        const digest = unwrap(newsDigest, null) as any;
+        if (!digest?.items) return [];
+        return digest.items.slice(0, 8).map((item: any) => ({
+          id: item.id ?? Math.random(),
+          title: item.title,
+          url: item.url,
+          source: item.source,
+          publishedAt: item.publishedAt ?? new Date(item.timestamp ?? Date.now()).toISOString(),
+          votes: { positive: item.sentimentScore > 0.1 ? Math.round(item.sentimentScore * 10) : 0, negative: item.sentimentScore < -0.1 ? Math.round(-item.sentimentScore * 10) : 0, important: 0 },
+          kind: 'news',
+        }));
+      })(),
     } : null,
     stock: !isCrypto ? {
       profile: unwrap(companyProfile, null),
