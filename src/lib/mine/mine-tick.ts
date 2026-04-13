@@ -217,18 +217,18 @@ export async function executeMineeTick(
     try {
       switch (action.type) {
         case 'open_mine': {
-          // Check available capital before placing order
+          // Cap order to a safe size: max $500 notional per trade
+          const MAX_NOTIONAL = 500;
           let qty = action.mine.quantity;
-          try {
-            const acc = await getAccountInfo();
-            if (!acc) throw new Error('no account');
-            const maxNotional = Math.min(acc.buyingPower * 0.8, acc.equity * 0.01);
-            const price = liveContexts.get(action.mine.symbol)?.price ?? 0;
-            if (price > 0) {
-              const maxQty = maxNotional / price;
-              if (qty > maxQty) qty = Math.max(0.00001, maxQty);
-            }
-          } catch {}
+          const price = liveContexts.get(action.mine.symbol)?.price ?? 0;
+          if (price > 0) {
+            const maxQty = MAX_NOTIONAL / price;
+            if (qty > maxQty) qty = maxQty;
+          }
+          // Round quantity appropriately
+          qty = action.mine.symbol.includes('/')
+            ? parseFloat(qty.toFixed(6))  // crypto: 6 decimals
+            : parseFloat(qty.toFixed(2)); // stock: 2 decimals
           if (qty <= 0) { errors.push(`open-mine ${action.mine.symbol}: zero quantity`); break; }
 
           const orderResult = await placeMarketOrder(
