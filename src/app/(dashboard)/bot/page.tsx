@@ -263,22 +263,41 @@ function BotPage() {
         </div>
         {activeMines.length > 0 && (
           <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {activeMines.slice(0, 6).map(mine => (
-              <div key={mine.id} className="flex items-center justify-between rounded-lg bg-n-bg/60 p-2.5">
-                <div>
-                  <span className="font-mono text-[11px] font-semibold text-n-text">{mine.symbol.replace('/USD', '')}</span>
-                  <span className={`ml-1.5 rounded px-1 py-0.5 text-[9px] font-bold ${mine.direction === 'long' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
-                    {mine.direction.toUpperCase()}
-                  </span>
-                  <p className="text-[9px] text-n-dim">{mine.strategy} · {mine.timeframe}</p>
-                </div>
-                <div className="text-right">
-                  <p className={`font-mono text-[11px] font-bold ${mine.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`} suppressHydrationWarning>
-                    {mine.unrealizedPnl >= 0 ? '+' : ''}{mine.unrealizedPnl.toFixed(2)}$
+            {activeMines.slice(0, 6).map(mine => {
+              const entryPrice = (mine as any).entryPrice ?? 0;
+              const tp = (mine as any).takeProfit ?? 0;
+              const sl = (mine as any).stopLoss ?? 0;
+              return (
+              <div key={mine.id} className={`rounded-lg border p-3 ${mine.unrealizedPnl >= 0 ? 'border-green-500/20 bg-green-500/5' : 'border-red-500/20 bg-red-500/5'}`}>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-sm font-bold text-n-text">{mine.symbol.replace('/USD', '')}</span>
+                    <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${mine.direction === 'long' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                      {mine.direction.toUpperCase()}
+                    </span>
+                  </div>
+                  <p className={`font-mono text-sm font-bold ${mine.unrealizedPnl >= 0 ? 'text-green-400' : 'text-red-400'}`} suppressHydrationWarning>
+                    {mine.unrealizedPnl >= 0 ? '+' : ''}${mine.unrealizedPnl.toFixed(2)}
                   </p>
                 </div>
+                <div className="grid grid-cols-3 gap-2 text-[9px]">
+                  <div>
+                    <p className="text-n-dim">Entry</p>
+                    <p className="font-mono text-n-text">${entryPrice > 0 ? entryPrice.toLocaleString('en-US', {maximumFractionDigits: 2}) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-green-400">TP</p>
+                    <p className="font-mono text-n-text">${tp > 0 ? tp.toLocaleString('en-US', {maximumFractionDigits: 2}) : '—'}</p>
+                  </div>
+                  <div>
+                    <p className="text-red-400">SL</p>
+                    <p className="font-mono text-n-text">${sl > 0 ? sl.toLocaleString('en-US', {maximumFractionDigits: 2}) : '—'}</p>
+                  </div>
+                </div>
+                <p className="mt-1.5 text-[9px] text-n-dim">{mine.strategy} · {mine.timeframe} · qty: {mine.quantity.toFixed(mine.symbol.includes('/') ? 4 : 0)}</p>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

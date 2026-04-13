@@ -69,9 +69,18 @@ async function detectAICSignal(input: SignalDetectorInput): Promise<DetectedSign
       }
     }
 
-    const { tp, sl } = sig.TP && sig.SL
+    // Use AIC TP/SL if valid, otherwise calculate from current price
+    let { tp, sl } = sig.TP && sig.SL
       ? { tp: sig.TP[0], sl: sig.SL }
       : suggestTPSL(direction, live.price, 3, 2);
+
+    // Validate TP/SL direction — AIC signals can be stale with wrong prices
+    if (direction === 'long' && (tp <= live.price || sl >= live.price)) {
+      ({ tp, sl } = suggestTPSL('long', live.price, 3, 2));
+    }
+    if (direction === 'short' && (tp >= live.price || sl <= live.price)) {
+      ({ tp, sl } = suggestTPSL('short', live.price, 3, 2));
+    }
 
     return {
       symbol,
