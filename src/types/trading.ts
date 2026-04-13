@@ -185,6 +185,21 @@ export interface Indicators {
   };
   obv: number[];
   vwap: number[];
+
+  // Phase 5 — Advanced indicators
+  cci: number[];
+  williamsR: number[];
+  mfi: number[];
+  psar: number[];
+  cmf: number[];
+  keltner: { upper: number[]; mid: number[]; lower: number[] };
+  ichimoku: {
+    tenkan: number[];
+    kijun: number[];
+    senkouA: number[];
+    senkouB: number[];
+  };
+  squeezeMom: number[];
 }
 
 export interface RiskAssessment {

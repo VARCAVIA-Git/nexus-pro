@@ -17,6 +17,30 @@ export interface RiskCheckResult {
 }
 
 /**
+ * Kelly Criterion position sizing.
+ * Returns optimal fraction of capital to risk (0-1).
+ *
+ * Formula: kelly = (WR × avg_win - (1 - WR) × avg_loss) / avg_win
+ * We use fractional Kelly (25%) to reduce volatility.
+ *
+ * @param winRate — historical win rate (0-1)
+ * @param avgWin — average winning trade return (positive)
+ * @param avgLoss — average losing trade return (positive, absolute)
+ * @param fraction — Kelly fraction (0.25 = quarter Kelly, conservative)
+ */
+export function kellySize(
+  winRate: number,
+  avgWin: number,
+  avgLoss: number,
+  fraction = 0.25,
+): number {
+  if (avgWin <= 0 || avgLoss <= 0 || winRate <= 0 || winRate >= 1) return 0;
+  const kelly = (winRate * avgWin - (1 - winRate) * avgLoss) / avgWin;
+  if (kelly <= 0) return 0; // Negative Kelly = don't trade
+  return Math.min(kelly * fraction, 0.1); // Cap at 10% of capital
+}
+
+/**
  * Check if a new mine can be opened given current portfolio state.
  * Returns allocation details if allowed.
  */
