@@ -175,7 +175,7 @@ describe('checkRisk', () => {
   });
 
   it('rejects when max concurrent mines reached', () => {
-    const mines = Array.from({ length: 5 }, (_, i) =>
+    const mines = Array.from({ length: 10 }, (_, i) =>
       mockMine({ id: `mine-${i}` }),
     );
     const result = checkRisk(mockSignal(), moderateProfile, 100000, mines, []);
@@ -184,7 +184,7 @@ describe('checkRisk', () => {
   });
 
   it('rejects when max mines per asset reached', () => {
-    const assetMines = [mockMine({ id: 'mine-1' }), mockMine({ id: 'mine-2' })];
+    const assetMines = Array.from({ length: 4 }, (_, i) => mockMine({ id: `mine-${i}` }));
     const result = checkRisk(mockSignal(), moderateProfile, 100000, assetMines, assetMines);
     expect(result.allowed).toBe(false);
     expect(result.reason).toContain('per asset');
@@ -192,7 +192,7 @@ describe('checkRisk', () => {
 
   it('conservative requires higher confidence than moderate', () => {
     const signal = mockSignal({
-      signal: { type: 'zone_bounce', confidence: 0.6, macroClear: true },
+      signal: { type: 'zone_bounce', confidence: 0.42, macroClear: true },
     });
     const modResult = checkRisk(signal, PROFILES.moderate, 100000, [], []);
     const conResult = checkRisk(signal, PROFILES.conservative, 100000, [], []);
@@ -226,7 +226,7 @@ describe('evaluateSignals', () => {
   });
 
   it('respects max concurrent mines across multiple signals', () => {
-    const existingMines = Array.from({ length: 4 }, (_, i) =>
+    const existingMines = Array.from({ length: 7 }, (_, i) =>
       mockMine({ id: `mine-${i}`, symbol: `ASSET-${i}/USD` }),
     );
     const signals = [
@@ -235,7 +235,7 @@ describe('evaluateSignals', () => {
     ];
     const actions = evaluateSignals(signals, moderateProfile, 100000, existingMines);
     const opens = actions.filter((a) => a.type === 'open_mine');
-    // moderate allows 5 max, 4 existing → only 1 new
+    // moderate allows 8 max, 7 existing → only 1 new
     expect(opens.length).toBe(1);
   });
 });

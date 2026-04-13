@@ -7,7 +7,7 @@
 // failure.
 // ═══════════════════════════════════════════════════════════════
 
-import { createDefaultBrokerAsync } from '@/lib/broker';
+import { createDefaultBrokerAsync, AlpacaBroker } from '@/lib/broker';
 import type { BrokerAdapter } from '@/lib/broker/base';
 import type { BrokerOrder, BrokerBalance, Side } from '@/types';
 
@@ -33,7 +33,15 @@ let _brokerInitPromise: Promise<BrokerAdapter> | null = null;
 async function getBroker(): Promise<BrokerAdapter> {
   if (_broker) return _broker;
   if (!_brokerInitPromise) {
-    _brokerInitPromise = createDefaultBrokerAsync().then(b => { _broker = b; return b; });
+    // Mine Engine always uses PAPER Alpaca for safe demo trading
+    // Users see results in the UI to verify AI works before going live
+    const key = process.env.ALPACA_API_KEY ?? '';
+    const secret = process.env.ALPACA_API_SECRET ?? '';
+    if (key && secret) {
+      _brokerInitPromise = Promise.resolve(new AlpacaBroker(key, secret, true)).then(b => { _broker = b; return b; });
+    } else {
+      _brokerInitPromise = createDefaultBrokerAsync().then(b => { _broker = b; return b; });
+    }
   }
   return _brokerInitPromise;
 }

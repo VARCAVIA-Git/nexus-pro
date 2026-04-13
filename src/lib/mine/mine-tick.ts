@@ -215,7 +215,7 @@ export async function executeMineeTick(
           .filter((m) => m.status === 'open' || m.status === 'pending')
           .map((m) => m.direction),
       };
-      signals = detectSignals(input);
+      signals = await detectSignals(input);
     }
 
     totalSignals += signals.length;
