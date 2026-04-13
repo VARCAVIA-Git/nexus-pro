@@ -167,16 +167,21 @@ export async function executeMineeTick(
 
   for (const sym of SUPPORTED_SYMBOLS) {
     const live = liveContexts.get(sym);
-    if (!live) continue;
+    if (!live) {
+      console.log(`[mine-tick] ${sym}: no live context, skipping`);
+      continue;
+    }
 
     const aicOnline = aicHealthMap.get(sym) ?? false;
     const aicCtx = aicContextMap.get(sym);
 
     let signals: DetectedSignal[] = [];
 
-    // Phase 5: Use ALL signal sources together (not either/or)
-    // AIC signal + TS signal detector run in parallel
+    // Phase 5: Use ALL signal sources together
     const report = await loaders.loadReport(sym);
+    if (!report) {
+      console.log(`[mine-tick] ${sym}: no report, skipping signal detection`);
+    }
     const news = await loaders.loadNews(sym);
     const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
 
