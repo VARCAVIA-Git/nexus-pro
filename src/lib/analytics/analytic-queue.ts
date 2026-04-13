@@ -238,26 +238,37 @@ export async function processNext(): Promise<boolean> {
   try {
     symbol = await redisRPop(KEY_QUEUE);
     if (!symbol) {
-      // Niente in coda: rilascia subito e ritorna false
+      await releaseLock(token);
       return false;
     }
 
-    // Lazy import per evitare cicli (asset-analytic importa cose pesanti)
-    const { runPipeline } = await import('./asset-analytic');
-    await runPipeline(symbol);
+    // Phase 5: Fire-and-forget — launch training in background.
+    // The training saves progress to Redis as it goes.
+    // Lock is released INSIDE the background task when done.
+    // This prevents the HTTP request timeout from killing the training.
+    const capturedSymbol = symbol;
+    const capturedToken = token;
+
+    // Don't await — let it run in background
+    (async () => {
+      try {
+        const { runPipeline } = await import('./asset-analytic');
+        await runPipeline(capturedSymbol);
+      } catch (err) {
+        try {
+          await markFailed(capturedSymbol, err as Error);
+        } catch {}
+        console.error(`[processNext] training failed for ${capturedSymbol}:`, (err as Error).message);
+      } finally {
+        await releaseLock(capturedToken);
+      }
+    })();
+
+    // Return immediately — training continues in background
     return true;
   } catch (err) {
-    if (symbol) {
-      try {
-        await markFailed(symbol, err as Error);
-      } catch (markErr) {
-        console.warn(`[processNext] markFailed error: ${(markErr as Error).message}`);
-      }
-    }
-    return true;
-  } finally {
-    // GARANTITO anche in caso di throw nel try/catch sopra
     await releaseLock(token);
+    return false;
   }
 }
 

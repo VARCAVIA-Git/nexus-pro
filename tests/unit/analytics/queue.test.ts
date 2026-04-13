@@ -156,10 +156,14 @@ describe('analytic-queue', () => {
     const ok = await processNext();
     expect(ok).toBe(true);
 
-    // After processing, the runPipeline mock marked state as ready
+    // Phase 5: processNext is fire-and-forget — returns immediately
+    // while training runs in background. Wait a tick for the async task.
+    await new Promise(r => setTimeout(r, 100));
+
+    // After background processing, the runPipeline mock marked state as ready
     const state = JSON.parse(store.get('nexus:analytic:SOL/USD')!);
     expect(state.status).toBe('ready');
-    // Lock has been released
+    // Lock has been released by the background task
     expect(store.has('nexus:analytic:lock')).toBe(false);
   });
 
