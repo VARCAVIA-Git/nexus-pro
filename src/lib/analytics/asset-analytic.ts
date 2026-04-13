@@ -287,14 +287,16 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     // Run GA on 1h data (most reliable timeframe for strategy discovery)
     const gaCandles = history['1h'] ?? [];
     if (gaCandles.length >= 200) {
-      gaResult = runGeneticOptimizer(gaCandles, {
-        populationSize: 60,
-        generations: 100,
-        tournamentSize: 5,
+      // Use only last 2000 candles for GA (RAM + speed constraint on 3.8GB droplet)
+      const gaCandlesSliced = gaCandles.slice(-2000);
+      gaResult = runGeneticOptimizer(gaCandlesSliced, {
+        populationSize: 30,      // Reduced for droplet (was 60)
+        generations: 50,         // Reduced (was 100)
+        tournamentSize: 4,
         crossoverRate: 0.7,
         mutationRate: 0.15,
-        eliteCount: 3,
-        minTrades: 15,
+        eliteCount: 2,
+        minTrades: 10,
         trainSplit: 0.7,
         fitnessWeights: { sharpe: 0.3, calmar: 0.2, profitFactor: 0.3, winRate: 0.2 },
       });
