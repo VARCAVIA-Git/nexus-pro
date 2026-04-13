@@ -238,9 +238,9 @@ describe('mine utils', () => {
   });
 
   describe('calcPositionSize', () => {
-    it('calculates correct size', () => {
-      // $100k equity, 2% risk, 2% SL distance → $100k * 0.02 / 0.02 = $100k notional
-      expect(calcPositionSize(100000, 2, 2)).toBe(100000);
+    it('calculates correct size (capped at 20% equity)', () => {
+      // $100k equity, 2% risk, 2% SL → raw $100k, capped at 20% = $20k
+      expect(calcPositionSize(100000, 2, 2)).toBe(20000);
     });
 
     it('returns 0 for zero SL distance', () => {
