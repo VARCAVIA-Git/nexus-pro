@@ -3,6 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { redisGet } from '@/lib/db/redis';
+import { decrypt } from '@/lib/utils/encryption';
 
 export interface AlpacaKeys {
   key: string;
@@ -28,8 +29,8 @@ export async function getAlpacaKeys(): Promise<AlpacaKeys | null> {
     const saved = await redisGet<Record<string, any>>('nexus:broker:keys');
     if (saved?.liveKey && saved?.liveSecret && saved?.liveEnabled) {
       return {
-        key: String(saved.liveKey),
-        secret: String(saved.liveSecret),
+        key: decrypt(String(saved.liveKey)),
+        secret: decrypt(String(saved.liveSecret)),
         baseUrl: 'https://api.alpaca.markets',
         mode: 'live',
       };

@@ -76,12 +76,20 @@ const bots: Record<string, BotRuntime> = G.__nexusBots;
 
 async function ensureBroker(): Promise<AlpacaBroker> {
   if (G.__nexusBroker) return G.__nexusBroker;
-  const key = process.env.ALPACA_API_KEY ?? '';
-  const secret = process.env.ALPACA_API_SECRET ?? '';
+
+  // Try live keys first (from Redis, saved via UI), then fallback to paper env
+  const { getAlpacaKeys } = await import('@/lib/broker/alpaca-keys');
+  const keys = await getAlpacaKeys();
+
+  const key = keys?.key ?? process.env.ALPACA_API_KEY ?? '';
+  const secret = keys?.secret ?? process.env.ALPACA_API_SECRET ?? '';
+  const isPaper = keys?.mode !== 'live';
+
   if (!key || !secret) throw new Error('Alpaca API keys not configured');
-  const broker = new AlpacaBroker(key, secret, true);
+  const broker = new AlpacaBroker(key, secret, isPaper);
   await broker.connect();
   G.__nexusBroker = broker;
+  console.log(`[broker] Connected to Alpaca ${isPaper ? 'PAPER' : 'LIVE'}`);
   return broker;
 }
 

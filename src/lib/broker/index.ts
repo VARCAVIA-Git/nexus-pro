@@ -49,19 +49,27 @@ export function createBroker(
 }
 
 /**
- * Create the default broker from environment variables.
- * Uses Alpaca with paper/live determined by ALPACA_PAPER.
+ * Create the default broker.
+ * Priority: Redis-saved live keys → env live keys → env paper keys.
+ * This is sync — for async resolution with Redis, use createDefaultBrokerAsync().
  */
 export function createDefaultBroker(): BrokerAdapter {
-  const enableLive = process.env.NEXT_PUBLIC_ENABLE_LIVE_TRADING === 'true';
-  const alpacaPaper = process.env.ALPACA_PAPER !== 'false';
-
-  // Only use live if both flags allow it
-  const usePaper = !enableLive || alpacaPaper;
-
+  // Sync fallback — uses env vars only (paper by default)
   return new AlpacaBroker(
     process.env.ALPACA_API_KEY ?? '',
     process.env.ALPACA_API_SECRET ?? '',
-    usePaper,
+    true, // paper — async version resolves live keys
   );
+}
+
+/**
+ * Async version: resolves live keys from Redis, falls back to paper env.
+ */
+export async function createDefaultBrokerAsync(): Promise<BrokerAdapter> {
+  const { getAlpacaKeys } = await import('./alpaca-keys');
+  const keys = await getAlpacaKeys();
+  if (keys) {
+    return new AlpacaBroker(keys.key, keys.secret, keys.mode !== 'live');
+  }
+  return createDefaultBroker();
 }

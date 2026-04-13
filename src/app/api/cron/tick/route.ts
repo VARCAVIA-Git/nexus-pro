@@ -116,11 +116,23 @@ async function tickHandler(request: Request) {
     return NextResponse.json({ processed: 0, message: 'No running bots', skipped: skippedDisabled.length });
   }
 
-  // Broker credentials per mode
+  // Broker credentials: try Redis-saved live keys first, then env vars
   const paperKey = process.env.ALPACA_API_KEY ?? '';
   const paperSecret = process.env.ALPACA_API_SECRET ?? '';
-  const liveKey = process.env.ALPACA_LIVE_API_KEY ?? '';
-  const liveSecret = process.env.ALPACA_LIVE_SECRET_KEY ?? '';
+  let liveKey = process.env.ALPACA_LIVE_API_KEY ?? '';
+  let liveSecret = process.env.ALPACA_LIVE_SECRET_KEY ?? '';
+
+  // Read live keys from Redis if not in env
+  if (!liveKey || !liveSecret) {
+    try {
+      const { decrypt } = await import('@/lib/utils/encryption');
+      const savedKeys = await redisGet<Record<string, any>>('nexus:broker:keys');
+      if (savedKeys?.liveKey && savedKeys?.liveSecret && savedKeys?.liveEnabled) {
+        liveKey = decrypt(String(savedKeys.liveKey));
+        liveSecret = decrypt(String(savedKeys.liveSecret));
+      }
+    } catch {}
+  }
 
   function getBrokerForBot(botEnv: string): { broker: AlpacaBroker; ok: boolean; error?: string } {
     if (botEnv === 'real') {

@@ -29,7 +29,8 @@ export async function GET(request: Request) {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const keys = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
     // Decrypt and mask for display
-    const liveKeyDisplay = keys.liveKey ? String(keys.liveKey).slice(0, 4) + '...' : '';
+    const decrypted = keys.liveKey ? decrypt(String(keys.liveKey)) : '';
+    const liveKeyDisplay = decrypted ? decrypted.slice(0, 4) + '...' : '';
     return NextResponse.json({
       liveKey: liveKeyDisplay,
       hasLiveSecret: !!keys.liveSecret,
@@ -62,8 +63,8 @@ export async function POST(request: Request) {
     if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     const current = await redisGet<Record<string, any>>('nexus:broker:keys') ?? {};
     const updated: Record<string, any> = { ...current };
-    if (body.liveKey) updated.liveKey = body.liveKey;
-    if (body.liveSecret) updated.liveSecret = body.liveSecret;
+    if (body.liveKey) updated.liveKey = encrypt(body.liveKey);
+    if (body.liveSecret) updated.liveSecret = encrypt(body.liveSecret);
     if (body.liveEnabled !== undefined) updated.liveEnabled = body.liveEnabled;
     updated.updatedAt = new Date().toISOString();
     await redisSet('nexus:broker:keys', updated);

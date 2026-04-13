@@ -7,7 +7,7 @@
 // failure.
 // ═══════════════════════════════════════════════════════════════
 
-import { createDefaultBroker } from '@/lib/broker';
+import { createDefaultBrokerAsync } from '@/lib/broker';
 import type { BrokerAdapter } from '@/lib/broker/base';
 import type { BrokerOrder, BrokerBalance, Side } from '@/types';
 
@@ -26,12 +26,16 @@ export interface AccountInfo {
   cash: number;
 }
 
-/** Lazy-init singleton broker instance. */
+/** Lazy-init singleton broker instance (async — resolves live keys from Redis). */
 let _broker: BrokerAdapter | null = null;
+let _brokerInitPromise: Promise<BrokerAdapter> | null = null;
 
-function getBroker(): BrokerAdapter {
-  if (!_broker) _broker = createDefaultBroker();
-  return _broker;
+async function getBroker(): Promise<BrokerAdapter> {
+  if (_broker) return _broker;
+  if (!_brokerInitPromise) {
+    _brokerInitPromise = createDefaultBrokerAsync().then(b => { _broker = b; return b; });
+  }
+  return _brokerInitPromise;
 }
 
 /** Reset broker instance (for testing). */
@@ -48,7 +52,7 @@ export async function placeMarketOrder(
   qty: number,
 ): Promise<OrderResult> {
   try {
-    const broker = getBroker();
+    const broker = await getBroker();
     const brokerSide: Side = side === 'long' ? 'LONG' : 'SHORT';
     const order = await broker.placeOrder({
       symbol,
@@ -84,7 +88,7 @@ export async function placeLimitOrder(
   limitPrice: number,
 ): Promise<OrderResult> {
   try {
-    const broker = getBroker();
+    const broker = await getBroker();
     const brokerSide: Side = side === 'long' ? 'LONG' : 'SHORT';
     const order = await broker.placeOrder({
       symbol,
@@ -118,7 +122,7 @@ export async function placeLimitOrder(
 /** Cancel an open order. */
 export async function cancelOrder(orderId: string): Promise<boolean> {
   try {
-    const broker = getBroker();
+    const broker = await getBroker();
     await broker.cancelOrder(orderId);
     return true;
   } catch {
@@ -129,7 +133,7 @@ export async function cancelOrder(orderId: string): Promise<boolean> {
 /** Get order status. */
 export async function getOrderStatus(orderId: string): Promise<BrokerOrder | null> {
   try {
-    const broker = getBroker();
+    const broker = await getBroker();
     return await broker.getOrder(orderId);
   } catch {
     return null;
@@ -141,7 +145,7 @@ export async function getOrderStatus(orderId: string): Promise<BrokerOrder | nul
 /** Get account info (equity, buying power). */
 export async function getAccountInfo(): Promise<AccountInfo | null> {
   try {
-    const broker = getBroker();
+    const broker = await getBroker();
     const balance: BrokerBalance = await broker.getBalance();
     return {
       equity: balance.total,

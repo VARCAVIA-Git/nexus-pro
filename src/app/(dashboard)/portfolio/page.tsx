@@ -1,193 +1,194 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { fmtDollar, fmtPnl, fmtPercent } from '@/lib/utils/format';
+import { useState, useEffect, useCallback } from 'react';
+import { fmtDollar, fmtPnl } from '@/lib/utils/format';
 import {
-  AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-} from 'recharts';
-import {
-  Wallet, TrendingUp, Target, TrendingDown, AlertTriangle, Rocket, RefreshCw,
+  Wallet, TrendingUp, TrendingDown, DollarSign, BarChart3, RefreshCw, PieChart,
 } from 'lucide-react';
-import Link from 'next/link';
 
-interface PortfolioData {
-  balance: number; cash: number;
-  openPositions: Array<{ symbol: string; side: string; quantity: number; entryPrice: number; currentPrice: number; pnl: number; pnlPct: number }>;
-  stats: { totalTrades: number; wins: number; losses: number; winRate: number; totalPnl: number; avgWin: number; avgLoss: number; sharpe: number; maxDrawdown: number; profitFactor: number; bestTrade: number; worstTrade: number; expectancy: number };
-  equityCurve: Array<{ date: string; equity: number }>;
-  recentTrades: Array<{ id: string; symbol: string; side: string; entryPrice: number; exitPrice?: number; pnl?: number; pnlPct?: number; strategy: string; date?: string }>;
-  hasTrades: boolean;
+interface Account {
+  mode: 'live' | 'paper';
+  equity: number;
+  cash: number;
+  buyingPower: number;
+  portfolioValue: number;
+  dailyChange: number;
+  dailyChangePct: number;
+}
+
+interface Position {
+  symbol: string;
+  side: string;
+  qty: number;
+  avgEntryPrice: number;
+  currentPrice: number;
+  marketValue: number;
+  costBasis: number;
+  unrealizedPl: number;
+  unrealizedPlPct: number;
+  changeToday: number;
+  assetClass: string;
 }
 
 export default function PortfolioPage() {
-  const [data, setData] = useState<PortfolioData | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
+  const [positions, setPositions] = useState<Position[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    setLoading(true);
-    fetch('/api/portfolio?env=real').then(r => r.ok ? r.json() : null).then(setData).catch(() => {}).finally(() => setLoading(false));
+  const load = useCallback(async () => {
+    const [accRes, posRes] = await Promise.allSettled([
+      fetch('/api/broker/account'),
+      fetch('/api/broker/positions'),
+    ]);
+    if (accRes.status === 'fulfilled' && accRes.value.ok) setAccount(await accRes.value.json());
+    if (posRes.status === 'fulfilled' && posRes.value.ok) {
+      const d = await posRes.value.json();
+      setPositions(d.positions ?? []);
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => { load(); const i = setInterval(load, 15000); return () => clearInterval(i); }, [load]);
 
   if (loading) return <div className="flex items-center justify-center py-20"><RefreshCw size={24} className="animate-spin text-n-dim" /></div>;
 
-  const accent = '#3b82f6';
-
-  // Real mode: check if live broker is connected
-  if (true && data && (data as any).connected === false) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
-          <AlertTriangle size={16} className="text-blue-400 shrink-0" />
-          <p className="text-sm text-blue-300">Conto live non collegato</p>
-        </div>
-        <h1 className="text-n-text">Portfolio Real</h1>
-        <div className="rounded-xl border border-n-border bg-n-card p-6 space-y-4">
-          <h2 className="text-base font-medium text-n-text">Collega il tuo conto Alpaca Live</h2>
-          <p className="text-sm text-n-dim">{(data as any).message}</p>
-          <div className="space-y-2">
-            {['Completa la verifica identità su Alpaca', 'Genera API keys live dalla dashboard Alpaca', 'Inseriscile nella pagina Connessioni'].map((step, i) => (
-              <div key={i} className="flex items-start gap-3 rounded-lg bg-n-bg/50 px-4 py-3">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-blue-500/15 text-[11px] font-bold text-blue-400">{i + 1}</span>
-                <p className="text-sm text-n-text">{step}</p>
-              </div>
-            ))}
-          </div>
-          <Link href="/connections" className="flex items-center justify-center gap-2 rounded-xl bg-blue-500/10 px-4 py-3 text-sm font-medium text-blue-400 hover:bg-blue-500/20 min-h-[48px]">
-            Vai a Connessioni
-          </Link>
-        </div>
-      </div>
-    );
-  }
+  const totalUnrealized = positions.reduce((s, p) => s + p.unrealizedPl, 0);
+  const totalMarketValue = positions.reduce((s, p) => s + p.marketValue, 0);
 
   return (
-    <div className="space-y-6 stagger">
-      {true && (
-        <div className="flex items-center gap-3 rounded-xl border border-blue-500/20 bg-blue-500/5 px-4 py-3">
-          <AlertTriangle size={16} className="text-blue-400 shrink-0" />
-          <p className="text-sm text-blue-300">Capitale reale — procedi con cautela</p>
+    <div className="space-y-5">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-n-text">Portfolio</h1>
+          <p className="text-xs text-n-dim">
+            {account?.mode === 'live' ? 'Conto reale' : 'Conto simulato'} · aggiornato ogni 15s
+          </p>
+        </div>
+        <button onClick={load} className="rounded-lg border border-n-border p-2 text-n-dim hover:text-n-text">
+          <RefreshCw size={14} />
+        </button>
+      </div>
+
+      {/* Account stats */}
+      {account && (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <StatCard label="Equity totale" value={fmtDollar(account.equity)} icon={Wallet} />
+          <StatCard label="Cash disponibile" value={fmtDollar(account.cash)} icon={DollarSign} />
+          <StatCard label="Buying Power" value={fmtDollar(account.buyingPower)} icon={BarChart3} />
+          <StatCard
+            label="Variazione giornaliera"
+            value={`${account.dailyChange >= 0 ? '+' : ''}${fmtDollar(account.dailyChange)} (${account.dailyChangePct >= 0 ? '+' : ''}${account.dailyChangePct.toFixed(2)}%)`}
+            icon={account.dailyChange >= 0 ? TrendingUp : TrendingDown}
+            color={account.dailyChange >= 0 ? 'text-green-400' : 'text-red-400'}
+          />
         </div>
       )}
 
-      <h1 className="text-n-text">Portfolio</h1>
-
-      {data && data.balance > 0 && (
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {[
-            { label: 'Bilancio', value: fmtDollar(data.balance), sub: `${data.openPositions.length} posizioni`, icon: Wallet },
-            { label: 'P&L Totale', value: data.hasTrades ? fmtPnl(data.stats.totalPnl) : '$0.00', sub: data.hasTrades ? `${data.stats.totalTrades} trades` : '', icon: TrendingUp, color: data.stats.totalPnl >= 0 ? 'text-n-green' : 'text-n-red' },
-            { label: 'Win Rate', value: data.hasTrades ? fmtPercent(data.stats.winRate) : '—', sub: data.hasTrades ? `${data.stats.wins}W / ${data.stats.losses}L` : '', icon: Target },
-            { label: 'Max Drawdown', value: data.hasTrades ? fmtPercent(data.stats.maxDrawdown) : '—', icon: TrendingDown, color: 'text-n-red' },
-          ].map((s) => (
-            <div key={s.label} className="rounded-xl border border-n-border bg-n-card p-5">
-              <div className="flex items-center justify-between"><p className="label">{s.label}</p><s.icon size={16} className={s.color || 'text-n-dim'} /></div>
-              <p className="mt-2 font-mono text-2xl font-medium text-n-text" suppressHydrationWarning>{s.value}</p>
-              {s.sub && <p className="mt-1 text-xs text-n-dim" suppressHydrationWarning>{s.sub}</p>}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {!data?.hasTrades ? (
-        <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-n-border bg-n-card/50 py-16">
-          <Rocket size={32} className="text-n-dim mb-4" />
-          <p className="text-base font-medium text-n-text-s">Nessun trade eseguito</p>
-          <p className="mt-1 text-sm text-n-dim">Avvia il bot dalla pagina Strategy.</p>
-          <Link href="/bot" className="mt-5 rounded-xl bg-n-accent-dim px-6 py-3 text-sm font-medium text-accent min-h-[44px]">Vai a Strategy</Link>
-        </div>
-      ) : (
-        <>
-          {data!.equityCurve.length > 1 && (
-            <div className="rounded-xl border border-n-border bg-n-card p-5">
-              <h3 className="mb-4 label">Equity Curve</h3>
-              <div className="h-[200px] md:h-[300px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={data!.equityCurve} margin={{ top: 5, right: 5, bottom: 0, left: 0 }}>
-                    <defs><linearGradient id="eqG" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor={accent} stopOpacity={0.2} /><stop offset="100%" stopColor={accent} stopOpacity={0} /></linearGradient></defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                    <YAxis tickFormatter={(v: number) => `$${v.toFixed(0)}`} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} width={50} />
-                    <Tooltip contentStyle={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 12, fontSize: 13, fontFamily: 'Roboto Mono' }} />
-                    <Area type="monotone" dataKey="equity" stroke={accent} strokeWidth={2} fill="url(#eqG)" dot={false} />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <div className="rounded-xl border border-n-border bg-n-card p-5">
-              <h3 className="mb-3 label">Performance</h3>
-              <div className="space-y-3">
-                {[
-                  { l: 'Profit Factor', v: data!.stats.profitFactor >= 999 ? '∞' : data!.stats.profitFactor.toFixed(2) },
-                  { l: 'Sharpe', v: data!.stats.sharpe.toFixed(2) },
-                  { l: 'Expectancy', v: fmtDollar(data!.stats.expectancy) },
-                  { l: 'Avg Win', v: fmtDollar(data!.stats.avgWin), c: 'text-n-green' },
-                  { l: 'Avg Loss', v: fmtDollar(data!.stats.avgLoss), c: 'text-n-red' },
-                ].map(r => (
-                  <div key={r.l} className="flex items-center justify-between text-sm">
-                    <span className="text-n-dim">{r.l}</span>
-                    <span className={`font-mono font-medium ${r.c || 'text-n-text'}`} suppressHydrationWarning>{r.v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-xl border border-n-border bg-n-card p-5">
-              <h3 className="mb-3 label">Dettaglio</h3>
-              <div className="space-y-3">
-                {[
-                  { l: 'Best Trade', v: fmtPnl(data!.stats.bestTrade), c: 'text-n-green' },
-                  { l: 'Worst Trade', v: fmtPnl(data!.stats.worstTrade), c: 'text-n-red' },
-                  { l: 'Max Drawdown', v: fmtPercent(data!.stats.maxDrawdown), c: 'text-n-red' },
-                ].map(r => (
-                  <div key={r.l} className="flex items-center justify-between text-sm">
-                    <span className="text-n-dim">{r.l}</span>
-                    <span className={`font-mono font-medium ${r.c}`} suppressHydrationWarning>{r.v}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {data && data.openPositions.length > 0 && (
+      {/* Allocation */}
+      {positions.length > 0 && account && (
         <div className="rounded-xl border border-n-border bg-n-card p-5">
-          <h3 className="mb-3 label">Posizioni Aperte</h3>
-          <div className="space-y-2">
-            {data.openPositions.map(p => (
-              <div key={p.symbol} className="flex items-center justify-between rounded-lg bg-n-bg/50 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${p.side === 'LONG' ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`}>{p.side}</span>
-                  <span className="font-mono text-sm font-medium text-n-text">{p.symbol}</span>
+          <div className="flex items-center gap-2 mb-4">
+            <PieChart size={14} className="text-blue-400" />
+            <h2 className="text-sm font-bold text-n-text">Allocazione</h2>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {positions.map(p => {
+              const pct = account.equity > 0 ? (p.marketValue / account.equity * 100) : 0;
+              return (
+                <div key={p.symbol} className="flex items-center gap-2 rounded-lg bg-n-bg/60 px-3 py-2">
+                  <span className="font-mono text-xs font-bold text-n-text">{p.symbol}</span>
+                  <span className="text-[10px] text-n-dim">{fmtDollar(p.marketValue)}</span>
+                  <span className="font-mono text-[10px] text-blue-400">{pct.toFixed(1)}%</span>
                 </div>
-                <span className={`font-mono text-sm font-medium ${p.pnl >= 0 ? 'text-n-green' : 'text-n-red'}`} suppressHydrationWarning>{fmtPnl(p.pnl)}</span>
-              </div>
-            ))}
+              );
+            })}
+            <div className="flex items-center gap-2 rounded-lg bg-n-bg/60 px-3 py-2">
+              <span className="font-mono text-xs font-bold text-n-dim">Cash</span>
+              <span className="text-[10px] text-n-dim">{fmtDollar(account.cash)}</span>
+              <span className="font-mono text-[10px] text-amber-400">{(account.cash / account.equity * 100).toFixed(1)}%</span>
+            </div>
           </div>
         </div>
       )}
 
-      {data && data.recentTrades.length > 0 && (
-        <div className="rounded-xl border border-n-border bg-n-card p-5">
-          <h3 className="mb-3 label">Ultimi Trade</h3>
-          <div className="space-y-2">
-            {data.recentTrades.map(t => (
-              <div key={t.id} className="flex items-center justify-between rounded-lg bg-n-bg/50 px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className={`rounded px-2 py-0.5 text-xs font-medium ${t.side === 'LONG' ? 'bg-green-500/10 text-n-green' : 'bg-red-500/10 text-n-red'}`}>{t.side}</span>
-                  <div>
-                    <p className="font-mono text-sm font-medium text-n-text">{t.symbol}</p>
-                    <p className="text-xs text-n-dim">{t.strategy}</p>
-                  </div>
-                </div>
-                <span className={`font-mono text-sm font-medium ${(t.pnl ?? 0) >= 0 ? 'text-n-green' : 'text-n-red'}`} suppressHydrationWarning>{fmtPnl(t.pnl ?? 0)}</span>
-              </div>
-            ))}
+      {/* Positions */}
+      <div className="rounded-xl border border-n-border bg-n-card p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold text-n-text">Posizioni aperte</h2>
+          <div className="text-[10px] text-n-dim">
+            {positions.length} posizion{positions.length === 1 ? 'e' : 'i'} ·
+            P&L: <span className={totalUnrealized >= 0 ? 'text-green-400' : 'text-red-400'}>
+              {totalUnrealized >= 0 ? '+' : ''}{fmtDollar(totalUnrealized)}
+            </span>
           </div>
         </div>
-      )}
+
+        {positions.length === 0 ? (
+          <p className="py-8 text-center text-xs text-n-dim">Nessuna posizione aperta. Lancia un bot per iniziare ad operare.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-[11px]">
+              <thead className="text-n-dim">
+                <tr>
+                  <th className="px-3 py-2">Asset</th>
+                  <th className="px-3 py-2">Lato</th>
+                  <th className="px-3 py-2">Quantità</th>
+                  <th className="px-3 py-2">Prezzo medio</th>
+                  <th className="px-3 py-2">Prezzo attuale</th>
+                  <th className="px-3 py-2">Valore</th>
+                  <th className="px-3 py-2">P&L</th>
+                  <th className="px-3 py-2">P&L %</th>
+                  <th className="px-3 py-2">Oggi</th>
+                </tr>
+              </thead>
+              <tbody className="text-n-text">
+                {positions.map(p => (
+                  <tr key={p.symbol} className="border-t border-n-border">
+                    <td className="px-3 py-2.5">
+                      <span className="font-mono font-semibold">{p.symbol}</span>
+                      <span className="ml-1.5 text-[9px] text-n-dim">{p.assetClass}</span>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${p.side === 'long' ? 'bg-green-500/15 text-green-400' : 'bg-red-500/15 text-red-400'}`}>
+                        {p.side.toUpperCase()}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 font-mono">{p.qty}</td>
+                    <td className="px-3 py-2.5 font-mono">{fmtDollar(p.avgEntryPrice)}</td>
+                    <td className="px-3 py-2.5 font-mono">{fmtDollar(p.currentPrice)}</td>
+                    <td className="px-3 py-2.5 font-mono">{fmtDollar(p.marketValue)}</td>
+                    <td className={`px-3 py-2.5 font-mono font-bold ${p.unrealizedPl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {p.unrealizedPl >= 0 ? '+' : ''}{fmtDollar(p.unrealizedPl)}
+                    </td>
+                    <td className={`px-3 py-2.5 font-mono ${p.unrealizedPlPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {p.unrealizedPlPct >= 0 ? '+' : ''}{p.unrealizedPlPct.toFixed(2)}%
+                    </td>
+                    <td className={`px-3 py-2.5 font-mono text-[10px] ${p.changeToday >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {p.changeToday >= 0 ? '+' : ''}{p.changeToday.toFixed(2)}%
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ label, value, icon: Icon, color }: {
+  label: string; value: string; icon: React.ElementType; color?: string;
+}) {
+  return (
+    <div className="rounded-xl border border-n-border bg-n-card p-4">
+      <div className="flex items-center justify-between">
+        <p className="text-[10px] uppercase tracking-wide text-n-dim">{label}</p>
+        <Icon size={14} className={color ?? 'text-n-dim'} />
+      </div>
+      <p className={`mt-1.5 font-mono text-lg font-bold ${color ?? 'text-n-text'}`} suppressHydrationWarning>
+        {value}
+      </p>
     </div>
   );
 }
