@@ -44,6 +44,8 @@ import { computeIndicators } from '@/lib/core/indicators';
 import { strategyMap } from '@/lib/analytics/cognition/strategies';
 import { runMTFAnalysis } from '@/lib/analytics/perception/mtf-analysis';
 import { runFullBacktest } from '@/lib/analytics/backtester';
+import { runGeneticOptimizer } from '@/lib/analytics/optimizer';
+import type { GAResult } from '@/lib/analytics/optimizer';
 import type { BacktestSummary, BacktestStrategySummary } from './types';
 import { notify } from '@/lib/analytics/action/notifications';
 import { updateJobProgress } from './analytic-queue';
@@ -278,7 +280,71 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     console.warn(`[analytic] ${symbol}: Full backtest failed (non-fatal): ${(e as Error).message}`);
   }
 
-  // Event reactivity: in Phase 2 placeholder (vedi spec sez. STEP 3)
+  // Phase 5: Genetic Optimizer — discover optimal indicator combinations
+  let gaResult: GAResult | undefined;
+  try {
+    await updateJobProgress(symbol, 'profiling', 88, 'Genetic Optimizer: scoperta strategie ottimali…');
+    // Run GA on 1h data (most reliable timeframe for strategy discovery)
+    const gaCandles = history['1h'] ?? [];
+    if (gaCandles.length >= 200) {
+      gaResult = runGeneticOptimizer(gaCandles, {
+        populationSize: 60,
+        generations: 100,
+        tournamentSize: 5,
+        crossoverRate: 0.7,
+        mutationRate: 0.15,
+        eliteCount: 3,
+        minTrades: 15,
+        trainSplit: 0.7,
+        fitnessWeights: { sharpe: 0.3, calmar: 0.2, profitFactor: 0.3, winRate: 0.2 },
+      });
+
+      // Add GA-discovered strategies to the backtest rankings
+      if (backtestSummary && gaResult.topGenomes.length > 0) {
+        const gaRankings: BacktestStrategySummary[] = gaResult.topGenomes
+          .filter(g => g.totalTrades >= 10)
+          .slice(0, 3)
+          .map((g, i) => {
+            const activeNames = Object.entries(g.indicators)
+              .filter(([_, gene]) => (gene as any).active)
+              .map(([name]) => name)
+              .slice(0, 4);
+            return {
+              rank: 0, // will be re-ranked
+              strategyId: `ga_${g.id}`,
+              strategyName: `GA: ${activeNames.join(' + ')}`,
+              timeframe: '1h',
+              isMineRule: false,
+              totalTrades: g.totalTrades,
+              winRate: Math.round(g.winRate * 10) / 10,
+              profitFactor: Math.round(g.profitFactor * 100) / 100,
+              netProfitPct: Math.round(g.netProfitPct * 100) / 100,
+              maxDrawdownPct: Math.round(g.maxDrawdownPct * 100) / 100,
+              sharpe: Math.round(g.sharpe * 100) / 100,
+              avgTpDistancePct: Math.round(g.tpAtrMultiplier * 100) / 100,
+              avgSlDistancePct: Math.round(g.slAtrMultiplier * 100) / 100,
+              tpHitRate: 0,
+              slHitRate: 0,
+              avgHoldingHours: 0,
+              optimalEntryTimeout: 12,
+            };
+          });
+
+        // Merge GA rankings into backtest rankings, re-sort by profitFactor
+        const merged = [...backtestSummary.rankings, ...gaRankings]
+          .sort((a, b) => b.profitFactor - a.profitFactor)
+          .map((r, i) => ({ ...r, rank: i + 1 }));
+        backtestSummary.rankings = merged.slice(0, 25);
+        backtestSummary.totalStrategiesTested += gaRankings.length;
+      }
+
+      console.log(`[analytic] ${symbol}: GA done — best fitness ${gaResult.bestGenome.fitness.toFixed(3)}, WR ${gaResult.bestGenome.winRate.toFixed(1)}%, PF ${gaResult.bestGenome.profitFactor.toFixed(2)}, ${gaResult.generationsRun} gen, ${gaResult.elapsedMs}ms`);
+    }
+  } catch (e) {
+    console.warn(`[analytic] ${symbol}: GA failed (non-fatal): ${(e as Error).message}`);
+  }
+
+  // Event reactivity: in Phase 2 placeholder
   const eventReactivity: EventReactivity[] = [];
 
   await updateJobProgress(symbol, 'profiling', 90, 'Profiling completato');

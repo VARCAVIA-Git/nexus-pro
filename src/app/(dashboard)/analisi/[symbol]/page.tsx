@@ -768,6 +768,7 @@ function ReportView({
                     <td className="px-2 py-1.5">
                       {r.strategyName.length > 30 ? r.strategyName.slice(0, 30) + '...' : r.strategyName}
                       {r.isMineRule && <span className="ml-1 rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI RULE</span>}
+                      {r.strategyId.startsWith('ga_') && <span className="ml-1 rounded bg-emerald-500/15 px-1 py-0.5 text-[8px] font-bold text-emerald-400">GA</span>}
                     </td>
                     <td className="px-2 py-1.5 font-mono">{r.timeframe}</td>
                     <td className="px-2 py-1.5">{r.totalTrades}</td>
@@ -895,7 +896,9 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
           const avgPerTrade = r.totalTrades > 0 ? simulatedProfit / r.totalTrades : 0;
 
           // Get description
-          const description = r.isMineRule
+          const description = r.strategyId.startsWith('ga_')
+            ? `Strategia evoluta dal Genetic Algorithm: combinazione ottimale di indicatori scoperta testando migliaia di varianti sullo storico`
+            : r.isMineRule
             ? `Regola scoperta dall'AI: opera quando si verificano queste condizioni: ${r.conditions?.join(' + ') ?? '—'}`
             : strategyDescriptions[r.strategyId] ?? 'Strategia tecnica avanzata';
 
@@ -921,6 +924,9 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
                   )}
                   {r.isMineRule && (
                     <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-400">AI RULE</span>
+                  )}
+                  {r.strategyId.startsWith('ga_') && (
+                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">GA EVOLVED</span>
                   )}
                 </div>
                 <p className="text-xs font-bold text-n-text">
