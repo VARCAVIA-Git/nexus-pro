@@ -174,37 +174,13 @@ export async function executeMineeTick(
 
     let signals: DetectedSignal[] = [];
 
-    if (aicOnline) {
-      // Use AIC signals
-      const aicSignal = await getLatestSignal(sym);
-      if (aicSignal) {
-        // Convert AIC signal to DetectedSignal format
-        const direction: 'long' | 'short' = aicSignal.action === 'LONG' ? 'long' : 'short';
-        const tp = Array.isArray(aicSignal.TP) && aicSignal.TP.length > 0 ? aicSignal.TP[0] : 0;
-        const detected: DetectedSignal & { aicSetupName?: string } = {
-          symbol: sym,
-          signal: {
-            type: 'pattern_match',
-            confidence: aicSignal.confidence,
-            sourcePattern: aicSignal.setup_name,
-            macroClear: true, // AIC already factors this in
-          },
-          suggestedStrategy: 'trend',
-          suggestedTimeframe: '4h',
-          suggestedDirection: direction,
-          suggestedTp: tp,
-          suggestedSl: aicSignal.SL,
-          aicSetupName: aicSignal.setup_name,
-        };
-        signals = [detected];
-      }
-    } else {
-      // Fallback: use TypeScript signal detector
-      const report = await loaders.loadReport(sym);
-      if (!report) continue;
-      const news = await loaders.loadNews(sym);
-      const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
+    // Phase 5: Use ALL signal sources together (not either/or)
+    // AIC signal + TS signal detector run in parallel
+    const report = await loaders.loadReport(sym);
+    const news = await loaders.loadNews(sym);
+    const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
 
+    if (report) {
       const input: SignalDetectorInput = {
         symbol: sym,
         live,
@@ -215,7 +191,12 @@ export async function executeMineeTick(
           .filter((m) => m.status === 'open' || m.status === 'pending')
           .map((m) => m.direction),
       };
+      // detectSignals now includes AIC signals internally
       signals = await detectSignals(input);
+
+      if (signals.length > 0) {
+        console.log(`[mine-tick] ${sym}: ${signals.length} signals found — best: ${signals[0].signal.type} conf=${signals[0].signal.confidence.toFixed(2)} dir=${signals[0].suggestedDirection}`);
+      }
     }
 
     totalSignals += signals.length;
