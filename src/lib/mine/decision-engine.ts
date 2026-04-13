@@ -251,12 +251,24 @@ export function evaluateSignals(
     };
 
     const minesForAsset = allActiveMines.filter((m) => m.symbol === signal.symbol);
+
+    // Skip if we already have a mine in this direction for this asset
+    const sameDirectionMine = minesForAsset.find(m => m.direction === signal.suggestedDirection && (m.status === 'open' || m.status === 'pending'));
+    if (sameDirectionMine) {
+      actions.push({ type: 'no_action', reason: `${signal.symbol}: already have ${signal.suggestedDirection} mine` });
+      continue;
+    }
+
     const risk = checkRisk(adjustedSignal, profile, equity, allActiveMines, minesForAsset);
 
     if (!risk.allowed) {
       actions.push({ type: 'no_action', reason: `${signal.symbol}: ${risk.reason}` });
       continue;
     }
+
+    pendingCount++;
+    // Add to allActiveMines so subsequent signals see this pending mine
+    allActiveMines.push({ symbol: signal.symbol, direction: signal.suggestedDirection, status: 'pending' } as any);
 
     const now = Date.now();
     actions.push({
