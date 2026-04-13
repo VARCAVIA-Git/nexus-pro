@@ -72,8 +72,12 @@ export function calcPositionSize(
   slDistancePct: number,
 ): number {
   if (slDistancePct <= 0 || equity <= 0) return 0;
+  // Minimum SL distance: 1% to prevent astronomical position sizes
+  const safeSLPct = Math.max(slDistancePct, 1.0);
   const riskAmount = equity * (riskPct / 100);
-  return riskAmount / (slDistancePct / 100);
+  const notional = riskAmount / (safeSLPct / 100);
+  // Cap at 20% of equity per position (prevents Alpaca max notional errors)
+  return Math.min(notional, equity * 0.2);
 }
 
 /** Check if a mine is in a terminal state. */
