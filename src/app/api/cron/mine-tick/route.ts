@@ -24,8 +24,7 @@ const loaders: DataLoaders = {
     return redisGet<LiveContext>(`nexus:analytic:live:${symbol}`);
   },
   async loadReport(symbol: string): Promise<AnalyticReport | null> {
-    const state = await redisGet<{ report?: AnalyticReport }>(`nexus:analytic:${symbol}`);
-    return state?.report ?? null;
+    return redisGet<AnalyticReport>(`nexus:analytic:report:${symbol}`);
   },
   async loadNews(symbol: string): Promise<NewsDigest | null> {
     return redisGet<NewsDigest>(`nexus:news:digest:${symbol}`);
