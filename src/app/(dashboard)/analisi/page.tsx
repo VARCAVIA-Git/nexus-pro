@@ -1,207 +1,225 @@
 'use client';
 
-import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { ASSETS, type AssetConfig } from '@/lib/config/assets';
-import type { AssetAnalytic, AnalyticStatus, AssetClass } from '@/lib/analytics/types';
-import { Boxes, Loader2, CheckCircle2, Clock, AlertTriangle, Plus, X } from 'lucide-react';
+import type { AssetAnalytic } from '@/lib/analytics/types';
+import { useBatchPrices } from '@/hooks/useLivePrice';
+import {
+  Brain, Loader2, CheckCircle2, Clock, AlertTriangle, Plus,
+  Search, RefreshCw, TrendingUp, TrendingDown, X,
+} from 'lucide-react';
 
-type Tab = 'crypto' | 'us_stock' | 'us_etf';
-
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'crypto', label: 'Crypto' },
-  { key: 'us_stock', label: 'US Stocks' },
-  { key: 'us_etf', label: 'ETF' },
-];
-
-function badgeFor(status: AnalyticStatus | 'unassigned') {
+function badgeFor(status: string) {
   switch (status) {
-    case 'ready':
-      return { label: 'Ready', cls: 'bg-emerald-500/15 text-emerald-400', Icon: CheckCircle2 };
-    case 'training':
-      return { label: 'Training', cls: 'bg-blue-500/15 text-blue-400', Icon: Loader2 };
-    case 'queued':
-      return { label: 'In coda', cls: 'bg-amber-500/15 text-amber-400', Icon: Clock };
-    case 'refreshing':
-      return { label: 'Refresh', cls: 'bg-indigo-500/15 text-indigo-300', Icon: Loader2 };
-    case 'failed':
-      return { label: 'Failed', cls: 'bg-red-500/15 text-red-400', Icon: AlertTriangle };
-    default:
-      return { label: 'Non assegnata', cls: 'bg-n-card text-n-dim', Icon: Plus };
+    case 'ready': return { label: 'Attiva', cls: 'bg-emerald-500/15 text-emerald-400', Icon: CheckCircle2 };
+    case 'training': case 'refreshing': return { label: 'Training...', cls: 'bg-blue-500/15 text-blue-400', Icon: Loader2 };
+    case 'queued': return { label: 'In coda', cls: 'bg-amber-500/15 text-amber-400', Icon: Clock };
+    case 'failed': return { label: 'Errore', cls: 'bg-red-500/15 text-red-400', Icon: AlertTriangle };
+    default: return { label: 'Non avviata', cls: 'bg-n-bg-s text-n-dim', Icon: Clock };
   }
 }
 
-function classifyAsset(a: AssetConfig): AssetClass {
-  if (a.type === 'crypto') return 'crypto';
-  return 'us_stock';
+function formatTimeAgo(ts: number | null): string {
+  if (!ts) return '—';
+  const diff = Date.now() - ts;
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'ora';
+  if (min < 60) return `${min}m fa`;
+  const hrs = Math.floor(min / 60);
+  if (hrs < 24) return `${hrs}h fa`;
+  return `${Math.floor(hrs / 24)}g fa`;
 }
 
-export default function AssetsPage() {
-  return (
-    <Suspense fallback={<div className="flex items-center justify-center py-20"><Loader2 size={24} className="animate-spin text-n-dim" /></div>}>
-      <AssetsPageInner />
-    </Suspense>
-  );
+interface SearchResult {
+  symbol: string;
+  name: string;
+  type: 'crypto' | 'stock';
+  tracked: boolean;
 }
 
-function AssetsPageInner() {
-  const searchParams = useSearchParams();
-  const archivedFrom = searchParams.get('archived');
-  const [archivedToast, setArchivedToast] = useState<string | null>(archivedFrom);
-  const [tab, setTab] = useState<Tab>('crypto');
+export default function AnalisiPage() {
   const [analytics, setAnalytics] = useState<AssetAnalytic[]>([]);
   const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [assigning, setAssigning] = useState<string | null>(null);
+  const [filter, setFilter] = useState<'all' | 'crypto' | 'stock'>('all');
 
-  async function load() {
+  // Load tracked analytics
+  const load = useCallback(async () => {
     try {
-      const r = await fetch('/api/analytics');
-      if (r.ok) {
-        const d = await r.json();
+      const res = await fetch('/api/analytics');
+      if (res.ok) {
+        const d = await res.json();
         setAnalytics(d.analytics ?? []);
       }
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    load();
+    } catch {}
+    setLoading(false);
   }, []);
 
-  const byKey = useMemo(() => {
-    const m = new Map<string, AssetAnalytic>();
-    analytics.forEach((a) => m.set(a.symbol, a));
-    return m;
-  }, [analytics]);
+  useEffect(() => { load(); const i = setInterval(load, 30000); return () => clearInterval(i); }, [load]);
 
-  const filtered = useMemo(() => {
-    return ASSETS.filter((a) => {
-      const cls = classifyAsset(a);
-      if (tab === 'us_etf') return false; // nessun ETF in lista corrente
-      return cls === tab;
-    });
-  }, [tab]);
+  // Batch prices for tracked assets
+  const trackedSymbols = analytics.map(a => a.symbol);
+  const prices = useBatchPrices(trackedSymbols);
 
-  const activeCount = analytics.filter((a) => a.status !== 'unassigned').length;
+  // Search
+  useEffect(() => {
+    if (searchQuery.length < 2) { setSearchResults([]); return; }
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const res = await fetch(`/api/assets/search?q=${encodeURIComponent(searchQuery)}&type=${filter === 'all' ? 'all' : filter}`);
+        if (res.ok) {
+          const d = await res.json();
+          setSearchResults(d.results ?? []);
+        }
+      } catch {}
+      setSearching(false);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [searchQuery, filter]);
 
-  async function assign(symbol: string, assetClass: AssetClass) {
-    setBusy(symbol);
+  // Assign (add) new asset
+  const assignAsset = async (symbol: string, type: string) => {
+    setAssigning(symbol);
     try {
-      const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}/assign`, {
+      await fetch(`/api/analytics/${encodeURIComponent(symbol)}/assign`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetClass }),
+        body: JSON.stringify({ assetClass: type }),
       });
-      if (r.ok) await load();
-    } finally {
-      setBusy(null);
-    }
-  }
+      setSearchQuery('');
+      setSearchResults([]);
+      await load();
+    } catch {}
+    setAssigning(null);
+  };
+
+  // Filter analytics
+  const filtered = analytics.filter(a => {
+    if (filter === 'crypto') return a.symbol.includes('/');
+    if (filter === 'stock') return !a.symbol.includes('/');
+    return true;
+  });
 
   return (
     <div className="space-y-5">
-      {archivedToast && (
-        <div className="flex items-start justify-between gap-3 rounded-2xl border border-amber-500/30 bg-amber-500/10 p-4 text-xs text-amber-200">
-          <div>
-            <span className="font-semibold">Sezione archiviata.</span>{' '}
-            La sezione <span className="font-mono">/{archivedToast}</span> è stata rimossa.
-            L&apos;AI Analytic la sostituisce — gestisci i tuoi asset da qui.
-          </div>
-          <button
-            onClick={() => setArchivedToast(null)}
-            className="shrink-0 rounded p-1 text-amber-300 hover:bg-amber-500/15"
-            aria-label="Chiudi"
-          >
-            <X size={14} />
-          </button>
-        </div>
-      )}
-
+      {/* Header */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15">
-            <Boxes size={20} className="text-blue-400" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-n-text">Assets</h1>
-            <p className="text-xs text-n-dim">
-              {ASSETS.length} asset · {activeCount} AI Analytic attive
-            </p>
-          </div>
+        <div>
+          <h1 className="text-xl font-bold text-n-text">AI Analytics</h1>
+          <p className="text-xs text-n-dim">{analytics.length} asset monitorati · l&apos;AI analizza 24/7</p>
         </div>
       </div>
 
-      <div className="flex gap-2">
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`rounded-xl px-4 py-2 text-xs font-medium transition-all ${
-              tab === t.key ? 'bg-n-text text-n-bg' : 'bg-n-card text-n-dim hover:text-n-text'
-            }`}
-          >
-            {t.label}
+      {/* Search bar */}
+      <div className="relative">
+        <div className="flex items-center gap-2 rounded-xl border border-n-border bg-n-card px-4 py-3">
+          <Search size={16} className="text-n-dim shrink-0" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Cerca asset da analizzare (es. BTC, AAPL, Solana...)"
+            className="flex-1 bg-transparent text-sm text-n-text placeholder:text-n-dim outline-none"
+          />
+          {searchQuery && (
+            <button onClick={() => { setSearchQuery(''); setSearchResults([]); }} className="text-n-dim hover:text-n-text">
+              <X size={14} />
+            </button>
+          )}
+          {searching && <Loader2 size={14} className="animate-spin text-n-dim" />}
+        </div>
+
+        {/* Search results dropdown */}
+        {searchResults.length > 0 && (
+          <div className="absolute left-0 right-0 top-full z-20 mt-1 rounded-xl border border-n-border bg-n-card p-2 shadow-lg">
+            {searchResults.map(r => (
+              <div key={r.symbol} className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-n-bg/60">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${r.type === 'crypto' ? 'bg-amber-500/15 text-amber-400' : 'bg-blue-500/15 text-blue-400'}`}>
+                    {r.type === 'crypto' ? 'CRYPTO' : 'STOCK'}
+                  </span>
+                  <span className="font-mono text-sm font-semibold text-n-text">{r.symbol.replace('/USD', '')}</span>
+                  <span className="text-xs text-n-dim">{r.name}</span>
+                </div>
+                {r.tracked ? (
+                  <Link href={`/analisi/${encodeURIComponent(r.symbol)}`} className="rounded-lg bg-n-bg-s px-3 py-1 text-[11px] font-medium text-n-text hover:bg-n-border">
+                    Apri
+                  </Link>
+                ) : (
+                  <button
+                    onClick={() => assignAsset(r.symbol, r.type)}
+                    disabled={assigning === r.symbol}
+                    className="flex items-center gap-1 rounded-lg bg-blue-500/15 px-3 py-1 text-[11px] font-bold text-blue-400 hover:bg-blue-500/25 disabled:opacity-50"
+                  >
+                    {assigning === r.symbol ? <Loader2 size={10} className="animate-spin" /> : <Plus size={10} />}
+                    Analizza
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Filter tabs */}
+      <div className="flex gap-1 rounded-lg border border-n-border p-1">
+        {(['all', 'crypto', 'stock'] as const).map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`flex-1 rounded-md px-3 py-1.5 text-xs font-medium transition-all ${filter === f ? 'bg-n-accent-dim text-n-text' : 'text-n-dim hover:text-n-text'}`}>
+            {f === 'all' ? 'Tutti' : f === 'crypto' ? 'Crypto' : 'Stocks'}
           </button>
         ))}
       </div>
 
+      {/* Asset grid */}
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 size={24} className="animate-spin text-n-dim" />
+        <div className="flex items-center justify-center py-16">
+          <Loader2 size={20} className="animate-spin text-n-dim" />
         </div>
       ) : filtered.length === 0 ? (
-        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 py-16 text-center text-sm text-n-dim">
-          Nessun asset disponibile in questa categoria.
+        <div className="rounded-xl border border-dashed border-n-border bg-n-card/50 py-12 text-center">
+          <Brain size={32} className="mx-auto text-n-dim mb-2" />
+          <p className="text-sm text-n-text-s">Nessun asset analizzato</p>
+          <p className="text-xs text-n-dim mt-1">Cerca un asset nella barra sopra per iniziare l&apos;analisi AI.</p>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((a) => {
-            const state = byKey.get(a.symbol);
-            const status: AnalyticStatus | 'unassigned' = state?.status ?? 'unassigned';
-            const b = badgeFor(status);
-            const isReady = status === 'ready';
-            const isUnassigned = status === 'unassigned';
-            const cls = classifyAsset(a);
-
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {filtered.map(a => {
+            const badge = badgeFor(a.status);
+            const price = prices.get(a.symbol);
+            const isCrypto = a.symbol.includes('/');
             return (
-              <div
-                key={a.symbol}
-                className="rounded-2xl border border-n-border bg-n-card p-4 space-y-3"
-              >
-                <div className="flex items-start justify-between">
+              <Link key={a.symbol} href={`/analisi/${encodeURIComponent(a.symbol)}`}
+                className="group rounded-xl border border-n-border bg-n-card p-4 hover:border-n-border-b transition-all">
+                <div className="flex items-start justify-between mb-3">
                   <div>
-                    <div className="text-sm font-semibold text-n-text">{a.symbol}</div>
-                    <div className="text-[11px] text-n-dim">{a.name}</div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-lg font-bold text-n-text">{a.symbol.replace('/USD', '')}</span>
+                      <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${isCrypto ? 'bg-amber-500/10 text-amber-400' : 'bg-blue-500/10 text-blue-400'}`}>
+                        {isCrypto ? 'CRYPTO' : 'STOCK'}
+                      </span>
+                    </div>
+                    {price && (
+                      <p className="mt-0.5 font-mono text-sm text-n-text-s" suppressHydrationWarning>
+                        ${price.toLocaleString('en-US', { minimumFractionDigits: price < 10 ? 2 : 0, maximumFractionDigits: price < 10 ? 2 : 0 })}
+                      </p>
+                    )}
                   </div>
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[10px] font-medium ${b.cls}`}
-                  >
-                    <b.Icon size={11} className={status === 'training' || status === 'refreshing' ? 'animate-spin' : ''} />
-                    {b.label}
-                  </span>
+                  <div className={`flex items-center gap-1 rounded-lg px-2 py-0.5 text-[10px] font-bold ${badge.cls}`}>
+                    <badge.Icon size={10} className={a.status === 'training' || a.status === 'refreshing' ? 'animate-spin' : ''} />
+                    {badge.label}
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-2 pt-1">
-                  {isUnassigned ? (
-                    <button
-                      disabled={busy === a.symbol}
-                      onClick={() => assign(a.symbol, cls)}
-                      className="flex-1 rounded-lg bg-blue-500/15 px-3 py-2 text-[11px] font-semibold text-blue-300 hover:bg-blue-500/25 disabled:opacity-50"
-                    >
-                      {busy === a.symbol ? 'Assegnazione…' : 'Assegna AI Analytic'}
-                    </button>
-                  ) : (
-                    <Link
-                      href={`/analisi/${encodeURIComponent(a.symbol)}`}
-                      className="flex-1 rounded-lg bg-n-bg-s px-3 py-2 text-center text-[11px] font-semibold text-n-text hover:bg-n-border"
-                    >
-                      {isReady ? 'Apri' : 'Dettaglio'}
-                    </Link>
-                  )}
+                <div className="flex items-center justify-between text-[10px] text-n-dim">
+                  <span>Regime: <span className="text-n-text-s">{a.currentRegime ?? '—'}</span></span>
+                  <span suppressHydrationWarning>Training: {formatTimeAgo(a.lastTrainedAt)}</span>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>

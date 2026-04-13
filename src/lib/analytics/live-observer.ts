@@ -61,6 +61,8 @@ export async function computeLiveContext(symbol: string): Promise<LiveContext> {
   } catch (e) {
     const fallback = await loadValidLiveContext(symbol);
     if (fallback) {
+      // Re-persist with fresh TTL so it doesn't expire while fetch keeps failing
+      await redisSet(KEY_LIVE(symbol), fallback, LIVE_TTL_SECONDS).catch(() => {});
       console.warn(`[live-observer] ${symbol}: fetch fallito, uso ultimo live valido`);
       return fallback;
     }
@@ -68,7 +70,10 @@ export async function computeLiveContext(symbol: string): Promise<LiveContext> {
   }
   if (candles1h.length < 50) {
     const fallback = await loadValidLiveContext(symbol);
-    if (fallback) return fallback;
+    if (fallback) {
+      await redisSet(KEY_LIVE(symbol), fallback, LIVE_TTL_SECONDS).catch(() => {});
+      return fallback;
+    }
     throw makeError('insufficient-data', `dati insufficienti: 1h=${candles1h.length}`);
   }
 

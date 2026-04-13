@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from 'react';
 import type { LiveContext } from '@/lib/analytics/types';
-import { Activity, TrendingUp, TrendingDown, Minus, Zap, RadioTower } from 'lucide-react';
+import { TrendingUp, TrendingDown, Minus, Zap, RadioTower, RefreshCw, Activity } from 'lucide-react';
+import { useLivePrice } from '@/hooks/useLivePrice';
 
-function fmtPct(v: number, digits = 2): string {
-  if (v === undefined || v === null || Number.isNaN(v)) return '—';
-  return `${v.toFixed(digits)}%`;
+function formatTimeAgo(ts: number): string {
+  const diff = Date.now() - ts;
+  const sec = Math.floor(diff / 1000);
+  if (sec < 10) return 'ora';
+  if (sec < 60) return `${sec}s fa`;
+  const min = Math.floor(sec / 60);
+  if (min < 60) return `${min}m fa`;
+  const hrs = Math.floor(min / 60);
+  return `${hrs}h fa`;
 }
 
 function fmtNum(v: number, digits = 2): string {
@@ -14,39 +21,9 @@ function fmtNum(v: number, digits = 2): string {
   return v.toFixed(digits);
 }
 
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'pochi sec fa';
-  if (mins < 60) return `${mins} min fa`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h fa`;
-  return `${Math.floor(hours / 24)}g fa`;
-}
-
-/** Hook to fetch live price for a specific symbol every 15s */
-function useLivePrice(symbol: string): { price: number | null; updatedAt: number | null } {
-  const [data, setData] = useState<{ price: number | null; updatedAt: number | null }>({ price: null, updatedAt: null });
-
-  useEffect(() => {
-    const fetchPrice = async () => {
-      try {
-        const sym = symbol.replace('/', '%2F');
-        const res = await fetch(`/api/prices/symbol?symbol=${sym}`);
-        if (res.ok) {
-          const d = await res.json();
-          if (typeof d.price === 'number') {
-            setData({ price: d.price, updatedAt: Date.now() });
-          }
-        }
-      } catch {}
-    };
-    fetchPrice();
-    const interval = setInterval(fetchPrice, 15000);
-    return () => clearInterval(interval);
-  }, [symbol]);
-
-  return data;
+function fmtPct(v: number, digits = 2): string {
+  if (v === undefined || v === null || Number.isNaN(v)) return '—';
+  return `${v.toFixed(digits)}%`;
 }
 
 function MomentumBadge({ score }: { score: number }) {
@@ -73,8 +50,12 @@ function LiveContextPlaceholder({ msg }: { msg: string }) {
   );
 }
 
-export function LiveContextCard({ context, symbol }: { context: LiveContext | null | undefined; symbol?: string }) {
+export function LiveContextCard({ context, symbol, onRefresh }: { context: LiveContext | null | undefined; symbol?: string; onRefresh?: () => void }) {
   const livePrice = useLivePrice(symbol ?? '');
+
+  // Auto-refresh timeAgo display every 10s
+  const [, setTick] = useState(0);
+  useEffect(() => { const id = setInterval(() => setTick(t => t + 1), 10000); return () => clearInterval(id); }, []);
 
   if (!context) {
     return <LiveContextPlaceholder msg="In attesa di dati live (verrà popolato al prossimo tick)." />;
@@ -113,9 +94,16 @@ export function LiveContextCard({ context, symbol }: { context: LiveContext | nu
             ATTIVA
           </span>
         </div>
-        <span className="text-[10px] text-n-dim">
-          Snapshot {context.updatedAt ? timeAgo(context.updatedAt) : '—'}
-        </span>
+        <div className="flex items-center gap-2">
+          {onRefresh && (
+            <button onClick={onRefresh} className="rounded p-1 text-n-dim hover:text-n-text transition-colors" title="Aggiorna contesto">
+              <RefreshCw size={12} />
+            </button>
+          )}
+          <span className="text-[10px] text-n-dim" suppressHydrationWarning>
+            Aggiornato {context.updatedAt ? formatTimeAgo(context.updatedAt) : '—'}
+          </span>
+        </div>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">

@@ -16,6 +16,7 @@ import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clo
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
 import { AssetIntelCard } from '@/components/analytics/AssetIntelCard';
+import { DataFreshnessBar } from '@/components/analytics/DataFreshnessBar';
 import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
 import { useExplainMode } from '@/hooks/useExplainMode';
@@ -357,8 +358,16 @@ export default function AssetDetailPage() {
 
       {isReady && (
         <>
+          {/* Data freshness indicator */}
+          <DataFreshnessBar
+            priceUpdatedAt={null}
+            contextUpdatedAt={live?.updatedAt ?? null}
+            aicOnline={!!aicData?.status}
+            lastTrainedAt={analytic?.lastTrainedAt ?? null}
+            nextRefreshAt={analytic?.nextScheduledRefresh ?? null}
+          />
+          <LiveContextCard context={live} symbol={symbol} onRefresh={loadLive} />
           <AICInsightsCard data={aicData} symbol={symbol} />
-          <LiveContextCard context={live} symbol={symbol} />
           <AssetIntelCard symbol={symbol} />
         </>
       )}
