@@ -8,7 +8,7 @@ Nexus Pro è un **centro di comando autonomo per trading algoritmico** con AI mu
 
 **Architettura completa**: vedi `NEXUS-PRO-BLUEPRINT.md`
 
-## Stato attuale (aggiornato 2026-04-13)
+## Stato attuale (aggiornato 2026-04-14)
 
 ### Phase 5: IN CORSO
 
@@ -112,7 +112,7 @@ nexus:global:ticker_assets      → ticker selection (deprecated, now auto)
 
 ```bash
 # Locale
-pnpm test:run        # 374 tests
+pnpm test:run        # 391 tests
 pnpm build           # Next.js production build
 pnpm dev             # Dev server
 
