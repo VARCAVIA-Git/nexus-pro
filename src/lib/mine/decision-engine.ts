@@ -265,9 +265,10 @@ export function evaluateSignals(
     const minesForAsset = allActiveMines.filter((m) => m.symbol === signal.symbol);
 
     // Skip if we already have a mine in this direction for this asset
-    const sameDirectionMine = minesForAsset.find(m => m.direction === signal.suggestedDirection && (m.status === 'open' || m.status === 'pending' || m.status === 'waiting'));
-    if (sameDirectionMine) {
-      actions.push({ type: 'no_action', reason: `${signal.symbol}: already have ${signal.suggestedDirection} mine` });
+    // Phase 6: Block if ANY active mine on this asset (no opposing positions)
+    const anyActiveMine = minesForAsset.find(m => m.status === 'open' || m.status === 'pending' || m.status === 'waiting');
+    if (anyActiveMine) {
+      actions.push({ type: 'no_action', reason: `${signal.symbol}: already have ${anyActiveMine.direction} mine (no opposing)` });
       continue;
     }
 

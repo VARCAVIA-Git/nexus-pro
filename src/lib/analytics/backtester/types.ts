@@ -32,22 +32,23 @@ export interface BacktestConfig {
 }
 
 export const DEFAULT_BACKTEST_CONFIG: BacktestConfig = {
-  initialCapital: 100_000,
-  tradeSize: 100,
-  commissionRate: 0.001,
-  slippageRate: 0.0005,
-  maxConcurrentPositions: 5,
+  initialCapital: 1_000,       // Phase 6: realistic $1k capital
+  tradeSize: 30,               // Phase 6: $30 per trade (3% of capital)
+  commissionRate: 0.001,       // 0.1% per side
+  slippageRate: 0.0003,        // 0.03% per side
+  maxConcurrentPositions: 3,   // Phase 6: max 3 concurrent (less over-exposure)
   useTrailingStop: true,
-  trailingStopPct: 0.015, // 1.5% trailing
-  entryTimeoutBars: 12,
+  trailingStopPct: 0.012,      // Phase 6: 1.2% trailing (tighter)
+  entryTimeoutBars: 8,         // Phase 6: 8 bars timeout (faster stale)
   includeMineRules: true,
 };
 
 // ── Timeframes ───────────────────────────────────────────────
 
-export type BacktestTimeframe = '5m' | '15m' | '1h' | '4h';
+export type BacktestTimeframe = '15m' | '1h' | '4h';
 
-export const BACKTEST_TIMEFRAMES: BacktestTimeframe[] = ['5m', '15m', '1h', '4h'];
+// Phase 6: removed 5m — too noisy, commissions eat all profit
+export const BACKTEST_TIMEFRAMES: BacktestTimeframe[] = ['15m', '1h', '4h'];
 
 // ── Individual Trade ─────────────────────────────────────────
 

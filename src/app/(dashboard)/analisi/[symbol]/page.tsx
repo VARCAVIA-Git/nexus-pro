@@ -1162,7 +1162,8 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
 
   // Find the single best result for the hero
   const best = allToShow.reduce((a, b) => (b.netProfitPct > a.netProfitPct ? b : a), allToShow[0]);
-  const bestProfit = best.netProfitPct * 100;
+  // netProfitPct is % return on initial capital (now $1000 directly)
+  const bestProfit = best.netProfitPct / 100 * INITIAL_CAPITAL;
   const bestFinal = INITIAL_CAPITAL + bestProfit;
 
   // Coded strategy descriptions
@@ -1225,7 +1226,7 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
       {/* All combinations grid */}
       <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {allToShow.map((r, i) => {
-          const simulatedProfit = r.netProfitPct * 100;
+          const simulatedProfit = r.netProfitPct / 100 * INITIAL_CAPITAL;
           const finalCapital = INITIAL_CAPITAL + simulatedProfit;
           const isProfit = simulatedProfit >= 0;
           const avgPerTrade = r.totalTrades > 0 ? simulatedProfit / r.totalTrades : 0;

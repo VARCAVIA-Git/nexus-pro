@@ -35,10 +35,10 @@ function round(n: number, d = 2): number {
 /** Map timeframe to approximate hours per bar */
 function tfToHours(tf: BacktestTimeframe): number {
   switch (tf) {
-    case '5m': return 5 / 60;
     case '15m': return 0.25;
     case '1h': return 1;
     case '4h': return 4;
+    default: return 1;
   }
 }
 
@@ -127,8 +127,8 @@ export function backtestStrategy(
         filledEntries++;
         const entryPrice = pending.targetPrice * (1 + (pending.direction === 'long' ? config.slippageRate : -config.slippageRate));
         const quantity = config.tradeSize / entryPrice;
-        const slDist = atr * 2;
-        const tpDist = atr * 3;
+        const slDist = atr * 1;     // Phase 6: tighter SL = 1×ATR
+        const tpDist = atr * 1.8;   // Phase 6: realistic TP = 1.8×ATR (R:R = 1.8)
         const stopLoss = pending.direction === 'long' ? entryPrice - slDist : entryPrice + slDist;
         const takeProfit = pending.direction === 'long' ? entryPrice + tpDist : entryPrice - tpDist;
 

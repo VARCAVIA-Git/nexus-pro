@@ -310,7 +310,8 @@ export async function executeMineeTick(
       switch (action.type) {
         case 'open_mine': {
           // Cap order to a safe size: max $500 notional per trade
-          const MAX_NOTIONAL = 500;
+          // Phase 6: use 3% of equity per trade (realistic sizing)
+          const MAX_NOTIONAL = Math.min(equity * 0.03, 3000);
           let qty = action.mine.quantity;
           const price = liveContexts.get(action.mine.symbol)?.price ?? 0;
           if (price > 0) {

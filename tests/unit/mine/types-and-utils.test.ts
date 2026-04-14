@@ -242,9 +242,9 @@ describe('mine utils', () => {
   });
 
   describe('calcPositionSize', () => {
-    it('calculates correct size (capped at 20% equity)', () => {
-      // $100k equity, 2% risk, 2% SL → raw $100k, capped at 20% = $20k
-      expect(calcPositionSize(100000, 2, 2)).toBe(1000);
+    it('calculates correct size (capped at 5% equity)', () => {
+      // $100k equity, 2% risk, 2% SL → raw = $2000/0.02 = $100k, capped at 5% = $5000
+      expect(calcPositionSize(100000, 2, 2)).toBe(5000);
     });
 
     it('returns 0 for zero SL distance', () => {

@@ -226,8 +226,8 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
   let backtestSummary: BacktestSummary | undefined;
   try {
     await updateJobProgress(symbol, 'profiling', 86, 'Full backtest su tutte le strategie e TF…');
-    const backtestHistory: Partial<Record<'5m' | '15m' | '1h' | '4h', typeof history['1h']>> = {
-      '5m': history['5m'],
+    // Phase 6: no 5m — too noisy for realistic profit
+    const backtestHistory: Partial<Record<'15m' | '1h' | '4h', typeof history['1h']>> = {
       '15m': history['15m'],
       '1h': history['1h'],
       '4h': history['4h'],

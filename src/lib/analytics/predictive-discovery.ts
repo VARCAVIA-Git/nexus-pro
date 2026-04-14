@@ -102,7 +102,7 @@ const TIER_LABELS: Record<RiskTier, { label: string; description: string }> = {
 
 const MAX_COMBOS_PER_TIER = 8;
 const SIM_CAPITAL = 1000;
-const SIM_TRADE_SIZE_PCT = 0.02; // 2% of capital per trade
+const SIM_TRADE_SIZE_PCT = 0.03; // 3% of capital per trade ($30 on $1000)
 
 // ─── Condition definitions (same as pattern-miner) ───────────
 

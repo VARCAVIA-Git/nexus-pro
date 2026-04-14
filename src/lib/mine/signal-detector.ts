@@ -36,7 +36,8 @@ function isMacroBlackout(events: MacroEvent[], now = Date.now()): boolean {
   return events.some(e => e.importance === 'high' && e.scheduledAt > now && e.scheduledAt - now < MACRO_BLACKOUT_MS);
 }
 
-function suggestTPSL(direction: 'long' | 'short', price: number, tpPct = 2.5, slPct = 1.5): { tp: number; sl: number } {
+// Phase 6: tighter TP/SL for realistic profit (was 2.5/1.5)
+function suggestTPSL(direction: 'long' | 'short', price: number, tpPct = 1.8, slPct = 1.0): { tp: number; sl: number } {
   if (direction === 'long') {
     return { tp: price * (1 + tpPct / 100), sl: price * (1 - slPct / 100) };
   }
@@ -72,14 +73,14 @@ async function detectAICSignal(input: SignalDetectorInput): Promise<DetectedSign
     // Use AIC TP/SL if valid, otherwise calculate from current price
     let { tp, sl } = sig.TP && sig.SL
       ? { tp: sig.TP[0], sl: sig.SL }
-      : suggestTPSL(direction, live.price, 3, 2);
+      : suggestTPSL(direction, live.price);
 
     // Validate TP/SL direction — AIC signals can be stale with wrong prices
     if (direction === 'long' && (tp <= live.price || sl >= live.price)) {
-      ({ tp, sl } = suggestTPSL('long', live.price, 3, 2));
+      ({ tp, sl } = suggestTPSL('long', live.price));
     }
     if (direction === 'short' && (tp >= live.price || sl <= live.price)) {
-      ({ tp, sl } = suggestTPSL('short', live.price, 3, 2));
+      ({ tp, sl } = suggestTPSL('short', live.price));
     }
 
     return {

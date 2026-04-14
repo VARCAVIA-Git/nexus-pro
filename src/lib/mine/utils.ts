@@ -76,8 +76,8 @@ export function calcPositionSize(
   const safeSLPct = Math.max(slDistancePct, 1.0);
   const riskAmount = equity * (riskPct / 100);
   const notional = riskAmount / (safeSLPct / 100);
-  // Cap at 1% of equity per position (fits within available buying power)
-  return Math.min(notional, equity * 0.01);
+  // Phase 6: cap at 5% of equity per position (realistic for crypto)
+  return Math.min(notional, equity * 0.05);
 }
 
 /** Check if a mine is in a terminal state. */
