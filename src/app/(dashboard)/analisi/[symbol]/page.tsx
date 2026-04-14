@@ -986,11 +986,11 @@ function DistributionBar({ dist, horizon }: { dist: { p10: number; p30: number; 
         />
       </div>
       <div className="flex justify-between text-[8px] text-n-dim mt-1 font-mono">
-        <span className="text-red-300">{dist.p10.toFixed(2)}%</span>
-        <span>{dist.p30.toFixed(2)}%</span>
-        <span className="text-amber-300">{dist.p50.toFixed(2)}%</span>
-        <span>{dist.p70.toFixed(2)}%</span>
-        <span className="text-emerald-300">{dist.p90.toFixed(2)}%</span>
+        <span className="text-red-300">{(dist.p10 * 100).toFixed(2)}%</span>
+        <span>{(dist.p30 * 100).toFixed(2)}%</span>
+        <span className="text-amber-300">{(dist.p50 * 100).toFixed(2)}%</span>
+        <span>{(dist.p70 * 100).toFixed(2)}%</span>
+        <span className="text-emerald-300">{(dist.p90 * 100).toFixed(2)}%</span>
       </div>
       <div className="flex justify-between text-[7px] text-n-dim mt-0.5">
         <span>p10</span>

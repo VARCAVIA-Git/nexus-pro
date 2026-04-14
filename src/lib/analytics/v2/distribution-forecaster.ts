@@ -184,12 +184,13 @@ function deriveTradeSetup(
     const upsideExtreme = d.p90 - d.p50;
     const downsideExtreme = d.p50 - d.p10;
 
+    // NOTE: quantile values are RATIOS (0.01 = 1%), convert to % for TP/SL
     // LONG setup: upside > downside × 1.3
     if (upside > 0 && downside > 0 && upsideExtreme / downsideExtreme > 1.3) {
-      const tpPct = Math.max(0.3, d.p70);  // min 0.3% TP
-      const slPct = Math.max(0.2, Math.abs(d.p10)); // SL at p10
+      const tpPct = Math.max(0.5, d.p70 * 100);  // min 0.5% TP, convert ratio→%
+      const slPct = Math.max(0.3, Math.abs(d.p10) * 100); // SL at p10, convert ratio→%
       const rr = tpPct / slPct;
-      if (rr < 1.2) continue; // need at least 1.2:1 R:R
+      if (rr < 1.2) continue;
 
       const confidence = Math.min(1, d.sampleSize / 100) * Math.min(1, rr / 2);
 
@@ -201,7 +202,7 @@ function deriveTradeSetup(
         tpPct: round4(tpPct),
         slPct: round4(slPct),
         riskReward: round4(rr),
-        expectedValuePct: round4(d.mean),
+        expectedValuePct: round4(d.mean * 100),  // convert ratio→%
         skewness: d.skewness,
         confidence: round4(confidence),
         horizon: key,
@@ -211,8 +212,8 @@ function deriveTradeSetup(
 
     // SHORT setup: downside > upside × 1.3
     if (downside > 0 && upside > 0 && downsideExtreme / upsideExtreme > 1.3) {
-      const tpPct = Math.max(0.3, Math.abs(d.p30));
-      const slPct = Math.max(0.2, d.p90);
+      const tpPct = Math.max(0.5, Math.abs(d.p30) * 100);  // convert ratio→%
+      const slPct = Math.max(0.3, d.p90 * 100);              // convert ratio→%
       const rr = tpPct / slPct;
       if (rr < 1.2) continue;
 
@@ -226,7 +227,7 @@ function deriveTradeSetup(
         tpPct: round4(tpPct),
         slPct: round4(slPct),
         riskReward: round4(rr),
-        expectedValuePct: round4(-d.mean), // short profits from decline
+        expectedValuePct: round4(-d.mean * 100),  // convert ratio→%
         skewness: round4(-d.skewness),
         confidence: round4(confidence),
         horizon: key,
