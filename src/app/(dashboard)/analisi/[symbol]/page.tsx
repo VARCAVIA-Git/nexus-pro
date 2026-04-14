@@ -515,29 +515,26 @@ function ReportView({
 
   return (
     <div className="space-y-5">
-      {/* ═══ HERO: COSA ABBIAMO ANALIZZATO ═══ */}
-      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 to-blue-500/5 p-6">
-        <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300 mb-2">
-          <CheckCircle2 size={16} /> Analisi AI completata su {symbol}
+      {/* ═══ HERO: Stato AI ═══ */}
+      <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-5">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2 text-sm font-semibold text-emerald-300">
+            <CheckCircle2 size={16} /> AI pronta su {symbol}
+          </div>
+          <span className="text-[10px] text-n-dim" suppressHydrationWarning>Aggiornata {generated}</span>
         </div>
-        <p className="text-xs text-n-dim mb-4">
-          Generata il <span className="font-mono text-n-text">{generated}</span>
-        </p>
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-xl bg-n-bg/60 p-4">
-            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Dati analizzati</p>
-            <p className="text-2xl font-bold text-n-text">{totalCandles.toLocaleString()}</p>
-            <p className="text-[10px] text-n-dim">candele su 5 timeframe ({yearsAnalyzed} anni di storico)</p>
+          <div className="rounded-lg bg-n-bg/60 p-3 text-center">
+            <p className="text-[10px] text-n-dim">Storico analizzato</p>
+            <p className="text-lg font-bold text-n-text">{yearsAnalyzed} anni</p>
           </div>
-          <div className="rounded-xl bg-n-bg/60 p-4">
-            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Strategie testate</p>
-            <p className="text-2xl font-bold text-n-text">{report.backtestSummary?.totalStrategiesTested ?? 0}</p>
-            <p className="text-[10px] text-n-dim">combinazioni strategia + timeframe</p>
+          <div className="rounded-lg bg-n-bg/60 p-3 text-center">
+            <p className="text-[10px] text-n-dim">Opportunit&agrave; trovate</p>
+            <p className="text-lg font-bold text-emerald-400">{report.distributionProfile?.conditionDistributions?.length ?? report.backtestSummary?.rankings?.length ?? 0}</p>
           </div>
-          <div className="rounded-xl bg-n-bg/60 p-4">
-            <p className="text-[10px] uppercase tracking-wide text-n-dim mb-1">Operazioni simulate</p>
-            <p className="text-2xl font-bold text-n-text">{(report.backtestSummary?.totalTradesSimulated ?? 0).toLocaleString()}</p>
-            <p className="text-[10px] text-n-dim">trade calcolati sullo storico reale</p>
+          <div className="rounded-lg bg-n-bg/60 p-3 text-center">
+            <p className="text-[10px] text-n-dim">Stile consigliato</p>
+            <p className="text-lg font-bold text-n-text">{report.recommendedOperationMode === 'scalp' ? 'Scalping' : report.recommendedOperationMode === 'intraday' ? 'Intraday' : report.recommendedOperationMode === 'daily' ? 'Swing' : 'Position'}</p>
           </div>
         </div>
       </div>
@@ -554,38 +551,16 @@ function ReportView({
 
       {/* Come operare */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-3 text-sm font-semibold text-n-text">Come operare su {symbol}</h2>
+        <h2 className="mb-3 text-sm font-semibold text-n-text">Raccomandazioni AI per {symbol}</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Stile consigliato" value={report.recommendedOperationMode === 'scalp' ? 'Scalping (veloce)' : report.recommendedOperationMode === 'intraday' ? 'Intraday (giornata)' : report.recommendedOperationMode === 'daily' ? 'Swing (multi-day)' : 'Position'} />
+          <Stat label="Stile consigliato" value={report.recommendedOperationMode === 'scalp' ? 'Scalping (veloce)' : report.recommendedOperationMode === 'intraday' ? 'Intraday' : report.recommendedOperationMode === 'daily' ? 'Swing (multi-day)' : 'Position'} />
           <Stat label="Timeframe migliore" value={report.recommendedTimeframe} />
-          <Stat label="Miglior momento per comprare" value={regimeLabel(report.globalStats?.bestRegimeForLong)} />
-          <Stat label="Miglior momento per vendere" value={regimeLabel(report.globalStats?.bestRegimeForShort)} />
-        </div>
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat label="Max rialzo storico 24h" value={fmtPct(report.globalStats?.maxGainObserved)} />
-          <Stat label="Max ribasso storico 24h" value={fmtPct(report.globalStats?.maxLossObserved)} />
-          <Stat label="Volatilità oraria" value={fmtPct(report.globalStats?.volatility?.['1h'], 3)} />
-          <Stat label="Volatilità giornaliera" value={fmtPct(report.globalStats?.volatility?.['1d'], 3)} />
+          <Stat label="Quando comprare" value={regimeLabel(report.globalStats?.bestRegimeForLong)} />
+          <Stat label="Quando vendere" value={regimeLabel(report.globalStats?.bestRegimeForShort)} />
         </div>
       </div>
 
-      {/* Segnali storici */}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <RuleTable
-          title="Segnali di acquisto"
-          rules={buyRules}
-          dir="long"
-          symbol={symbol}
-          explainMode={explainMode}
-        />
-        <RuleTable
-          title="Segnali di vendita"
-          rules={sellRules}
-          dir="short"
-          symbol={symbol}
-          explainMode={explainMode}
-        />
-      </div>
+      {/* Segnali storici rimossi — ridondanti con V2 Distribution View */}
 
       {/* Reaction zones — Phase 3.6: filtrate ±15% dal prezzo corrente */}
       <div className="rounded-2xl border border-n-border bg-n-card p-5">
@@ -756,37 +731,7 @@ function ReportView({
         </div>
       )}
 
-      {/* Indicator reactivity */}
-      <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-1 text-sm font-semibold text-n-text">Efficacia degli indicatori</h2>
-        <p className="mb-3 text-[10px] text-n-dim">Quanto spesso ogni indicatore ha predetto correttamente il movimento successivo.</p>
-        {indicators.length === 0 ? (
-          <p className="text-xs text-n-dim">Nessun indicatore con segnali sufficienti.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[11px]">
-              <thead className="text-n-dim">
-                <tr>
-                  <th className="px-2 py-1.5">Indicatore</th>
-                  <th className="px-2 py-1.5">Segnali</th>
-                  <th className="px-2 py-1.5">WR</th>
-                  <th className="px-2 py-1.5">Avg return</th>
-                </tr>
-              </thead>
-              <tbody className="text-n-text">
-                {indicators.map((ind, i) => (
-                  <tr key={ind?.indicatorName ?? `ind-${i}`} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{ind?.indicatorName ?? '—'}</td>
-                    <td className="px-2 py-1.5">{ind?.signalCount ?? '—'}</td>
-                    <td className="px-2 py-1.5">{fmtPct(ind?.winRate, 1)}</td>
-                    <td className="px-2 py-1.5">{fmtPct(ind?.avgReturn, 3)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Efficacia indicatori rimossa — obsoleta con V2 Distribution */}
     </div>
   );
 }
@@ -875,7 +820,7 @@ function V2DistributionView({ profile, symbol }: { profile: DistributionProfile;
                   <p className="font-mono text-lg font-bold text-red-300">-{best.setup.slPct.toFixed(1)}%</p>
                 </div>
               </div>
-              <p className="text-[10px] text-emerald-300 mt-1">EV: {best.setup.expectedValuePct > 0 ? '+' : ''}{(best.setup.expectedValuePct * 100).toFixed(2)}% per trade</p>
+              <p className="text-[10px] text-emerald-300 mt-1">Rendimento atteso: {best.setup.expectedValuePct > 0 ? '+' : ''}{best.setup.expectedValuePct.toFixed(2)}% per operazione</p>
             </div>
           </div>
         </div>
