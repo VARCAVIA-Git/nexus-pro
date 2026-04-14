@@ -73,16 +73,16 @@ export interface PredictiveProfile {
 
 /** Minimum move to be considered "substantial" by tier. */
 const SUBSTANTIAL_MOVE_PCT: Record<RiskTier, number> = {
-  prudent: 2.0,     // >2% move = substantial (fewer, bigger moves)
-  moderate: 1.0,    // >1% move
-  aggressive: 0.5,  // >0.5% move (any meaningful move)
+  prudent: 1.0,     // >1% move = substantial
+  moderate: 0.5,    // >0.5% move
+  aggressive: 0.2,  // >0.2% move (any meaningful move)
 };
 
-/** Minimum criteria for each tier. */
+/** Minimum criteria for each tier — based on raw hit rate, not simulation. */
 const TIER_CRITERIA: Record<RiskTier, { minWR: number; minPF: number; minOccurrences: number; minWilson: number }> = {
-  prudent:    { minWR: 0.62, minPF: 1.8, minOccurrences: 20, minWilson: 0.50 },
-  moderate:   { minWR: 0.52, minPF: 1.3, minOccurrences: 15, minWilson: 0.40 },
-  aggressive: { minWR: 0.42, minPF: 1.0, minOccurrences: 10, minWilson: 0.30 },
+  prudent:    { minWR: 0.55, minPF: 1.0, minOccurrences: 15, minWilson: 0.40 },
+  moderate:   { minWR: 0.48, minPF: 0.8, minOccurrences: 10, minWilson: 0.30 },
+  aggressive: { minWR: 0.40, minPF: 0.5, minOccurrences: 8,  minWilson: 0.20 },
 };
 
 const TIER_LABELS: Record<RiskTier, { label: string; description: string }> = {
@@ -252,28 +252,29 @@ function simulate(returns: number[], prices: number[]): SimResult {
   let capital = SIM_CAPITAL;
   let peak = capital;
   let maxDD = 0;
+  let trades = 0;
   let wins = 0;
   let grossProfit = 0;
   let grossLoss = 0;
   const tpDistances: number[] = [];
   const slDistances: number[] = [];
 
-  // Minimum cooldown: skip signals within 4 bars of last trade
+  // Cooldown: skip signals within 4 bars of last trade
   let lastTradeIdx = -5;
 
   for (let i = 0; i < returns.length; i++) {
-    if (i - lastTradeIdx < 4) continue; // cooldown
+    if (i - lastTradeIdx < 4) continue;
 
     const tradeSize = capital * SIM_TRADE_SIZE_PCT;
-    if (tradeSize < 1) break; // too small
+    if (tradeSize < 1) break;
 
     const ret = returns[i];
-    // Apply commission (0.2% round trip)
-    const netRet = ret - 0.2;
+    const netRet = ret - 0.2; // 0.2% commission round trip
     const pnl = tradeSize * (netRet / 100);
 
     capital += pnl;
     lastTradeIdx = i;
+    trades++;
 
     if (pnl > 0) {
       wins++;
@@ -289,22 +290,10 @@ function simulate(returns: number[], prices: number[]): SimResult {
     maxDD = Math.max(maxDD, dd);
   }
 
-  const trades = returns.filter((_, i) => {
-    // Recalculate which trades were taken (same cooldown logic)
-    let last = -5;
-    for (let j = 0; j <= i; j++) {
-      if (j - last >= 4) { last = j; if (j === i) return true; }
-    }
-    return false;
-  }).length || Math.max(1, Math.floor(returns.length / 4)); // approximation
-
-  const actualTrades = wins + (grossLoss > 0 ? Math.round(grossLoss / (grossLoss / Math.max(1, returns.length - wins))) : returns.length - wins);
-  const finalTrades = Math.min(returns.length, Math.max(1, Math.floor(returns.length / 4)));
-
   return {
-    trades: finalTrades,
+    trades,
     wins,
-    winRate: finalTrades > 0 ? wins / finalTrades : 0,
+    winRate: trades > 0 ? wins / trades : 0,
     profitFactor: grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? 99 : 0,
     finalCapital: Math.round(capital * 100) / 100,
     maxDrawdownPct: Math.round(maxDD * 100) / 100,
@@ -342,12 +331,11 @@ function buildTierCombinations(
     const avgMAE = raw.sumMaxAdverse / raw.occurrences;
     const falsePositiveRate = 1 - hitRate;
 
+    // Check raw hit rate against tier criteria
+    if (hitRate < criteria.minWR) continue;
+
     // Simulate $1000
     const sim = simulate(raw.returns, raw.prices);
-
-    if (sim.winRate < criteria.minWR) continue;
-    if (sim.profitFactor < criteria.minPF) continue;
-    if (sim.finalCapital <= SIM_CAPITAL) continue; // must be profitable
 
     const edgeScore = wilson * Math.abs(avgReturn) * Math.sqrt(raw.occurrences);
 
