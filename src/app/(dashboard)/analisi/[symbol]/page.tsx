@@ -13,6 +13,7 @@ import type {
   BacktestStrategySummary,
 } from '@/lib/analytics/types';
 import type { PredictiveProfile, TierProfile, PredictiveCombination, RiskTier } from '@/lib/analytics/predictive-discovery';
+import type { DistributionProfile, ConditionDistribution, TradeSetup } from '@/lib/analytics/v2/distribution-forecaster';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot, Rocket } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
@@ -541,13 +542,13 @@ function ReportView({
         </div>
       </div>
 
-      {/* ═══ Phase 6: Profili Predittivi (3 livelli di rischio) ═══ */}
-      {report.predictiveProfile && (
-        <PredictiveProfileSection profile={report.predictiveProfile} symbol={symbol} />
+      {/* ═══ V2.0: Opportunita di Trading Scoperte dall'AI ═══ */}
+      {report.distributionProfile && report.distributionProfile.conditionDistributions.length > 0 && (
+        <V2DistributionView profile={report.distributionProfile} symbol={symbol} />
       )}
 
-      {/* Fallback: se non ci sono profili predittivi, mostra il vecchio simulatore */}
-      {!report.predictiveProfile && report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
+      {/* Fallback: vecchio simulatore se V2 non disponibile */}
+      {!report.distributionProfile && report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
         <TradingSimulator rankings={report.backtestSummary.rankings} symbol={symbol} />
       )}
 
@@ -672,70 +673,7 @@ function ReportView({
         )}
       </div>
 
-      {/* Strategy fit */}
-      <div className="rounded-2xl border border-n-border bg-n-card p-5">
-        <h2 className="mb-1 text-sm font-semibold text-n-text">Strategie testate (base)</h2>
-        <p className="mb-3 text-[10px] text-n-dim">
-          Strategie classiche testate sullo storico di {symbol}. Le righe &quot;low sample&quot; hanno pochi trade e servono più dati.
-        </p>
-        {fits.length === 0 ? (
-          <p className="text-xs text-n-dim">Nessun fit calcolato.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[11px]">
-              <thead className="text-n-dim">
-                <tr>
-                  <th className="px-2 py-1.5">#</th>
-                  <th className="px-2 py-1.5">Strategia</th>
-                  <th className="px-2 py-1.5">TF</th>
-                  <th className="px-2 py-1.5">
-                    <MetricTooltip term="Trades">Trades</MetricTooltip>
-                  </th>
-                  <th className="px-2 py-1.5">
-                    <MetricTooltip term="WR">WR</MetricTooltip>
-                  </th>
-                  <th className="px-2 py-1.5">
-                    <MetricTooltip term="PF">PF</MetricTooltip>
-                  </th>
-                  <th className="px-2 py-1.5">
-                    <MetricTooltip term="Sharpe">Sharpe</MetricTooltip>
-                  </th>
-                  <th className="px-2 py-1.5">
-                    <MetricTooltip term="MaxDD">MaxDD</MetricTooltip>
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="text-n-text">
-                {fits.map((f, i) => {
-                  const lowSample = (f as any)._lowSample;
-                  return (
-                    <tr
-                      key={`${f?.strategyName ?? 'x'}-${f?.timeframe ?? i}`}
-                      className={`border-t border-n-border ${lowSample ? 'text-n-dim opacity-60' : ''}`}
-                    >
-                      <td className="px-2 py-1.5 font-mono">{lowSample ? '—' : f?.rank ?? '—'}</td>
-                      <td className="px-2 py-1.5">
-                        {f?.strategyName ?? '—'}
-                        {lowSample && (
-                          <span className="ml-1.5 rounded bg-n-card px-1.5 py-0.5 text-[9px] font-semibold text-n-dim">
-                            low sample
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1.5">{f?.timeframe ?? '—'}</td>
-                      <td className="px-2 py-1.5">{f?.totalTrades ?? '—'}</td>
-                      <td className="px-2 py-1.5">{fmtPct(f?.winRate, 1)}</td>
-                      <td className="px-2 py-1.5">{fmtNum(f?.profitFactor)}</td>
-                      <td className="px-2 py-1.5">{fmtNum(f?.sharpe)}</td>
-                      <td className="px-2 py-1.5">{fmtPct(f?.maxDrawdown)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      {/* Sezione "Strategie testate (base)" rimossa — ridondante con Classifica Strategie */}
 
       {/* Phase 4.6: Full Backtest Results */}
       {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
@@ -862,7 +800,210 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
-// ─── Predictive Profile Section (Phase 6) ───────────────────
+// ─── V2.0 Distribution View ─────────────────────────────────
+// Shows asymmetric trading opportunities discovered by analyzing
+// the DISTRIBUTION of future returns per regime + conditions.
+
+function V2DistributionView({ profile, symbol }: { profile: DistributionProfile; symbol: string }) {
+  const setups = profile.conditionDistributions;
+  if (setups.length === 0) return null;
+
+  // Group by regime
+  const byRegime: Record<string, ConditionDistribution[]> = {};
+  for (const s of setups) {
+    if (!byRegime[s.regime]) byRegime[s.regime] = [];
+    byRegime[s.regime].push(s);
+  }
+
+  const regimeLabelsV2: Record<string, { name: string; color: string; bg: string }> = {
+    TRENDING:     { name: 'Trend',        color: 'text-blue-300',   bg: 'bg-blue-500/10 border-blue-500/30' },
+    RANGING:      { name: 'Laterale',     color: 'text-amber-300',  bg: 'bg-amber-500/10 border-amber-500/30' },
+    VOLATILE:     { name: 'Volatile',     color: 'text-red-300',    bg: 'bg-red-500/10 border-red-500/30' },
+    ACCUMULATING: { name: 'Accumulo',     color: 'text-purple-300', bg: 'bg-purple-500/10 border-purple-500/30' },
+  };
+
+  // Best overall
+  const best = setups[0];
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-500/5 to-blue-500/5 p-6">
+        <h2 className="text-base font-bold text-emerald-300 mb-1">
+          Opportunit&agrave; di Trading — Analisi V2.0
+        </h2>
+        <p className="text-xs text-n-dim mb-4">
+          L&apos;AI ha analizzato <span className="font-mono text-n-text">{profile.totalCandles.toLocaleString()}</span> candele
+          e scoperto <span className="font-mono text-emerald-300">{setups.length}</span> setup con distribuzione asimmetrica:
+          il guadagno potenziale supera la perdita potenziale di almeno 1.3x.
+          Ogni setup mostra i quantili della distribuzione reale dei rendimenti.
+        </p>
+
+        {/* Best setup hero */}
+        <div className="rounded-xl bg-n-bg/60 border border-emerald-500/20 p-4 mb-4">
+          <div className="flex items-start justify-between flex-wrap gap-3">
+            <div>
+              <p className="text-[10px] text-n-dim uppercase tracking-wider mb-1">Miglior setup scoperto</p>
+              <div className="flex flex-wrap gap-1.5 mb-1">
+                {best.conditions.map((c, i) => (
+                  <span key={i} className="rounded bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">
+                    {conditionLabelsMap[c] ?? c}
+                  </span>
+                ))}
+                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${best.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                  {best.direction.toUpperCase()}
+                </span>
+                <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${regimeLabelsV2[best.regime]?.bg ?? ''}`}>
+                  {regimeLabelsV2[best.regime]?.name ?? best.regime}
+                </span>
+              </div>
+              <p className="text-[10px] text-n-dim">
+                {best.setup.sampleSize} occorrenze storiche · Orizzonte {best.setup.horizon}
+              </p>
+            </div>
+            <div className="text-right">
+              <div className="grid grid-cols-3 gap-3 text-center">
+                <div>
+                  <p className="text-[9px] text-n-dim">R:R</p>
+                  <p className="font-mono text-lg font-bold text-emerald-400">{best.setup.riskReward.toFixed(1)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-n-dim">TP</p>
+                  <p className="font-mono text-lg font-bold text-emerald-300">+{best.setup.tpPct.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-n-dim">SL</p>
+                  <p className="font-mono text-lg font-bold text-red-300">-{best.setup.slPct.toFixed(1)}%</p>
+                </div>
+              </div>
+              <p className="text-[10px] text-emerald-300 mt-1">EV: {best.setup.expectedValuePct > 0 ? '+' : ''}{(best.setup.expectedValuePct * 100).toFixed(2)}% per trade</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Distribution bar visualization for best */}
+        <DistributionBar dist={best.forecast.h4.p10 !== 0 ? best.forecast.h4 : best.forecast.h1} horizon={best.setup.horizon} />
+      </div>
+
+      {/* Setups grouped by regime */}
+      {Object.entries(byRegime).map(([regime, regimeSetups]) => {
+        const meta = regimeLabelsV2[regime] ?? { name: regime, color: 'text-n-text', bg: 'bg-n-card border-n-border' };
+        return (
+          <div key={regime} className={`rounded-2xl border ${meta.bg} p-5`}>
+            <h3 className={`text-sm font-bold ${meta.color} mb-1`}>
+              Regime: {meta.name} — {regimeSetups.length} setup
+            </h3>
+            <p className="text-[10px] text-n-dim mb-3">
+              Setup che funzionano quando il mercato &egrave; in fase {meta.name.toLowerCase()}.
+            </p>
+
+            <div className="space-y-2">
+              {regimeSetups.map((s, i) => (
+                <SetupCard key={`${s.conditions.join('-')}-${s.direction}-${i}`} setup={s} rank={i + 1} />
+              ))}
+            </div>
+          </div>
+        );
+      })}
+
+      <p className="text-[10px] text-n-dim italic">
+        ⓘ Ogni setup mostra la distribuzione reale dei rendimenti (quantili p10→p90).
+        TP e SL sono derivati dalla distribuzione, non da multipli ATR fissi.
+        R:R = Risk/Reward (quanto guadagni per ogni $ rischiato). EV = valore atteso per trade.
+      </p>
+    </div>
+  );
+}
+
+function SetupCard({ setup: s, rank }: { setup: ConditionDistribution; rank: number }) {
+  return (
+    <div className="rounded-xl bg-n-bg/40 border border-n-border p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-[10px] font-bold text-n-dim">#{rank}</span>
+            <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${s.direction === 'long' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-red-500/15 text-red-400'}`}>
+              {s.direction.toUpperCase()}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {s.conditions.map((c, i) => (
+              <span key={i} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-300">
+                {conditionLabelsMap[c] ?? c}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="grid grid-cols-4 gap-2 text-center text-[9px] shrink-0">
+          <div>
+            <p className="text-n-dim">R:R</p>
+            <p className={`font-mono font-bold ${s.setup.riskReward >= 1.5 ? 'text-emerald-400' : 'text-amber-400'}`}>
+              {s.setup.riskReward.toFixed(1)}
+            </p>
+          </div>
+          <div>
+            <p className="text-n-dim">TP</p>
+            <p className="font-mono font-bold text-emerald-300">+{s.setup.tpPct.toFixed(1)}%</p>
+          </div>
+          <div>
+            <p className="text-n-dim">SL</p>
+            <p className="font-mono font-bold text-red-300">-{s.setup.slPct.toFixed(1)}%</p>
+          </div>
+          <div>
+            <p className="text-n-dim">N</p>
+            <p className="font-mono font-bold text-n-text">{s.setup.sampleSize}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DistributionBar({ dist, horizon }: { dist: { p10: number; p30: number; p50: number; p70: number; p90: number; sampleSize: number }; horizon: string }) {
+  // Normalize values to a visual range
+  const maxAbs = Math.max(Math.abs(dist.p10), Math.abs(dist.p90), 1);
+  const scale = (v: number) => ((v / maxAbs) * 50) + 50; // 0-100 scale, 50 = center
+
+  return (
+    <div className="rounded-lg bg-n-bg/60 p-3">
+      <p className="text-[9px] text-n-dim mb-2">Distribuzione rendimenti {horizon} ({dist.sampleSize} campioni)</p>
+      <div className="relative h-8 rounded bg-n-bg-s overflow-hidden">
+        {/* Center line (0%) */}
+        <div className="absolute top-0 bottom-0 left-1/2 w-px bg-n-dim/30" />
+        {/* p10-p90 range */}
+        <div
+          className="absolute top-1 bottom-1 bg-blue-500/20 rounded"
+          style={{ left: `${scale(dist.p10)}%`, width: `${scale(dist.p90) - scale(dist.p10)}%` }}
+        />
+        {/* p30-p70 range (darker) */}
+        <div
+          className="absolute top-0.5 bottom-0.5 bg-blue-500/40 rounded"
+          style={{ left: `${scale(dist.p30)}%`, width: `${scale(dist.p70) - scale(dist.p30)}%` }}
+        />
+        {/* Median line */}
+        <div
+          className="absolute top-0 bottom-0 w-0.5 bg-amber-400"
+          style={{ left: `${scale(dist.p50)}%` }}
+        />
+      </div>
+      <div className="flex justify-between text-[8px] text-n-dim mt-1 font-mono">
+        <span className="text-red-300">{dist.p10.toFixed(2)}%</span>
+        <span>{dist.p30.toFixed(2)}%</span>
+        <span className="text-amber-300">{dist.p50.toFixed(2)}%</span>
+        <span>{dist.p70.toFixed(2)}%</span>
+        <span className="text-emerald-300">{dist.p90.toFixed(2)}%</span>
+      </div>
+      <div className="flex justify-between text-[7px] text-n-dim mt-0.5">
+        <span>p10</span>
+        <span>p30</span>
+        <span>mediana</span>
+        <span>p70</span>
+        <span>p90</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── Predictive Profile Section (Phase 6 legacy) ────────────
 // Shows 3 risk-tiered strategy profiles discovered by analyzing
 // 4 years of historical data.
 
