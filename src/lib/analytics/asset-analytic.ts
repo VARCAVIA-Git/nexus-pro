@@ -346,6 +346,17 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     console.warn(`[analytic] ${symbol}: GA failed (non-fatal): ${(e as Error).message}`);
   }
 
+  // V2.0: Distribution-based forecasting profile
+  let distributionProfile: import('@/lib/analytics/v2/distribution-forecaster').DistributionProfile | undefined;
+  try {
+    await updateJobProgress(symbol, 'profiling', 88, 'V2.0: analisi distribuzione rendimenti per regime…');
+    const { buildDistributionProfile } = await import('@/lib/analytics/v2/distribution-forecaster');
+    distributionProfile = buildDistributionProfile(contexts, symbol);
+    console.log(`[analytic] ${symbol}: V2.0 distribution done — ${distributionProfile.conditionDistributions.length} actionable setups found`);
+  } catch (e) {
+    console.warn(`[analytic] ${symbol}: V2.0 distribution failed (non-fatal): ${(e as Error).message}`);
+  }
+
   // Phase 6: Predictive Combination Discovery — 3 risk-tiered strategies
   let predictiveProfile: import('@/lib/analytics/predictive-discovery').PredictiveProfile | undefined;
   try {
@@ -395,6 +406,7 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     eventReactivity,
     backtestSummary,
     predictiveProfile,
+    distributionProfile,
     // Carry-over Phase 3 fields se presenti
     liveContext: previousReport?.liveContext,
     newsDigest: previousReport?.newsDigest,

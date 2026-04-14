@@ -68,6 +68,9 @@ export interface AnalyticReport {
   // Phase 6 — Predictive profiles (3 risk tiers)
   predictiveProfile?: import('@/lib/analytics/predictive-discovery').PredictiveProfile;
 
+  // V2.0 — Distribution-based forecasting
+  distributionProfile?: import('@/lib/analytics/v2/distribution-forecaster').DistributionProfile;
+
   // Phase 3 — Living Brain (tutti opzionali per retrocompat)
   liveContext?: LiveContext;
   newsDigest?: NewsDigest;

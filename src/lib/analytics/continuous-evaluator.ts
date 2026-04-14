@@ -24,6 +24,8 @@ import type {
   AggressivenessProfile,
 } from '@/lib/mine/types';
 import type { PredictiveProfile, PredictiveCombination, RiskTier } from './predictive-discovery';
+import { decide as v2Decide, buildPortfolioState } from './v2';
+import type { DistributionProfile } from './v2';
 import { MINE_KEYS } from '@/lib/mine/constants';
 
 const EVAL_TTL_SECONDS = 60; // 60s TTL for evaluations
@@ -54,6 +56,9 @@ export interface EvaluatorInput {
   report: AnalyticReport;
   memory: AssetMemory | null;
   riskProfile?: AggressivenessProfile;  // maps to predictive tier
+  candles?: import('@/types').OHLCV[];  // recent candles for v2 regime detection
+  equity?: number;                       // current equity for v2 Kelly sizing
+  openMines?: Array<{ allocatedCapital: number }>;  // for portfolio state
 }
 
 /** Map user risk profile to predictive tier. */
@@ -75,7 +80,39 @@ export function evaluate(input: EvaluatorInput): ContinuousEvaluation {
   const reasoning: string[] = [];
   const now = Date.now();
 
-  // Phase 6: Check predictive profile combinations first
+  // V2.0: Try Trade Brain first (distribution-based, regime-aware)
+  const distProfile = report.distributionProfile;
+  if (distProfile && input.candles && input.candles.length >= 60) {
+    try {
+      const portfolio = buildPortfolioState(
+        input.equity ?? 1000,
+        input.equity ?? 1000,
+        input.openMines ?? [],
+      );
+      const decision = v2Decide(input.candles, live, distProfile, portfolio);
+      if (decision.shouldTrade && decision.direction && decision.tp && decision.sl) {
+        reasoning.push(...decision.reasoning);
+        return {
+          symbol, updatedAt: now, shouldTrade: true,
+          direction: decision.direction,
+          confidence: decision.confidence,
+          suggestedEntry: decision.entryPrice,
+          tp: decision.tp,
+          sl: decision.sl,
+          timeoutMs: decision.orderType === 'limit' ? calculateTimeout(live.volatilityPercentile) : null,
+          orderType: decision.orderType,
+          strategy: decision.direction === 'long' ? 'trend' : 'reversion',
+          timeframe: '1h',
+          reasoning: [...reasoning, 'source: v2-brain'],
+        };
+      }
+      reasoning.push(`v2-brain: ${decision.reasoning[decision.reasoning.length - 1] ?? 'no setup'}`);
+    } catch (e: any) {
+      reasoning.push(`v2-brain error: ${e?.message}`);
+    }
+  }
+
+  // Phase 6: Check predictive profile combinations (fallback)
   const predictive = report.predictiveProfile;
   if (predictive) {
     const tier = profileToTier(input.riskProfile);
