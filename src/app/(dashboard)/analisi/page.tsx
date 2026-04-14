@@ -64,6 +64,27 @@ export default function AnalisiPage() {
   const trackedSymbols = analytics.map(a => a.symbol);
   const prices = useBatchPrices(trackedSymbols);
 
+  // V2: Load mine counts and evaluator status per asset
+  const [assetMeta, setAssetMeta] = useState<Record<string, { mines: number; signal: string | null; setups: number }>>({});
+  useEffect(() => {
+    async function loadMeta() {
+      try {
+        const [minesRes, snapRes] = await Promise.all([
+          fetch('/api/mine/list').then(r => r.ok ? r.json() : null),
+          fetch('/api/portfolio/snapshot').then(r => r.ok ? r.json() : null),
+        ]);
+        const mines = minesRes?.mines ?? [];
+        const meta: Record<string, { mines: number; signal: string | null; setups: number }> = {};
+        for (const sym of trackedSymbols) {
+          const assetMines = mines.filter((m: any) => m.symbol === sym && (m.status === 'open' || m.status === 'waiting' || m.status === 'pending'));
+          meta[sym] = { mines: assetMines.length, signal: null, setups: 0 };
+        }
+        setAssetMeta(meta);
+      } catch {}
+    }
+    if (trackedSymbols.length > 0) loadMeta();
+  }, [trackedSymbols.join(',')]);
+
   // Search
   useEffect(() => {
     if (searchQuery.length < 2) { setSearchResults([]); return; }
@@ -219,6 +240,16 @@ export default function AnalisiPage() {
                   <span>Regime: <span className="text-n-text-s">{a.currentRegime ?? '—'}</span></span>
                   <span suppressHydrationWarning>Training: {formatTimeAgo(a.lastTrainedAt)}</span>
                 </div>
+
+                {/* V2: Mine count + status */}
+                {assetMeta[a.symbol] && assetMeta[a.symbol].mines > 0 && (
+                  <div className="mt-2 pt-2 border-t border-n-border flex items-center gap-2 text-[10px]">
+                    <span className="flex items-center gap-1 rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-400 font-semibold">
+                      <TrendingUp size={10} />
+                      {assetMeta[a.symbol].mines} mine attive
+                    </span>
+                  </div>
+                )}
               </Link>
             );
           })}
