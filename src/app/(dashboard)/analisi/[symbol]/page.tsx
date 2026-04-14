@@ -653,81 +653,121 @@ function ReportView({
       {/* Phase 4.6: Full Backtest Results */}
       {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
         <div className="rounded-2xl border border-blue-500/30 bg-blue-500/5 p-5">
-          <h2 className="mb-1 text-sm font-semibold text-blue-300">Classifica Strategie — Simulazione Completa</h2>
-          <p className="mb-3 text-[10px] text-n-dim">
-            L&apos;AI ha testato {report.backtestSummary.totalStrategiesTested} combinazioni strategia+timeframe
-            simulando {report.backtestSummary.totalTradesSimulated.toLocaleString()} operazioni reali.
-            Le righe <span className="rounded bg-purple-500/15 px-1 text-purple-400">AI RULE</span> sono
-            regole scoperte dall&apos;AI, specifiche per questo asset.
+          <h2 className="mb-1 text-sm font-semibold text-blue-300">Strategie Disponibili</h2>
+          <p className="mb-4 text-[10px] text-n-dim">
+            L&apos;AI ha testato {report.backtestSummary.totalStrategiesTested} strategie sullo storico reale.
+            La previsione di profitto &egrave; basata sulla performance storica annualizzata.
           </p>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-[11px]">
-              <thead className="text-n-dim">
-                <tr>
-                  <th className="px-2 py-1.5">#</th>
-                  <th className="px-2 py-1.5">Strategia</th>
-                  <th className="px-2 py-1.5">TF</th>
-                  <th className="px-2 py-1.5">Operazioni</th>
-                  <th className="px-2 py-1.5">Vincite</th>
-                  <th className="px-2 py-1.5">Profitto/Perdita</th>
-                  <th className="px-2 py-1.5">Rendimento</th>
-                  <th className="px-2 py-1.5">Rischio max</th>
-                  <th className="px-2 py-1.5">Qualità</th>
-                  <th className="px-2 py-1.5">TP ok</th>
-                  <th className="px-2 py-1.5">SL ok</th>
-                  <th className="px-2 py-1.5">Durata</th>
-                  <th className="px-2 py-1.5"></th>
-                </tr>
-              </thead>
-              <tbody className="text-n-text">
-                {report.backtestSummary.rankings.slice(0, 10).map((r) => {
-                  const botParams = new URLSearchParams({
-                    symbol,
-                    strategy: r.strategyId,
-                    strategyName: r.strategyName,
-                    tf: r.timeframe,
-                    tp: String(r.avgTpDistancePct || ''),
-                    sl: String(r.avgSlDistancePct || ''),
-                    timeout: String(r.optimalEntryTimeout || ''),
-                    isMine: r.isMineRule ? '1' : '',
-                    conditions: r.conditions?.join(',') ?? '',
-                    wr: String(r.winRate),
-                    pf: String(r.profitFactor),
-                  });
-                  return (
-                  <tr key={`${r.strategyId}-${r.timeframe}`} className="border-t border-n-border">
-                    <td className="px-2 py-1.5 font-mono">{r.rank}</td>
-                    <td className="px-2 py-1.5">
-                      {r.strategyName.length > 30 ? r.strategyName.slice(0, 30) + '...' : r.strategyName}
-                      {r.isMineRule && <span className="ml-1 rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI RULE</span>}
-                      {r.strategyId.startsWith('ga_') && <span className="ml-1 rounded bg-emerald-500/15 px-1 py-0.5 text-[8px] font-bold text-emerald-400">GA</span>}
-                    </td>
-                    <td className="px-2 py-1.5 font-mono">{r.timeframe}</td>
-                    <td className="px-2 py-1.5">{r.totalTrades}</td>
-                    <td className="px-2 py-1.5">{r.winRate}%</td>
-                    <td className="px-2 py-1.5">{r.profitFactor}</td>
-                    <td className={`px-2 py-1.5 font-mono font-bold ${r.netProfitPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+          <div className="grid gap-3 md:grid-cols-2">
+            {report.backtestSummary.rankings.slice(0, 8).map((r) => {
+              // Calculate annualized return projection
+              const dateRange = report.backtestSummary?.dateRange;
+              let periodYears = 4; // default
+              if (dateRange?.start && dateRange?.end) {
+                const ms = new Date(dateRange.end).getTime() - new Date(dateRange.start).getTime();
+                periodYears = Math.max(0.5, ms / (365.25 * 86400000));
+              }
+              const annualizedPct = periodYears > 0 ? (r.netProfitPct / periodYears) : r.netProfitPct;
+              const monthly = annualizedPct / 12;
+              const isProfit = r.netProfitPct > 0;
+              const tradesPerMonth = r.totalTrades / (periodYears * 12);
+
+              // Strategy name in Italian
+              const friendlyName = r.isMineRule
+                ? 'Regola AI'
+                : r.strategyId.startsWith('ga_')
+                ? 'Strategia Evoluta (GA)'
+                : r.strategyName === 'Combined AI' ? 'AI Combinata'
+                : r.strategyName === 'Breakout' ? 'Rottura livelli'
+                : r.strategyName === 'Mean Reversion' ? 'Inversione media'
+                : r.strategyName === 'Trend Following' ? 'Segui il trend'
+                : r.strategyName;
+
+              const botParams = new URLSearchParams({
+                symbol,
+                strategy: r.strategyId,
+                strategyName: r.strategyName,
+                tf: r.timeframe,
+                tp: String(r.avgTpDistancePct || ''),
+                sl: String(r.avgSlDistancePct || ''),
+                timeout: String(r.optimalEntryTimeout || ''),
+                isMine: r.isMineRule ? '1' : '',
+                conditions: r.conditions?.join(',') ?? '',
+                wr: String(r.winRate),
+                pf: String(r.profitFactor),
+              });
+
+              return (
+              <div key={`${r.strategyId}-${r.timeframe}`} className={`rounded-xl border p-4 ${isProfit ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-n-border bg-n-bg/40'}`}>
+                {/* Header */}
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="text-xs font-bold text-n-text">{friendlyName}</p>
+                    <div className="flex items-center gap-1.5 mt-0.5">
+                      <span className="text-[10px] text-n-dim">TF {r.timeframe}</span>
+                      {r.isMineRule && <span className="rounded bg-purple-500/15 px-1 py-0.5 text-[8px] font-bold text-purple-400">AI</span>}
+                      {r.strategyId.startsWith('ga_') && <span className="rounded bg-emerald-500/15 px-1 py-0.5 text-[8px] font-bold text-emerald-400">GA</span>}
+                    </div>
+                  </div>
+                  <span className="text-[10px] text-n-dim">#{r.rank}</span>
+                </div>
+
+                {/* Profit projection — the key feature */}
+                <div className={`rounded-lg p-3 mb-3 ${isProfit ? 'bg-emerald-500/10' : 'bg-n-bg/60'}`}>
+                  <div className="flex items-baseline justify-between">
+                    <p className="text-[9px] text-n-dim">Previsione annuale</p>
+                    <p className={`font-mono text-lg font-bold ${annualizedPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {annualizedPct >= 0 ? '+' : ''}{annualizedPct.toFixed(1)}%
+                    </p>
+                  </div>
+                  <p className="text-[9px] text-n-dim mt-0.5">
+                    ~{monthly >= 0 ? '+' : ''}{monthly.toFixed(1)}% al mese · ~{tradesPerMonth.toFixed(0)} operazioni/mese
+                  </p>
+                </div>
+
+                {/* Key stats */}
+                <div className="grid grid-cols-3 gap-2 text-[10px] mb-3">
+                  <div>
+                    <p className="text-n-dim">Vincite</p>
+                    <p className="font-bold text-n-text">{r.winRate}%</p>
+                  </div>
+                  <div>
+                    <p className="text-n-dim">Profitto storico</p>
+                    <p className={`font-bold font-mono ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
                       {r.netProfitPct >= 0 ? '+' : ''}{r.netProfitPct}%
-                    </td>
-                    <td className="px-2 py-1.5 text-red-300">{r.maxDrawdownPct}%</td>
-                    <td className="px-2 py-1.5">{r.sharpe}</td>
-                    <td className="px-2 py-1.5 text-green-300">{r.tpHitRate}%</td>
-                    <td className="px-2 py-1.5 text-red-300">{r.slHitRate}%</td>
-                    <td className="px-2 py-1.5 text-n-dim">{r.avgHoldingHours}h</td>
-                    <td className="px-2 py-1.5">
-                      <a
-                        href={`/bot?${botParams.toString()}`}
-                        className="flex items-center gap-1 rounded-lg bg-blue-500/15 px-2 py-1 text-[10px] font-bold text-blue-400 hover:bg-blue-500/25 transition-all whitespace-nowrap"
-                      >
-                        <Rocket size={10} /> Lancia Bot
-                      </a>
-                    </td>
-                  </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-n-dim">Rischio max</p>
+                    <p className="font-bold text-red-300">{r.maxDrawdownPct}%</p>
+                  </div>
+                </div>
+
+                {/* Conditions if AI rule */}
+                {r.isMineRule && r.conditions && r.conditions.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-3">
+                    {r.conditions.map((c, ci) => (
+                      <span key={ci} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] text-purple-300">
+                        {conditionLabelsMap[c] ?? c}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* Action */}
+                <a
+                  href={`/bot?${botParams.toString()}`}
+                  className="flex items-center justify-center gap-1.5 rounded-lg bg-blue-500/15 px-3 py-2 text-[11px] font-bold text-blue-400 hover:bg-blue-500/25 transition-all w-full"
+                >
+                  <Rocket size={12} /> Attiva questa strategia
+                </a>
+              </div>
+              );
+            })}
           </div>
+          <p className="mt-3 text-[9px] text-n-dim italic">
+            Le previsioni sono basate sullo storico ({report.backtestSummary.dateRange?.start?.slice(0,4)} - {report.backtestSummary.dateRange?.end?.slice(0,4)}). Performance passate non garantiscono risultati futuri.
+          </p>
         </div>
       )}
 
