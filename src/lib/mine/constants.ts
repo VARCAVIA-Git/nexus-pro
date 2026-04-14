@@ -64,6 +64,9 @@ export const MINE_KEYS = {
   // Phase 4.5 — AIC + Scorecard
   scorecard: (symbol: string, setup: string) => `nexus:scorecard:${symbol}:${setup}`,
   scorecardIndex: (symbol: string) => `nexus:scorecards:${symbol}`,
+  // Phase 6 — Continuous Evaluator + Asset Memory
+  evaluation: (symbol: string) => `nexus:strategy:live:${symbol}`,
+  assetMemory: (symbol: string) => `nexus:memory:${symbol}`,
 } as const;
 
 // ─── Defaults ─────────────────────────────────────────────────

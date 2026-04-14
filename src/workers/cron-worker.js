@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-// NEXUS PRO — Cron Worker
-// Calls /api/cron/tick every 60 seconds via HTTP
+// NEXUS PRO — Cron Worker (Phase 6)
+//
+// Two tick cycles:
+//   - Fast tick (30s): live observer + mine engine (continuous AI)
+//   - Slow tick (60s): bot tick, analytic, news, auto-retrain
 // ═══════════════════════════════════════════════════════════════
 
 const http = require('http');
@@ -37,11 +40,14 @@ function callTick(path, label) {
         } else if (label === 'analytic') {
           console.log(`[${ts}] Analytic: ${res.statusCode} | observed=${d.observed ?? 0} processed=${d.processed ? 'yes' : 'no'} ${d.errors && d.errors.length ? '| errors=' + d.errors.join(';') : ''}`);
         } else if (label === 'live') {
-          console.log(`[${ts}] Live: ${res.statusCode} | symbol=${d.symbol ?? '-'} regime=${d.regime ?? '-'} momentum=${d.momentumScore ?? '-'} active=${d.activeRules ?? 0}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
+          const results = d.results ?? [];
+          const summary = results.map(r => r.symbol ? `${r.symbol}:${r.regime ?? '?'}` : '').filter(Boolean).join(' ');
+          console.log(`[${ts}] Live: ${res.statusCode} | ${d.processed ?? 0} symbols ${summary}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''} ${d.elapsedMs ?? 0}ms`);
         } else if (label === 'news') {
           console.log(`[${ts}] News: ${res.statusCode} | symbol=${d.symbol ?? '-'} count=${d.count ?? 0} sent=${d.avgSentiment ?? '-'} delta=${d.delta ?? '-'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
         } else if (label === 'mine') {
-          console.log(`[${ts}] Mine: ${res.statusCode} | enabled=${d.enabled ?? false} aic=${d.aicOnline ? 'ON' : 'off'}${d.regime ? ' regime=' + d.regime : ''} monitored=${d.monitored ?? 0} signals=${d.signalsDetected ?? 0} actions=${d.actionsExecuted ?? 0} ${d.elapsedMs ?? 0}ms${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}${d.errors?.length ? ' errors=' + d.errors.join(';') : ''}`);
+          const p6 = d.waitingMines != null ? ` waiting=${d.waitingMines} filled=${d.limitOrdersFilled ?? 0} expired=${d.limitOrdersExpired ?? 0} evals=${d.evaluations ?? 0}` : '';
+          console.log(`[${ts}] Mine: ${res.statusCode} | enabled=${d.enabled ?? false} aic=${d.aicOnline ? 'ON' : 'off'}${d.regime ? ' regime=' + d.regime : ''} monitored=${d.monitored ?? 0} signals=${d.signalsDetected ?? 0} actions=${d.actionsExecuted ?? 0}${p6} ${d.elapsedMs ?? 0}ms${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}${d.errors?.length ? ' errors=' + d.errors.join(';') : ''}`);
         } else if (label === 'auto-retrain') {
           console.log(`[${ts}] AutoRetrain: ${res.statusCode} | scheduled=${d.scheduled?.scheduled ?? 'none'} reason=${d.scheduled?.reason ?? '-'} incr=${d.incrementalResult ? (d.incrementalResult.skipped ? 'skipped:'+d.incrementalResult.reason : 'done:'+d.incrementalResult.symbol) : 'none'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
         } else {
@@ -60,41 +66,56 @@ function callTick(path, label) {
 
 let tickCounter = 0;
 
-function tick() {
+/**
+ * Fast tick (every 30s): live observer + mine engine.
+ * These are the Phase 6 continuous AI components.
+ */
+function fastTick() {
   tickCounter++;
+  // Live observer: all symbols in parallel
+  callTick('/api/cron/live-observer-tick', 'live');
+  // Mine engine: continuous evaluator + limit order monitoring
+  callTick('/api/cron/mine-tick', 'mine');
+}
+
+/**
+ * Slow tick (every 60s): bot tick, analytic queue, news, auto-retrain.
+ * These are heavier operations that don't need 30s cadence.
+ */
+function slowTick() {
   const now = Math.floor(Date.now() / 1000);
 
-  // Sequenziali ma asincroni: ogni route ha il suo timeout interno
   callTick('/api/cron/tick', 'tick');
   callTick('/api/cron/analytic-tick', 'analytic');
-  // Live observer: ogni tick (1 symbol round-robin)
-  callTick('/api/cron/live-observer-tick', 'live');
-  // News: ogni tick (1 symbol round-robin). Phase 3.7: era ogni 30 min,
-  // ora ogni 60s. Con dedup per guid e cache TTL 2h non c'è rischio di
-  // spam. Con N asset ognuno viene aggiornato ogni N min.
   callTick('/api/cron/news-tick', 'news');
-  // Mine engine: ogni tick (Phase 4)
-  callTick('/api/cron/mine-tick', 'mine');
-  // Auto-retrain: ogni 1h (3600s) con finestra di 60s
+
+  // Auto-retrain: every 1h (3600s) with 60s window
   if (now % 3600 < 60) {
     callTick('/api/cron/auto-retrain-tick', 'auto-retrain');
   }
 }
 
 console.log('═══════════════════════════════════════');
-console.log('NEXUS PRO — Cron Worker');
-console.log(`Ticking 6 endpoints every 60s on :${PORT}`);
-console.log('  - /api/cron/tick                  (legacy bot)');
-console.log('  - /api/cron/analytic-tick         (queue worker)');
-console.log('  - /api/cron/live-observer-tick    (1/tick round-robin)');
-console.log('  - /api/cron/news-tick             (every tick, 1 symbol)');
-console.log('  - /api/cron/mine-tick             (mine engine, every tick)');
-console.log('  - /api/cron/auto-retrain-tick     (every 1 h)');
+console.log('NEXUS PRO — Cron Worker (Phase 6)');
+console.log(`Fast tick: 30s on :${PORT} (live observer + mine engine)`);
+console.log(`Slow tick: 60s on :${PORT} (bot, analytic, news, retrain)`);
+console.log('  Fast:');
+console.log('  - /api/cron/live-observer-tick    (all symbols, 30s)');
+console.log('  - /api/cron/mine-tick             (evaluator + mines, 30s)');
+console.log('  Slow:');
+console.log('  - /api/cron/tick                  (legacy bot, 60s)');
+console.log('  - /api/cron/analytic-tick         (queue worker, 60s)');
+console.log('  - /api/cron/news-tick             (1 symbol round-robin, 60s)');
+console.log('  - /api/cron/auto-retrain-tick     (every 1h)');
 console.log('═══════════════════════════════════════');
 console.log('');
 
-// First tick after 5s (wait for web server to start)
-setTimeout(tick, 5000);
+// First fast tick after 5s (wait for web server to start)
+setTimeout(fastTick, 5000);
+// First slow tick after 10s
+setTimeout(slowTick, 10000);
 
-// Then every 60 seconds
-setInterval(tick, 60000);
+// Fast tick every 30 seconds
+setInterval(fastTick, 30000);
+// Slow tick every 60 seconds
+setInterval(slowTick, 60000);

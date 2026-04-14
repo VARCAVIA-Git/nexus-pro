@@ -346,6 +346,17 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     console.warn(`[analytic] ${symbol}: GA failed (non-fatal): ${(e as Error).message}`);
   }
 
+  // Phase 6: Predictive Combination Discovery — 3 risk-tiered strategies
+  let predictiveProfile: import('@/lib/analytics/predictive-discovery').PredictiveProfile | undefined;
+  try {
+    await updateJobProgress(symbol, 'profiling', 89, 'Scoperta combinazioni predittive (3 livelli di rischio)…');
+    const { discoverPredictiveProfile } = await import('@/lib/analytics/predictive-discovery');
+    predictiveProfile = discoverPredictiveProfile(contexts, symbol);
+    console.log(`[analytic] ${symbol}: Predictive discovery done — prudent=${predictiveProfile.tiers.prudent.combinations.length} moderate=${predictiveProfile.tiers.moderate.combinations.length} aggressive=${predictiveProfile.tiers.aggressive.combinations.length} combos`);
+  } catch (e) {
+    console.warn(`[analytic] ${symbol}: Predictive discovery failed (non-fatal): ${(e as Error).message}`);
+  }
+
   // Event reactivity: in Phase 2 placeholder
   const eventReactivity: EventReactivity[] = [];
 
@@ -383,6 +394,7 @@ async function runTraining(symbol: string, assetClass: AssetClass, refresh: bool
     recommendedTimeframe,
     eventReactivity,
     backtestSummary,
+    predictiveProfile,
     // Carry-over Phase 3 fields se presenti
     liveContext: previousReport?.liveContext,
     newsDigest: previousReport?.newsDigest,

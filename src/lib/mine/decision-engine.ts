@@ -19,7 +19,7 @@ import type {
   SetupScorecard,
 } from './types';
 import type { LiveContext } from '@/lib/analytics/types';
-import { isTpHit, isSlHit, isTimedOut, calcUnrealizedPnlPct } from './utils';
+import { isTpHit, isSlHit, isTimedOut, isLimitExpired, calcUnrealizedPnlPct } from './utils';
 import { checkRisk } from './risk-manager';
 
 // ─── Phase 4.5: AIC context for signal evaluation ────────────
@@ -38,12 +38,24 @@ export interface AICContext {
  * Check all active mines against current prices and produce
  * close/adjust actions.
  */
+// ─── Phase 6: Limit order expiry action ──────────────────────
+
+export type MineActionP6 = MineAction
+  | { type: 'expire_mine'; mineId: string };
+
 export function monitorMines(
   mines: Mine[],
   liveContexts: Map<string, LiveContext>,
   profile: CapitalProfile,
-): MineAction[] {
-  const actions: MineAction[] = [];
+): MineActionP6[] {
+  const actions: MineActionP6[] = [];
+
+  // Phase 6: check waiting mines for limit order expiry
+  for (const mine of mines) {
+    if (mine.status === 'waiting' && isLimitExpired(mine)) {
+      actions.push({ type: 'expire_mine', mineId: mine.id });
+    }
+  }
 
   for (const mine of mines) {
     if (mine.status !== 'open') continue;
@@ -253,7 +265,7 @@ export function evaluateSignals(
     const minesForAsset = allActiveMines.filter((m) => m.symbol === signal.symbol);
 
     // Skip if we already have a mine in this direction for this asset
-    const sameDirectionMine = minesForAsset.find(m => m.direction === signal.suggestedDirection && (m.status === 'open' || m.status === 'pending'));
+    const sameDirectionMine = minesForAsset.find(m => m.direction === signal.suggestedDirection && (m.status === 'open' || m.status === 'pending' || m.status === 'waiting'));
     if (sameDirectionMine) {
       actions.push({ type: 'no_action', reason: `${signal.symbol}: already have ${signal.suggestedDirection} mine` });
       continue;
@@ -271,11 +283,16 @@ export function evaluateSignals(
     allActiveMines.push({ symbol: signal.symbol, direction: signal.suggestedDirection, status: 'pending' } as any);
 
     const now = Date.now();
+    // Phase 6: determine order type and initial status
+    const orderType = signal.suggestedOrderType ?? 'market';
+    const isLimit = orderType === 'limit' && signal.suggestedLimitPrice != null;
+    const initialStatus = isLimit ? 'waiting' : 'pending';
+
     actions.push({
       type: 'open_mine',
       mine: {
         symbol: signal.symbol,
-        status: 'pending',
+        status: initialStatus,
         strategy: signal.suggestedStrategy,
         timeframe: signal.suggestedTimeframe,
         direction: signal.suggestedDirection,
@@ -299,16 +316,20 @@ export function evaluateSignals(
         exitOrderId: null,
         outcome: null,
         realizedPnl: null,
-        notes: [`signal: ${signal.signal.type} conf=${adjustedConfidence.toFixed(2)}${aicCtx ? ' (AIC gated)' : ''}`],
+        notes: [`signal: ${signal.signal.type} conf=${adjustedConfidence.toFixed(2)}${aicCtx ? ' (AIC gated)' : ''} order=${orderType}`],
         // Phase 4.5 AIC fields
         aicSetupName: (signal as any).aicSetupName,
         aicConfidence: signal.signal.confidence,
         regimeAtEntry: aicCtx?.regime,
         confluenceAtEntry: aicCtx?.confluence?.score,
+        // Phase 6 limit order fields
+        entryOrderType: orderType,
+        limitPrice: isLimit ? signal.suggestedLimitPrice : null,
+        limitTimeoutMs: isLimit ? (signal.suggestedLimitTimeoutMs ?? 3600_000) : null,
+        limitCreatedAt: isLimit ? now : null,
+        evaluatorSource: signal.evaluatorSource,
       },
     });
-
-    pendingCount++;
   }
 
   return actions;

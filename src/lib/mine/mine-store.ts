@@ -102,19 +102,20 @@ export async function getActiveMines(symbol?: string): Promise<Mine[]> {
   if (symbol) {
     ids = await redisSMembers(MINE_KEYS.activeMines(symbol));
   } else {
-    // Union of pending + open + closing status sets
-    const [pending, open, closing] = await Promise.all([
+    // Union of waiting + pending + open + closing status sets
+    const [waiting, pending, open, closing] = await Promise.all([
+      redisSMembers(MINE_KEYS.minesByStatus('waiting')),
       redisSMembers(MINE_KEYS.minesByStatus('pending')),
       redisSMembers(MINE_KEYS.minesByStatus('open')),
       redisSMembers(MINE_KEYS.minesByStatus('closing')),
     ]);
-    ids = [...new Set([...pending, ...open, ...closing])];
+    ids = [...new Set([...waiting, ...pending, ...open, ...closing])];
   }
 
   if (ids.length === 0) return [];
 
   const mines = await Promise.all(ids.map((id) => getMine(id)));
-  return mines.filter((m): m is Mine => m != null && m.status !== 'closed' && m.status !== 'cancelled');
+  return mines.filter((m): m is Mine => m != null && m.status !== 'closed' && m.status !== 'cancelled' && m.status !== 'expired');
 }
 
 /** Close a mine: update status, record outcome, move to history. */

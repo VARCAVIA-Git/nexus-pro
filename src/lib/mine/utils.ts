@@ -3,7 +3,7 @@
 // ═══════════════════════════════════════════════════════════════
 
 import { nanoid } from 'nanoid';
-import type { Mine, MineStatus, AggressivenessProfile, CapitalProfile } from './types';
+import type { Mine, MineStatus, MineOutcome, AggressivenessProfile, CapitalProfile } from './types';
 import { PROFILES, DEFAULT_PROFILE } from './constants';
 
 /** Generate a unique mine ID (10 chars). */
@@ -82,7 +82,14 @@ export function calcPositionSize(
 
 /** Check if a mine is in a terminal state. */
 export function isTerminal(status: MineStatus): boolean {
-  return status === 'closed' || status === 'cancelled';
+  return status === 'closed' || status === 'cancelled' || status === 'expired';
+}
+
+/** Check if a waiting limit order has timed out. */
+export function isLimitExpired(mine: Mine, now: number = Date.now()): boolean {
+  if (mine.status !== 'waiting') return false;
+  if (!mine.limitCreatedAt || !mine.limitTimeoutMs) return false;
+  return now - mine.limitCreatedAt >= mine.limitTimeoutMs;
 }
 
 /** Calculate TP/SL ratio. Returns 0 if SL distance is 0. */

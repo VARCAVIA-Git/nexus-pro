@@ -177,3 +177,58 @@ export async function closePosition(
   const exitSide = direction === 'long' ? 'short' : 'long';
   return placeMarketOrder(symbol, exitSide, qty);
 }
+
+// ─── Phase 6: Pending Limit Order Management ─────────────────
+
+export interface PendingOrderCheck {
+  mineId: string;
+  orderId: string;
+  status: 'filled' | 'expired' | 'still_pending' | 'cancelled' | 'error';
+  filledPrice?: number;
+  filledQty?: number;
+  error?: string;
+}
+
+/**
+ * Check status of a pending limit order.
+ * Returns structured result for mine-tick to act on.
+ */
+export async function checkPendingLimitOrder(
+  orderId: string,
+  mineId: string,
+  limitCreatedAt: number,
+  limitTimeoutMs: number,
+): Promise<PendingOrderCheck> {
+  try {
+    const order = await getOrderStatus(orderId);
+    if (!order) {
+      return { mineId, orderId, status: 'error', error: 'order not found' };
+    }
+
+    if (order.status === 'filled') {
+      return {
+        mineId,
+        orderId,
+        status: 'filled',
+        filledPrice: order.filledPrice ?? undefined,
+        filledQty: order.filledQty ?? undefined,
+      };
+    }
+
+    if (order.status === 'cancelled' || order.status === 'rejected') {
+      return { mineId, orderId, status: 'cancelled' };
+    }
+
+    // Check timeout
+    const elapsed = Date.now() - limitCreatedAt;
+    if (elapsed >= limitTimeoutMs) {
+      // Cancel the order
+      await cancelOrder(orderId);
+      return { mineId, orderId, status: 'expired' };
+    }
+
+    return { mineId, orderId, status: 'still_pending' };
+  } catch (e: any) {
+    return { mineId, orderId, status: 'error', error: e?.message ?? String(e) };
+  }
+}

@@ -1,25 +1,29 @@
 // ═══════════════════════════════════════════════════════════════
-// Phase 4 — Mine Engine Types
+// Phase 4 + 6 — Mine Engine Types
 //
 // A Mine is a single trading operation with full lifecycle:
-// pending → open → monitoring → closing → closed | cancelled
+// waiting → pending → open → monitoring → closing → closed | cancelled | expired
+// Phase 6 adds: waiting (limit order placed, not yet filled)
 // ═══════════════════════════════════════════════════════════════
 
 // ─── Enums ────────────────────────────────────────────────────
 
 export type MineStatus =
-  | 'pending'     // order placed, awaiting fill
+  | 'waiting'     // Phase 6: limit order placed, awaiting fill within timeout
+  | 'pending'     // order placed, awaiting fill (market order or limit being processed)
   | 'open'        // filled, actively monitored
   | 'closing'     // exit order placed, awaiting fill
   | 'closed'      // fully exited
-  | 'cancelled';  // never filled or error
+  | 'cancelled'   // never filled or error
+  | 'expired';    // Phase 6: limit order timed out without fill
 
 export type MineOutcome =
   | 'tp_hit'
   | 'sl_hit'
   | 'timeout'
   | 'manual'
-  | 'trailing_exit';
+  | 'trailing_exit'
+  | 'limit_expired';  // Phase 6: limit order expired without fill
 
 export type StrategyType = 'reversion' | 'trend' | 'breakout';
 
@@ -95,6 +99,13 @@ export interface Mine {
   aicConfidence?: number;           // original confidence before gates
   regimeAtEntry?: MarketRegime;     // regime when mine opened
   confluenceAtEntry?: number;       // confluence score when opened
+
+  // Phase 6 — Limit order fields (optional for backward compat)
+  entryOrderType?: 'market' | 'limit';   // order type used for entry
+  limitPrice?: number | null;            // target limit price
+  limitTimeoutMs?: number | null;        // timeout for limit order in ms
+  limitCreatedAt?: number | null;        // when limit order was placed (epoch ms)
+  evaluatorSource?: string;              // which evaluator strategy generated this
 }
 
 // ─── Capital Profile ──────────────────────────────────────────
@@ -131,6 +142,11 @@ export interface DetectedSignal {
   suggestedDirection: 'long' | 'short';
   suggestedTp: number;
   suggestedSl: number;
+  // Phase 6 — Limit order hints (optional)
+  suggestedOrderType?: 'market' | 'limit';
+  suggestedLimitPrice?: number;
+  suggestedLimitTimeoutMs?: number;
+  evaluatorSource?: string;
 }
 
 // ─── Portfolio Snapshot ───────────────────────────────────────
@@ -168,6 +184,79 @@ export interface MineEngineState {
   lastTick: number | null;
   lastError: string | null;
   activeMinesCount: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 6 — Continuous Evaluator types
+// ═══════════════════════════════════════════════════════════════
+
+export interface ContinuousEvaluation {
+  symbol: string;
+  updatedAt: number;
+  shouldTrade: boolean;
+  direction: 'long' | 'short' | null;
+  confidence: number;             // 0-1
+  suggestedEntry: number | null;  // limit price
+  tp: number | null;
+  sl: number | null;
+  timeoutMs: number | null;       // limit order timeout
+  orderType: 'market' | 'limit';
+  strategy: StrategyType;
+  timeframe: string;
+  reasoning: string[];            // decision log
+}
+
+// ═══════════════════════════════════════════════════════════════
+// Phase 6 — Asset Memory types
+// ═══════════════════════════════════════════════════════════════
+
+export interface AssetMemory {
+  symbol: string;
+  updatedAt: number;
+  // Rolling window strategy performance
+  strategyPerformance: Record<string, StrategyPerformanceEntry>;
+  // Regime history (time spent in each regime)
+  regimeHistory: RegimeHistoryEntry[];
+  // Recent decisions (last 200)
+  recentDecisions: DecisionEntry[];
+  // Best performing conditions
+  bestConditions: BestCondition[];
+}
+
+export interface StrategyPerformanceEntry {
+  strategy: string;
+  trades: number;
+  wins: number;
+  losses: number;
+  winRate: number;
+  profitFactor: number;
+  avgPnlPct: number;
+  avgDurationHours: number;
+  lastUpdated: number;
+}
+
+export interface RegimeHistoryEntry {
+  regime: string;
+  startedAt: number;
+  endedAt: number | null;    // null = current
+  durationMs: number;
+}
+
+export interface DecisionEntry {
+  timestamp: number;
+  direction: 'long' | 'short' | null;
+  confidence: number;
+  acted: boolean;            // did we open a mine?
+  outcome?: MineOutcome;     // filled after mine closes
+  pnlPct?: number;
+  strategy: string;
+}
+
+export interface BestCondition {
+  conditions: string[];      // indicator conditions that led to profit
+  direction: 'long' | 'short';
+  avgPnlPct: number;
+  sampleSize: number;
 }
 
 // ═══════════════════════════════════════════════════════════════

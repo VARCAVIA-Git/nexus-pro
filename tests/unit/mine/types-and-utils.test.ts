@@ -19,6 +19,7 @@ import {
   isTpHit,
   isSlHit,
   isTimedOut,
+  isLimitExpired,
   getProfile,
   calcPositionSize,
   isTerminal,
@@ -80,13 +81,13 @@ describe('mine types', () => {
   });
 
   it('MineStatus covers all lifecycle stages', () => {
-    const statuses: MineStatus[] = ['pending', 'open', 'closing', 'closed', 'cancelled'];
-    expect(statuses.length).toBe(5);
+    const statuses: MineStatus[] = ['waiting', 'pending', 'open', 'closing', 'closed', 'cancelled', 'expired'];
+    expect(statuses.length).toBe(7);
   });
 
   it('MineOutcome covers all exit reasons', () => {
-    const outcomes: MineOutcome[] = ['tp_hit', 'sl_hit', 'timeout', 'manual', 'trailing_exit'];
-    expect(outcomes.length).toBe(5);
+    const outcomes: MineOutcome[] = ['tp_hit', 'sl_hit', 'timeout', 'manual', 'trailing_exit', 'limit_expired'];
+    expect(outcomes.length).toBe(6);
   });
 });
 
@@ -115,6 +116,9 @@ describe('mine constants', () => {
     expect(MINE_KEYS.history('ETH/USD')).toBe('nexus:mines:history:ETH/USD');
     expect(MINE_KEYS.feedback('SOL/USD')).toBe('nexus:feedback:SOL/USD');
     expect(MINE_KEYS.engineEnabled).toBe('nexus:mine-engine:enabled');
+    // Phase 6 keys
+    expect(MINE_KEYS.evaluation('BTC/USD')).toBe('nexus:strategy:live:BTC/USD');
+    expect(MINE_KEYS.assetMemory('ETH/USD')).toBe('nexus:memory:ETH/USD');
   });
 
   it('default profile is conservative', () => {
@@ -255,9 +259,41 @@ describe('mine utils', () => {
   it('isTerminal correctly identifies terminal states', () => {
     expect(isTerminal('closed')).toBe(true);
     expect(isTerminal('cancelled')).toBe(true);
+    expect(isTerminal('expired')).toBe(true);
     expect(isTerminal('open')).toBe(false);
     expect(isTerminal('pending')).toBe(false);
     expect(isTerminal('closing')).toBe(false);
+    expect(isTerminal('waiting')).toBe(false);
+  });
+
+  describe('isLimitExpired', () => {
+    it('returns true when limit order has timed out', () => {
+      const mine = mockMine({
+        status: 'waiting',
+        limitCreatedAt: Date.now() - 3600_000 - 1, // > 1h ago
+        limitTimeoutMs: 3600_000,
+      });
+      expect(isLimitExpired(mine)).toBe(true);
+    });
+
+    it('returns false when limit order is still within timeout', () => {
+      const mine = mockMine({
+        status: 'waiting',
+        limitCreatedAt: Date.now() - 1800_000, // 30 min ago
+        limitTimeoutMs: 3600_000,
+      });
+      expect(isLimitExpired(mine)).toBe(false);
+    });
+
+    it('returns false for non-waiting mines', () => {
+      const mine = mockMine({ status: 'open' });
+      expect(isLimitExpired(mine)).toBe(false);
+    });
+
+    it('returns false if missing limit fields', () => {
+      const mine = mockMine({ status: 'waiting', limitCreatedAt: undefined as any, limitTimeoutMs: undefined as any });
+      expect(isLimitExpired(mine)).toBe(false);
+    });
   });
 
   describe('calcRiskReward', () => {

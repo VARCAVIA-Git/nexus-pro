@@ -12,6 +12,7 @@ import type {
   MacroEvent,
   BacktestStrategySummary,
 } from '@/lib/analytics/types';
+import type { PredictiveProfile, TierProfile, PredictiveCombination, RiskTier } from '@/lib/analytics/predictive-discovery';
 import { ArrowLeft, RefreshCw, Trash2, Loader2, CheckCircle2, AlertTriangle, Clock, Lightbulb, Bot, Rocket } from 'lucide-react';
 import { LiveContextCard } from '@/components/analytics/LiveContextCard';
 import { AICInsightsCard } from '@/components/analytics/AICInsightsCard';
@@ -20,6 +21,7 @@ import { DataFreshnessBar } from '@/components/analytics/DataFreshnessBar';
 import { MetricTooltip } from '@/components/ui/MetricTooltip';
 import { filterZonesByDistance } from '@/lib/analytics/zone-filter';
 import { useExplainMode } from '@/hooks/useExplainMode';
+import { useLivePrice } from '@/hooks/useLivePrice';
 import { ruleToItalian, regimeLabel } from '@/lib/analytics/labels';
 
 export default function AssetDetailPage() {
@@ -39,6 +41,9 @@ export default function AssetDetailPage() {
   const [explainMode, toggleExplain] = useExplainMode();
   const [creatingBot, setCreatingBot] = useState(false);
   const [botCreated, setBotCreated] = useState<string | null>(null);
+
+  // Phase 6: Real-time price from CoinGecko/Alpaca (updates every 10s)
+  const { price: realTimePrice } = useLivePrice(symbol);
 
   const load = useCallback(async () => {
     const r = await fetch(`/api/analytics/${encodeURIComponent(symbol)}`);
@@ -375,7 +380,7 @@ export default function AssetDetailPage() {
       {isReady && report && (
         <ReportView
           report={report}
-          currentPrice={live?.price ?? null}
+          currentPrice={realTimePrice ?? live?.price ?? null}
           symbol={symbol}
           explainMode={explainMode}
         />
@@ -536,8 +541,13 @@ function ReportView({
         </div>
       </div>
 
-      {/* ═══ SIMULAZIONE TRADING — $1000 → ? ═══ */}
-      {report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
+      {/* ═══ Phase 6: Profili Predittivi (3 livelli di rischio) ═══ */}
+      {report.predictiveProfile && (
+        <PredictiveProfileSection profile={report.predictiveProfile} symbol={symbol} />
+      )}
+
+      {/* Fallback: se non ci sono profili predittivi, mostra il vecchio simulatore */}
+      {!report.predictiveProfile && report.backtestSummary && report.backtestSummary.rankings.length > 0 && (
         <TradingSimulator rankings={report.backtestSummary.rankings} symbol={symbol} />
       )}
 
@@ -852,116 +862,449 @@ function Stat({ label, value }: { label: string; value: string | number | undefi
   );
 }
 
-// ─── Trading Simulator Component ───────────────────────────
-// Recalculates each strategy's results with $1000 initial capital and $10/trade
-// Original backtest used $100k/$100 (0.1% sizing), new = $10/$1000 (1% sizing)
-// Same number of trades, profit in $ = (netProfitPct * 100000 / 100) / 10 = netProfitPct * 100
+// ─── Predictive Profile Section (Phase 6) ───────────────────
+// Shows 3 risk-tiered strategy profiles discovered by analyzing
+// 4 years of historical data.
+
+/** Human-readable names for condition codes (shared). */
+const conditionLabelsMap: Record<string, string> = {
+  'RSI<30': 'RSI ipervenduto',
+  'RSI<40': 'RSI basso',
+  'RSI>60': 'RSI alto',
+  'RSI>70': 'RSI ipercomprato',
+  'BB=BELOW_LOWER': 'Sotto Bollinger inf.',
+  'BB=AT_LOWER': 'Alla banda inf.',
+  'BB=AT_UPPER': 'Alla banda sup.',
+  'BB=ABOVE_UPPER': 'Sopra Bollinger sup.',
+  'MACD=CROSS_UP': 'MACD cross rialzista',
+  'MACD=CROSS_DOWN': 'MACD cross ribassista',
+  'MACD=ABOVE': 'MACD positivo',
+  'MACD=BELOW': 'MACD negativo',
+  'TREND_S=UP': 'Trend breve UP',
+  'TREND_S=DOWN': 'Trend breve DOWN',
+  'TREND_M=UP': 'Trend medio UP',
+  'TREND_M=DOWN': 'Trend medio DOWN',
+  'TREND_L=UP': 'Trend lungo UP',
+  'TREND_L=DOWN': 'Trend lungo DOWN',
+  'ADX>25': 'Trend forte',
+  'ADX<15': 'Mercato piatto',
+  'VOL=CLIMAX': 'Volume estremo',
+  'VOL=HIGH': 'Volume alto',
+  'VOL=DRY': 'Volume basso',
+  'STOCH<20': 'Stoch ipervenduto',
+  'STOCH>80': 'Stoch ipercomprato',
+  'REGIME=TREND_UP': 'Regime rialzista',
+  'REGIME=TREND_DN': 'Regime ribassista',
+  'REGIME=RANGING': 'Regime laterale',
+};
+
+const tierColors: Record<string, { border: string; bg: string; text: string; badge: string }> = {
+  prudent:    { border: 'border-blue-500/40',    bg: 'bg-blue-500/5',    text: 'text-blue-300',    badge: 'bg-blue-500/20 text-blue-300' },
+  moderate:   { border: 'border-amber-500/40',   bg: 'bg-amber-500/5',   text: 'text-amber-300',   badge: 'bg-amber-500/20 text-amber-300' },
+  aggressive: { border: 'border-red-500/40',     bg: 'bg-red-500/5',     text: 'text-red-300',     badge: 'bg-red-500/20 text-red-300' },
+};
+
+function PredictiveProfileSection({ profile, symbol }: { profile: PredictiveProfile; symbol: string }) {
+  const tiers = ['prudent', 'moderate', 'aggressive'] as RiskTier[];
+  const anyData = tiers.some(t => profile.tiers[t].combinations.length > 0);
+
+  if (!anyData) return null;
+
+  // Find the overall best
+  const allCombos = tiers.flatMap(t => profile.tiers[t].combinations);
+  const overallBest = allCombos.length > 0
+    ? allCombos.reduce((a, b) => b.simFinalCapital > a.simFinalCapital ? b : a, allCombos[0])
+    : null;
+
+  return (
+    <div className="space-y-4">
+      {/* Hero header */}
+      <div className="rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-500/10 to-blue-500/5 p-6">
+        <h2 className="text-base font-bold text-purple-300 mb-1">
+          Combinazioni Predittive Scoperte dall&apos;AI
+        </h2>
+        <p className="text-xs text-n-dim mb-3">
+          Analizzando <span className="font-mono text-n-text">{profile.candlesAnalyzed.toLocaleString()}</span> candele
+          ({profile.periodStart?.slice(0, 10)} → {profile.periodEnd?.slice(0, 10)}), l&apos;AI ha testato{' '}
+          <span className="font-mono text-n-text">{profile.totalCombinationsTested}</span> combinazioni di indicatori
+          per individuare quali predicono con anticipo movimenti sostanziali di {symbol}.
+          Trovate <span className="font-mono text-purple-300">{profile.totalPredictiveCombos}</span> combinazioni predittive,
+          classificate in 3 livelli di rischio.
+        </p>
+
+        {/* Overall best result */}
+        {overallBest && (
+          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div>
+                <p className="text-[10px] text-n-dim uppercase tracking-wider">Miglior combinazione assoluta</p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {overallBest.conditions.map((c, i) => (
+                    <span key={i} className="rounded bg-purple-500/20 px-2 py-0.5 text-[10px] font-semibold text-purple-300">
+                      {conditionLabelsMap[c] ?? c}
+                    </span>
+                  ))}
+                  <span className={`rounded px-2 py-0.5 text-[10px] font-bold ${overallBest.direction === 'long' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-red-500/20 text-red-300'}`}>
+                    {overallBest.direction.toUpperCase()}
+                  </span>
+                </div>
+                <p className="text-[10px] text-n-dim mt-1">
+                  {overallBest.occurrences} segnali · WR {(overallBest.simWinRate * 100).toFixed(0)}% · PF {overallBest.simProfitFactor}
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-[10px] text-n-dim">$1.000 sarebbero diventati</p>
+                <p className="font-mono text-3xl font-bold text-emerald-400">
+                  ${overallBest.simFinalCapital.toFixed(0)}
+                </p>
+                <p className="text-[11px] font-semibold text-emerald-300">
+                  +{((overallBest.simFinalCapital - 1000) / 10).toFixed(1)}% rendimento
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Three tier columns */}
+      <div className="grid gap-4 lg:grid-cols-3">
+        {tiers.map(tier => {
+          const tp = profile.tiers[tier];
+          const colors = tierColors[tier];
+          if (tp.combinations.length === 0) {
+            return (
+              <div key={tier} className={`rounded-2xl border ${colors.border} ${colors.bg} p-5 opacity-60`}>
+                <h3 className={`text-sm font-bold ${colors.text} mb-1`}>{tp.label}</h3>
+                <p className="text-xs text-n-dim">{tp.description}</p>
+                <p className="text-xs text-n-dim mt-3 italic">Nessuna combinazione trovata per questo livello di rischio.</p>
+              </div>
+            );
+          }
+
+          return (
+            <div key={tier} className={`rounded-2xl border ${colors.border} ${colors.bg} p-5`}>
+              {/* Tier header */}
+              <div className="mb-4">
+                <div className="flex items-center gap-2 mb-1">
+                  <h3 className={`text-sm font-bold ${colors.text}`}>{tp.label}</h3>
+                  <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold ${colors.badge}`}>
+                    {tp.combinations.length} combinazioni
+                  </span>
+                </div>
+                <p className="text-[10px] text-n-dim">{tp.description}</p>
+
+                {/* Tier aggregated stats */}
+                <div className="grid grid-cols-3 gap-2 mt-3 text-[10px]">
+                  <div className="rounded-lg bg-n-bg/50 p-2 text-center">
+                    <p className="text-n-dim">Miglior risultato</p>
+                    <p className={`font-mono font-bold ${colors.text}`}>${tp.bestFinalCapital.toFixed(0)}</p>
+                  </div>
+                  <div className="rounded-lg bg-n-bg/50 p-2 text-center">
+                    <p className="text-n-dim">WR medio</p>
+                    <p className="font-mono font-bold text-n-text">{(tp.avgWinRate * 100).toFixed(0)}%</p>
+                  </div>
+                  <div className="rounded-lg bg-n-bg/50 p-2 text-center">
+                    <p className="text-n-dim">PF medio</p>
+                    <p className="font-mono font-bold text-n-text">{tp.avgProfitFactor}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Combination cards */}
+              <div className="space-y-2">
+                {tp.combinations.map((combo, i) => (
+                  <CombinationCard key={combo.id} combo={combo} rank={i + 1} colors={colors} />
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <p className="text-[10px] text-n-dim italic">
+        ⓘ Ogni combinazione simula $1.000 di capitale investendo il 2% per operazione. Commissioni 0.2% incluse.
+        Performance basate su storico reale — non garantiscono risultati futuri.
+      </p>
+    </div>
+  );
+}
+
+function CombinationCard({ combo, rank, colors }: {
+  combo: PredictiveCombination;
+  rank: number;
+  colors: { border: string; bg: string; text: string; badge: string };
+}) {
+  const isProfit = combo.simFinalCapital > 1000;
+
+  return (
+    <div className={`rounded-xl border ${isProfit ? 'border-emerald-500/20' : 'border-red-500/20'} bg-n-bg/40 p-3`}>
+      {/* Conditions */}
+      <div className="flex items-start justify-between gap-2 mb-2">
+        <div className="flex-1">
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="text-[10px] font-bold text-n-dim">#{rank}</span>
+            <span className={`rounded px-1 py-0.5 text-[8px] font-bold ${combo.direction === 'long' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+              {combo.direction.toUpperCase()}
+            </span>
+          </div>
+          <div className="flex flex-wrap gap-1">
+            {combo.conditions.map((c, i) => (
+              <span key={i} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-300">
+                {conditionLabelsMap[c] ?? c}
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`font-mono text-lg font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+            ${combo.simFinalCapital.toFixed(0)}
+          </p>
+          <p className={`text-[9px] font-semibold ${isProfit ? 'text-emerald-300' : 'text-red-300'}`}>
+            {isProfit ? '+' : ''}{((combo.simFinalCapital - 1000) / 10).toFixed(1)}%
+          </p>
+        </div>
+      </div>
+
+      {/* Stats row */}
+      <div className="grid grid-cols-4 gap-1 text-[9px]">
+        <div>
+          <p className="text-n-dim">Segnali</p>
+          <p className="font-mono text-n-text">{combo.occurrences}</p>
+        </div>
+        <div>
+          <p className="text-n-dim">Hit Rate</p>
+          <p className="font-mono text-n-text">{(combo.hitRate * 100).toFixed(0)}%</p>
+        </div>
+        <div>
+          <p className="text-n-dim">WR</p>
+          <p className="font-mono text-n-text">{(combo.simWinRate * 100).toFixed(0)}%</p>
+        </div>
+        <div>
+          <p className="text-n-dim">PF</p>
+          <p className="font-mono text-n-text">{combo.simProfitFactor}</p>
+        </div>
+      </div>
+
+      {/* TP/SL/DD */}
+      {(combo.simAvgTpPct > 0 || combo.simAvgSlPct > 0) && (
+        <div className="flex justify-between mt-1.5 pt-1.5 border-t border-n-border text-[9px]">
+          <span className="text-n-dim">TP <span className="text-emerald-400 font-mono">+{combo.simAvgTpPct}%</span></span>
+          <span className="text-n-dim">SL <span className="text-red-400 font-mono">-{combo.simAvgSlPct}%</span></span>
+          <span className="text-n-dim">MaxDD <span className="text-amber-400 font-mono">{combo.simMaxDrawdownPct}%</span></span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Trading Simulator Component (legacy fallback) ──────────
+// Phase 6: Shows the best indicator combinations discovered by AI,
+// with a $1000 simulated strategy for each combination.
+// Groups strategies by their indicator conditions and shows
+// how each combination performed historically.
+
+/** Human-readable names for condition codes. */
+const conditionLabels: Record<string, string> = {
+  'RSI<30': 'RSI ipervenduto (<30)',
+  'RSI<40': 'RSI basso (<40)',
+  'RSI>60': 'RSI alto (>60)',
+  'RSI>70': 'RSI ipercomprato (>70)',
+  'BB=BELOW_LOWER': 'Prezzo sotto Bollinger inf.',
+  'BB=AT_LOWER': 'Prezzo alla banda inf.',
+  'BB=LOWER_HALF': 'Prezzo metà inferiore',
+  'BB=AT_UPPER': 'Prezzo alla banda sup.',
+  'BB=ABOVE_UPPER': 'Prezzo sopra Bollinger sup.',
+  'MACD=CROSS_UP': 'MACD cross rialzista',
+  'MACD=CROSS_DOWN': 'MACD cross ribassista',
+  'MACD=ABOVE': 'MACD positivo',
+  'MACD=BELOW': 'MACD negativo',
+  'TREND_S=UP': 'Trend breve rialzista',
+  'TREND_S=DOWN': 'Trend breve ribassista',
+  'TREND_M=UP': 'Trend medio rialzista',
+  'TREND_M=DOWN': 'Trend medio ribassista',
+  'TREND_L=UP': 'Trend lungo rialzista',
+  'TREND_L=DOWN': 'Trend lungo ribassista',
+  'ADX>25': 'Trend forte (ADX>25)',
+  'ADX<15': 'Mercato piatto (ADX<15)',
+  'VOL=CLIMAX': 'Volume estremo (>2.5x)',
+  'VOL=HIGH': 'Volume alto (>1.5x)',
+  'VOL=DRY': 'Volume basso (<0.5x)',
+  'STOCH<20': 'Stocastico ipervenduto',
+  'STOCH>80': 'Stocastico ipercomprato',
+  'REGIME=TREND_UP': 'Regime rialzista',
+  'REGIME=TREND_DN': 'Regime ribassista',
+  'REGIME=RANGING': 'Regime laterale',
+  'REGIME=VOLATILE': 'Regime volatile',
+};
 
 function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySummary[]; symbol: string }) {
   const INITIAL_CAPITAL = 1000;
-  const TRADE_SIZE = 10;
 
-  // Take top 6 strategies with at least 10 trades for meaningful simulation
-  const reliable = rankings.filter(r => r.totalTrades >= 10).slice(0, 6);
-  const lowSample = rankings.filter(r => r.totalTrades < 10 && r.totalTrades > 0).slice(0, 3);
-  const allToShow = [...reliable, ...lowSample];
+  // Separate strategies into: combinations (mined rules / GA with conditions) and coded strategies
+  const withConditions = rankings.filter(r =>
+    (r.isMineRule && r.conditions && r.conditions.length > 0) ||
+    r.strategyId.startsWith('ga_')
+  );
+  const codedStrategies = rankings.filter(r =>
+    !r.isMineRule && !r.strategyId.startsWith('ga_')
+  );
 
+  // Build the display list: first combinations, then best coded strategies
+  const topCombinations = withConditions
+    .filter(r => r.totalTrades >= 5)
+    .slice(0, 8);
+  const topCoded = codedStrategies
+    .filter(r => r.totalTrades >= 10)
+    .slice(0, 4);
+
+  const allToShow = [...topCombinations, ...topCoded];
   if (allToShow.length === 0) return null;
 
-  // Strategy descriptions in plain language
+  // Find the single best result for the hero
+  const best = allToShow.reduce((a, b) => (b.netProfitPct > a.netProfitPct ? b : a), allToShow[0]);
+  const bestProfit = best.netProfitPct * 100;
+  const bestFinal = INITIAL_CAPITAL + bestProfit;
+
+  // Coded strategy descriptions
   const strategyDescriptions: Record<string, string> = {
-    trend: 'Compra quando il prezzo è in tendenza forte rialzista (EMA, ADX, MACD allineati)',
-    reversion: 'Compra in ipervenduto sulle bande di Bollinger inferiori con volume in aumento',
-    breakout: 'Compra alla rottura del massimo a 20 periodi con volume sopra la media',
-    momentum: 'Compra quando RSI > 50, MACD cross up, Stocastico cross up',
-    pattern: 'Compra su pattern candlestick rialzisti (engulfing, hammer, ecc.)',
-    combined_ai: 'Combina i segnali di tutte le strategie e opera quando 4+ sono concordi',
+    trend: 'Segue il trend usando EMA, ADX e MACD allineati',
+    reversion: 'Compra in ipervenduto sulle bande di Bollinger',
+    breakout: 'Entra alla rottura dei massimi con volume elevato',
+    momentum: 'Segue il momentum usando RSI, MACD e Stocastico',
+    pattern: 'Opera su pattern candlestick (engulfing, hammer...)',
+    combined_ai: 'Combina 4+ strategie concordi per operare',
+  };
+
+  // TF labels
+  const tfLabel: Record<string, string> = {
+    '5m': '5min', '15m': '15min', '1h': '1 ora', '4h': '4 ore', '1d': 'giorno',
   };
 
   return (
-    <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-emerald-500/5 p-6">
-      <div className="mb-4">
+    <div className="rounded-2xl border border-blue-500/30 bg-gradient-to-br from-blue-500/10 to-purple-500/5 p-6">
+      {/* Hero: best combination result */}
+      <div className="mb-5">
         <h2 className="text-base font-bold text-blue-300 mb-1">
-          Simulazione Trading: ${INITIAL_CAPITAL.toLocaleString()} → ?
+          Migliori Combinazioni Scoperte dall&apos;AI
         </h2>
-        <p className="text-xs text-n-dim">
-          Quanto avresti guadagnato (o perso) iniziando con <span className="font-mono text-n-text">${INITIAL_CAPITAL}</span>{' '}
-          e aprendo operazioni da <span className="font-mono text-n-text">${TRADE_SIZE}</span> ciascuna?
-          Risultati basati sulle operazioni reali simulate sullo storico di {symbol}.
+        <p className="text-xs text-n-dim mb-3">
+          L&apos;AI ha analizzato migliaia di combinazioni di indicatori sullo storico di {symbol}.
+          Per ogni combinazione vincente, abbiamo simulato una strategia con capitale di partenza{' '}
+          <span className="font-mono text-n-text">${INITIAL_CAPITAL}</span>.
         </p>
+
+        {/* Best result hero */}
+        <div className={`rounded-xl p-4 ${bestProfit >= 0 ? 'bg-emerald-500/10 border border-emerald-500/30' : 'bg-red-500/10 border border-red-500/30'}`}>
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div>
+              <p className="text-[10px] text-n-dim uppercase tracking-wider">Miglior combinazione trovata</p>
+              <p className="text-sm font-bold text-n-text mt-0.5">
+                {best.isMineRule && best.conditions
+                  ? best.conditions.map(c => conditionLabels[c] ?? c).join(' + ')
+                  : best.strategyId.startsWith('ga_')
+                    ? `GA Evolved: ${best.strategyName}`
+                    : best.strategyName}
+              </p>
+              <p className="text-[10px] text-n-dim mt-0.5">
+                {best.totalTrades} operazioni su TF {tfLabel[best.timeframe] ?? best.timeframe} · WR {best.winRate}% · PF {best.profitFactor}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-n-dim">$1.000 sarebbero diventati</p>
+              <p className={`font-mono text-3xl font-bold ${bestProfit >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                ${bestFinal.toFixed(0)}
+              </p>
+              <p className={`text-[11px] font-semibold ${bestProfit >= 0 ? 'text-emerald-300' : 'text-red-300'}`}>
+                {bestProfit >= 0 ? '+' : ''}{((bestProfit / INITIAL_CAPITAL) * 100).toFixed(1)}% rendimento
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+      {/* All combinations grid */}
+      <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {allToShow.map((r, i) => {
-          // Scale: original was $100/$100k (0.1%), we want $10/$1000 (1%)
-          // Per-trade profit ratio is 10x (sizing relative to capital is 10x)
-          // Total profit in $ = (netProfitPct * 100000 / 100) / 10 = netProfitPct * 100
           const simulatedProfit = r.netProfitPct * 100;
           const finalCapital = INITIAL_CAPITAL + simulatedProfit;
           const isProfit = simulatedProfit >= 0;
-          const isLowSample = r.totalTrades < 10;
-
-          // Calculate per-trade avg
           const avgPerTrade = r.totalTrades > 0 ? simulatedProfit / r.totalTrades : 0;
+          const isCombination = r.isMineRule || r.strategyId.startsWith('ga_');
+          const isBest = r === best;
 
-          // Get description
-          const description = r.strategyId.startsWith('ga_')
-            ? `Strategia evoluta dal Genetic Algorithm: combinazione ottimale di indicatori scoperta testando migliaia di varianti sullo storico`
-            : r.isMineRule
-            ? `Regola scoperta dall'AI: opera quando si verificano queste condizioni: ${r.conditions?.join(' + ') ?? '—'}`
-            : strategyDescriptions[r.strategyId] ?? 'Strategia tecnica avanzata';
-
-          // TF in plain language
-          const tfLabel: Record<string, string> = {
-            '5m': 'ogni 5 minuti', '15m': 'ogni 15 minuti', '1h': 'ogni ora', '4h': 'ogni 4 ore', '1d': 'ogni giorno',
-          };
+          // Build human-readable conditions
+          const conditionsDisplay = r.conditions && r.conditions.length > 0
+            ? r.conditions.map(c => conditionLabels[c] ?? c)
+            : null;
 
           return (
             <div
               key={`${r.strategyId}-${r.timeframe}-${i}`}
               className={`rounded-xl border p-4 transition-all ${
-                isLowSample ? 'border-n-border bg-n-bg/40 opacity-70' :
-                isProfit ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-red-500/30 bg-red-500/5'
+                isBest ? 'border-emerald-500/50 bg-emerald-500/10 ring-1 ring-emerald-500/30' :
+                isProfit ? 'border-emerald-500/20 bg-emerald-500/5' : 'border-red-500/20 bg-red-500/5'
               }`}
             >
-              {/* Header */}
-              <div className="mb-3">
-                <div className="flex items-baseline justify-between gap-2 mb-1">
+              {/* Header with badges */}
+              <div className="mb-2">
+                <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                   <span className="text-[10px] font-bold text-n-dim">#{i + 1}</span>
-                  {isLowSample && (
-                    <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[9px] font-bold text-amber-400">POCO TESTATO</span>
+                  {isBest && (
+                    <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">MIGLIORE</span>
                   )}
                   {r.isMineRule && (
-                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-400">AI RULE</span>
+                    <span className="rounded bg-purple-500/15 px-1.5 py-0.5 text-[9px] font-bold text-purple-400">COMBINAZIONE AI</span>
                   )}
                   {r.strategyId.startsWith('ga_') && (
-                    <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-400">GA EVOLVED</span>
+                    <span className="rounded bg-blue-500/15 px-1.5 py-0.5 text-[9px] font-bold text-blue-400">GA EVOLVED</span>
+                  )}
+                  {!isCombination && (
+                    <span className="rounded bg-n-card px-1.5 py-0.5 text-[9px] font-bold text-n-dim">STRATEGIA</span>
                   )}
                 </div>
-                <p className="text-xs font-bold text-n-text">
-                  {r.strategyName.length > 35 ? r.strategyName.slice(0, 35) + '…' : r.strategyName}
-                </p>
-                <p className="text-[10px] text-n-dim mt-0.5">
-                  Timeframe {r.timeframe} · controlla {tfLabel[r.timeframe] ?? r.timeframe}
+
+                {/* Conditions display */}
+                {conditionsDisplay ? (
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {conditionsDisplay.map((c, ci) => (
+                      <span key={ci} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-medium text-purple-300">
+                        {c}
+                      </span>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-xs font-bold text-n-text">
+                    {r.strategyName.length > 30 ? r.strategyName.slice(0, 30) + '...' : r.strategyName}
+                  </p>
+                )}
+
+                <p className="text-[10px] text-n-dim mt-1">
+                  TF {tfLabel[r.timeframe] ?? r.timeframe} · {r.totalTrades} trade · Sharpe {r.sharpe}
                 </p>
               </div>
 
-              {/* Capital result — BIG */}
-              <div className="mb-3 rounded-lg bg-n-bg/60 p-3">
-                <p className="text-[9px] text-n-dim mb-0.5">Capitale finale</p>
-                <p className={`font-mono text-2xl font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
-                  ${finalCapital.toFixed(2)}
-                </p>
-                <p className={`text-[10px] font-semibold ${isProfit ? 'text-emerald-300' : 'text-red-300'}`}>
-                  {isProfit ? '+' : ''}${simulatedProfit.toFixed(2)} ({isProfit ? '+' : ''}{((simulatedProfit / INITIAL_CAPITAL) * 100).toFixed(2)}%)
+              {/* Capital result */}
+              <div className="mb-2 rounded-lg bg-n-bg/60 p-2.5">
+                <div className="flex items-baseline justify-between">
+                  <p className="text-[9px] text-n-dim">$1.000 →</p>
+                  <p className={`font-mono text-xl font-bold ${isProfit ? 'text-emerald-400' : 'text-red-400'}`}>
+                    ${finalCapital.toFixed(0)}
+                  </p>
+                </div>
+                <p className={`text-[10px] font-semibold text-right ${isProfit ? 'text-emerald-300' : 'text-red-300'}`}>
+                  {isProfit ? '+' : ''}{((simulatedProfit / INITIAL_CAPITAL) * 100).toFixed(1)}%
                 </p>
               </div>
 
-              {/* Description */}
-              <p className="text-[10px] text-n-dim italic mb-3 line-clamp-2">{description}</p>
+              {/* Strategy description for coded strategies */}
+              {!isCombination && strategyDescriptions[r.strategyId] && (
+                <p className="text-[10px] text-n-dim italic mb-2 line-clamp-2">
+                  {strategyDescriptions[r.strategyId]}
+                </p>
+              )}
 
               {/* Stats grid */}
-              <div className="grid grid-cols-2 gap-2 text-[10px]">
+              <div className="grid grid-cols-2 gap-1.5 text-[10px]">
                 <div>
                   <p className="text-n-dim">Operazioni</p>
                   <p className="font-mono font-bold text-n-text">{r.totalTrades}</p>
@@ -971,24 +1314,34 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
                   <p className="font-mono font-bold text-n-text">{r.winRate}%</p>
                 </div>
                 <div>
-                  <p className="text-n-dim">Media per trade</p>
-                  <p className={`font-mono font-bold ${avgPerTrade >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                    {avgPerTrade >= 0 ? '+' : ''}${avgPerTrade.toFixed(3)}
+                  <p className="text-n-dim">Profit Factor</p>
+                  <p className={`font-mono font-bold ${r.profitFactor >= 1.5 ? 'text-emerald-400' : r.profitFactor >= 1 ? 'text-n-text' : 'text-red-400'}`}>
+                    {r.profitFactor}
                   </p>
                 </div>
                 <div>
-                  <p className="text-n-dim">Durata media</p>
-                  <p className="font-mono font-bold text-n-text">{r.avgHoldingHours.toFixed(1)}h</p>
+                  <p className="text-n-dim">Media/trade</p>
+                  <p className={`font-mono font-bold ${avgPerTrade >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {avgPerTrade >= 0 ? '+' : ''}${avgPerTrade.toFixed(2)}
+                  </p>
                 </div>
               </div>
 
-              {/* TP/SL info */}
-              {r.avgTpDistancePct > 0 && (
-                <div className="mt-3 pt-3 border-t border-n-border flex justify-between text-[9px]">
-                  <span className="text-n-dim">TP medio: <span className="text-emerald-400 font-mono">+{r.avgTpDistancePct.toFixed(2)}%</span></span>
-                  <span className="text-n-dim">SL medio: <span className="text-red-400 font-mono">-{r.avgSlDistancePct.toFixed(2)}%</span></span>
+              {/* TP/SL + drawdown */}
+              <div className="mt-2 pt-2 border-t border-n-border grid grid-cols-3 gap-1 text-[9px]">
+                <div>
+                  <p className="text-n-dim">TP</p>
+                  <p className="text-emerald-400 font-mono">+{r.avgTpDistancePct.toFixed(1)}%</p>
                 </div>
-              )}
+                <div>
+                  <p className="text-n-dim">SL</p>
+                  <p className="text-red-400 font-mono">-{r.avgSlDistancePct.toFixed(1)}%</p>
+                </div>
+                <div>
+                  <p className="text-n-dim">Max DD</p>
+                  <p className="text-amber-400 font-mono">{r.maxDrawdownPct}%</p>
+                </div>
+              </div>
             </div>
           );
         })}
@@ -996,8 +1349,9 @@ function TradingSimulator({ rankings, symbol }: { rankings: BacktestStrategySumm
 
       {/* Disclaimer */}
       <p className="mt-4 text-[10px] text-n-dim italic">
-        ⓘ I risultati sono basati su dati storici reali. Performance passate non garantiscono risultati futuri.
-        Le strategie marcate &quot;POCO TESTATO&quot; hanno meno di 10 operazioni — i numeri sono indicativi e poco affidabili.
+        ⓘ Combinazioni scoperte analizzando lo storico di {symbol}. Ogni card simula $1.000 di capitale
+        operando con quella combinazione specifica. Performance passate non garantiscono risultati futuri.
+        Le combinazioni &quot;AI&quot; sono regole scoperte automaticamente dal pattern mining.
       </p>
     </div>
   );

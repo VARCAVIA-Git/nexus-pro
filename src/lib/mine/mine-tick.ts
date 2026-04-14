@@ -1,14 +1,17 @@
 // ═══════════════════════════════════════════════════════════════
-// Phase 4 — Mine Tick (Orchestrator)
+// Phase 4 + 6 — Mine Tick (Orchestrator)
 //
-// Called every 60s by the cron worker. Full flow:
+// Called every 30s by the cron worker. Full flow:
 // 1. Check if engine is enabled
 // 2. Fetch account + active mines + profile
-// 3. Monitor existing mines (TP/SL/trailing/timeout)
-// 4. Detect new signals for each supported asset
-// 5. Evaluate signals through risk manager
-// 6. Execute actions (open/close/adjust)
-// 7. Update state in Redis
+// 3. Sync waiting mines (limit order fill/expiry check)
+// 4. Sync pending mines (market order fill check)
+// 5. Monitor open mines (TP/SL/trailing/timeout)
+// 6. Run continuous evaluator for each asset
+// 7. Detect new signals (evaluator + AIC + TS)
+// 8. Evaluate signals through risk manager
+// 9. Execute actions (open/close/adjust/expire)
+// 10. Update asset memory + portfolio snapshot
 // ═══════════════════════════════════════════════════════════════
 
 import type { Mine, MineAction, CapitalProfile, AICSignal, DetectedSignal, MarketRegime } from './types';
@@ -27,12 +30,15 @@ import { getProfile, calcUnrealizedPnl } from './utils';
 import { detectSignals } from './signal-detector';
 import type { SignalDetectorInput } from './signal-detector';
 import { monitorMines, evaluateSignals } from './decision-engine';
-import type { AICContext } from './decision-engine';
+import type { AICContext, MineActionP6 } from './decision-engine';
 import {
   placeMarketOrder,
+  placeLimitOrder,
   closePosition,
+  cancelOrder,
   getAccountInfo,
   getOrderStatus,
+  checkPendingLimitOrder,
 } from './execution';
 import { saveFeedback } from './feedback';
 import { SUPPORTED_SYMBOLS } from './constants';
@@ -44,6 +50,9 @@ import {
   getResearch,
   sendFeedback as sendAICFeedback,
 } from './aic-client';
+import { evaluateAndSave as evaluateContinuous } from '@/lib/analytics/continuous-evaluator';
+import type { EvaluatorInput } from '@/lib/analytics/continuous-evaluator';
+import { tickUpdate as memoryTickUpdate, onMineClose as memoryOnMineClose } from '@/lib/analytics/asset-memory';
 
 // ─── Data Loaders (injected for testability) ──────────────────
 
@@ -66,6 +75,11 @@ export interface MineTickResult {
   elapsedMs: number;
   aicOnline?: boolean;
   regime?: string;
+  // Phase 6
+  waitingMines?: number;
+  limitOrdersFilled?: number;
+  limitOrdersExpired?: number;
+  evaluations?: number;
 }
 
 // ─── Main ─────────────────────────────────────────────────────
@@ -104,7 +118,45 @@ export async function executeMineeTick(
     if (live) liveContexts.set(sym, live);
   }
 
-  // 4. Sync pending mines (check if entry orders filled)
+  // 4a. Phase 6: Sync WAITING mines (limit orders — check fill/expiry)
+  let limitFilled = 0;
+  let limitExpired = 0;
+  const waitingMines = allActiveMines.filter((m) => m.status === 'waiting');
+  for (const mine of waitingMines) {
+    if (!mine.entryOrderId) continue;
+    try {
+      const check = await checkPendingLimitOrder(
+        mine.entryOrderId,
+        mine.id,
+        mine.limitCreatedAt ?? mine.createdAt,
+        mine.limitTimeoutMs ?? 3600_000,
+      );
+      if (check.status === 'filled') {
+        await updateMine(mine.id, {
+          status: 'open',
+          entryPrice: check.filledPrice ?? mine.limitPrice ?? mine.entryPrice,
+          entryTime: Date.now(),
+        });
+        mine.status = 'open';
+        mine.entryPrice = check.filledPrice ?? mine.limitPrice ?? mine.entryPrice;
+        mine.entryTime = Date.now();
+        limitFilled++;
+        console.log(`[mine-tick] ${mine.symbol}: limit order FILLED @ ${mine.entryPrice}`);
+      } else if (check.status === 'expired') {
+        await updateMine(mine.id, { status: 'expired', outcome: 'limit_expired' });
+        mine.status = 'expired';
+        limitExpired++;
+        console.log(`[mine-tick] ${mine.symbol}: limit order EXPIRED (mine ${mine.id})`);
+      } else if (check.status === 'cancelled') {
+        await updateMine(mine.id, { status: 'cancelled' });
+        mine.status = 'cancelled';
+      }
+    } catch (e: any) {
+      errors.push(`sync-waiting ${mine.id}: ${e?.message}`);
+    }
+  }
+
+  // 4b. Sync PENDING mines (market orders — check if filled)
   const pendingMines = allActiveMines.filter((m) => m.status === 'pending');
   for (const mine of pendingMines) {
     if (!mine.entryOrderId) continue;
@@ -132,8 +184,9 @@ export async function executeMineeTick(
   const openMines = allActiveMines.filter((m) => m.status === 'open');
   const monitorActions = monitorMines(openMines, liveContexts, profile);
 
-  // 6. Detect signals — AIC-first with TS fallback
+  // 6. Phase 6: Run continuous evaluator + detect signals
   let totalSignals = 0;
+  let evaluationCount = 0;
   const allSignalActions: MineAction[] = [];
   const macroEvents = await loaders.loadMacroEvents();
 
@@ -177,7 +230,6 @@ export async function executeMineeTick(
 
     let signals: DetectedSignal[] = [];
 
-    // Phase 5: Use ALL signal sources together
     const report = await loaders.loadReport(sym);
     if (!report) {
       console.log(`[mine-tick] ${sym}: no report, skipping signal detection`);
@@ -185,6 +237,44 @@ export async function executeMineeTick(
     const news = await loaders.loadNews(sym);
     const minesForAsset = allActiveMines.filter((m) => m.symbol === sym);
 
+    // Phase 6: Run continuous evaluator
+    if (report && live) {
+      try {
+        const memory = await memoryTickUpdate(sym, live);
+        const evalInput: EvaluatorInput = { symbol: sym, live, report, memory, riskProfile: profileName };
+        const evaluation = await evaluateContinuous(evalInput);
+        evaluationCount++;
+
+        // If evaluator recommends a trade, inject as a DetectedSignal
+        if (evaluation.shouldTrade && evaluation.direction && evaluation.confidence > 0) {
+          const evalSignal: DetectedSignal = {
+            symbol: sym,
+            signal: {
+              type: 'pattern_match',
+              confidence: evaluation.confidence,
+              sourcePattern: `evaluator:${evaluation.strategy}`,
+              macroClear: true,
+            },
+            suggestedStrategy: evaluation.strategy,
+            suggestedTimeframe: evaluation.timeframe,
+            suggestedDirection: evaluation.direction,
+            suggestedTp: evaluation.tp ?? live.price * (evaluation.direction === 'long' ? 1.025 : 0.975),
+            suggestedSl: evaluation.sl ?? live.price * (evaluation.direction === 'long' ? 0.985 : 1.015),
+            // Phase 6 limit order hints
+            suggestedOrderType: evaluation.orderType,
+            suggestedLimitPrice: evaluation.orderType === 'limit' ? (evaluation.suggestedEntry ?? undefined) : undefined,
+            suggestedLimitTimeoutMs: evaluation.timeoutMs ?? undefined,
+            evaluatorSource: evaluation.strategy,
+          };
+          signals.push(evalSignal);
+          console.log(`[mine-tick] ${sym}: evaluator signal — ${evaluation.direction} conf=${evaluation.confidence.toFixed(2)} order=${evaluation.orderType}${evaluation.orderType === 'limit' ? ' @' + evaluation.suggestedEntry?.toFixed(2) : ''}`);
+        }
+      } catch (e: any) {
+        errors.push(`evaluator ${sym}: ${e?.message}`);
+      }
+    }
+
+    // Detect signals from other sources (AIC + rules + trend + zones)
     if (report) {
       const input: SignalDetectorInput = {
         symbol: sym,
@@ -193,14 +283,16 @@ export async function executeMineeTick(
         news,
         macroEvents,
         activeMineDirections: minesForAsset
-          .filter((m) => m.status === 'open' || m.status === 'pending')
+          .filter((m) => m.status === 'open' || m.status === 'pending' || m.status === 'waiting')
           .map((m) => m.direction),
       };
-      // detectSignals now includes AIC signals internally
-      signals = await detectSignals(input);
+      const otherSignals = await detectSignals(input);
+      signals.push(...otherSignals);
 
       if (signals.length > 0) {
-        console.log(`[mine-tick] ${sym}: ${signals.length} signals found — best: ${signals[0].signal.type} conf=${signals[0].signal.confidence.toFixed(2)} dir=${signals[0].suggestedDirection}`);
+        // Sort all signals by confidence
+        signals.sort((a, b) => b.signal.confidence - a.signal.confidence);
+        console.log(`[mine-tick] ${sym}: ${signals.length} total signals — best: ${signals[0].signal.type} conf=${signals[0].signal.confidence.toFixed(2)} dir=${signals[0].suggestedDirection}`);
       }
     }
 
@@ -210,7 +302,7 @@ export async function executeMineeTick(
   }
 
   // 7. Execute all actions
-  const allActions = [...monitorActions, ...allSignalActions];
+  const allActions: MineActionP6[] = [...monitorActions, ...allSignalActions];
   let executed = 0;
 
   for (const action of allActions) {
@@ -231,25 +323,43 @@ export async function executeMineeTick(
             : parseFloat(qty.toFixed(2)); // stock: 2 decimals
           if (qty <= 0) { errors.push(`open-mine ${action.mine.symbol}: zero quantity`); break; }
 
-          const orderResult = await placeMarketOrder(
-            action.mine.symbol,
-            action.mine.direction,
-            qty,
-          );
+          // Phase 6: Choose between market and limit order
+          const useLimit = action.mine.entryOrderType === 'limit' && action.mine.limitPrice != null;
+
+          const orderResult = useLimit
+            ? await placeLimitOrder(action.mine.symbol, action.mine.direction, qty, action.mine.limitPrice!)
+            : await placeMarketOrder(action.mine.symbol, action.mine.direction, qty);
 
           if (orderResult.success) {
+            const isLimitOrder = useLimit && !orderResult.filledPrice;
             const mine = await createMine({
               ...action.mine,
               entryOrderId: orderResult.orderId,
               entryPrice: orderResult.filledPrice,
               entryTime: orderResult.filledPrice ? Date.now() : null,
-              status: orderResult.filledPrice ? 'open' : 'pending',
+              status: isLimitOrder ? 'waiting' : (orderResult.filledPrice ? 'open' : 'pending'),
+              limitCreatedAt: isLimitOrder ? Date.now() : action.mine.limitCreatedAt,
             });
-            mine; // created in Redis
+            if (isLimitOrder) {
+              console.log(`[mine-tick] ${action.mine.symbol}: LIMIT order placed @ ${action.mine.limitPrice} (mine ${mine.id})`);
+            }
             executed++;
           } else {
             errors.push(`open-mine ${action.mine.symbol}: ${orderResult.error}`);
           }
+          break;
+        }
+
+        case 'expire_mine': {
+          // Phase 6: Cancel limit order and expire the mine
+          const mine = allActiveMines.find((m) => m.id === action.mineId);
+          if (!mine) break;
+          if (mine.entryOrderId) {
+            await cancelOrder(mine.entryOrderId);
+          }
+          await updateMine(mine.id, { status: 'expired', outcome: 'limit_expired' });
+          console.log(`[mine-tick] ${mine.symbol}: mine ${mine.id} EXPIRED (limit not filled)`);
+          executed++;
           break;
         }
 
@@ -266,9 +376,11 @@ export async function executeMineeTick(
             const exitPrice = orderResult.filledPrice ?? currentPrice;
             const closed = await storeCloseMine(mine.id, action.reason, exitPrice);
 
-            // Save feedback for learning loop
+            // Save feedback for learning loop + asset memory
             if (closed) {
               await saveFeedback(closed);
+              // Phase 6: update asset memory
+              memoryOnMineClose(closed).catch(() => {});
               // Phase 4.5: send feedback to AIC
               if (closed.aicSetupName) {
                 sendAICFeedback(closed.symbol, {
@@ -363,5 +475,10 @@ export async function executeMineeTick(
     elapsedMs: Date.now() - start,
     aicOnline: anyAicOnline,
     regime: tickRegime,
+    // Phase 6
+    waitingMines: waitingMines.length,
+    limitOrdersFilled: limitFilled,
+    limitOrdersExpired: limitExpired,
+    evaluations: evaluationCount,
   };
 }

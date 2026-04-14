@@ -8,11 +8,17 @@ Nexus Pro è un **centro di comando autonomo per trading algoritmico** con AI mu
 
 **Architettura completa**: vedi `NEXUS-PRO-BLUEPRINT.md`
 
-## Stato attuale (aggiornato 2026-04-14)
+## Stato attuale (aggiornato 2026-04-13)
 
-### Phase 5: IN CORSO
+### Phase 6: COMPLETATA
 
-Completate Phase 4 (Mine Engine), 4.5 (AIC Integration), 4.6 (Full Backtester + AI-calibrated bots). In corso: integrazione migliorie da NeuralTrade (Genetic Optimizer, indicatori avanzati, Kelly Criterion).
+Completate Phase 4 (Mine Engine), 4.5 (AIC Integration), 4.6 (Full Backtester + AI-calibrated bots), 5 (NeuralTrade: GA Optimizer, 23 indicatori, Kelly Criterion). Phase 6 implementa l'AI Analytic Continua con:
+- Continuous Strategy Evaluator (30s cycle)
+- Mine programmate con ordini LIMIT + timer scadenza
+- Asset Memory (performance per strategia, regime history, best conditions)
+- Cron worker a due velocità (fast 30s + slow 60s)
+- Predictive Discovery: analizza 4 anni di storico per scoprire combinazioni predittive
+- 3 profili di rischio (Prudente/Moderato/Aggressivo) con combinazioni specifiche
 
 ### Infrastruttura produzione
 
@@ -63,14 +69,17 @@ AIC_SOL_URL=http://localhost:8082
 
 ## Architettura — Riassunto Rapido
 
-### Cron Worker (ogni 60s)
+### Cron Worker (Phase 6: dual speed)
 
 ```
-1. /api/cron/tick              → Legacy bot tick
-2. /api/cron/analytic-tick     → Queue worker (training)
-3. /api/cron/live-observer-tick → TUTTI gli asset in parallelo
-4. /api/cron/news-tick         → 1 asset round-robin
-5. /api/cron/mine-tick         → Mine Engine
+Fast tick (30s):
+1. /api/cron/live-observer-tick → TUTTI gli asset in parallelo
+2. /api/cron/mine-tick         → Evaluator + Mine Engine + Limit Orders
+
+Slow tick (60s):
+3. /api/cron/tick              → Legacy bot tick
+4. /api/cron/analytic-tick     → Queue worker (training)
+5. /api/cron/news-tick         → 1 asset round-robin
 6. /api/cron/auto-retrain-tick → Ogni 1h
 ```
 
@@ -94,6 +103,9 @@ nexus:bot:config                → MultiBotConfig[]
 nexus:broker:keys               → API keys (from UI)
 nexus:mine-engine:enabled       → "true"/"false"
 nexus:global:ticker_assets      → ticker selection (deprecated, now auto)
+# Phase 6
+nexus:strategy:live:{symbol}    → ContinuousEvaluation (60s TTL)
+nexus:memory:{symbol}           → AssetMemory (30d TTL)
 ```
 
 ## Regole operative
@@ -131,11 +143,11 @@ ssh root@167.172.229.159 "free -h"
 - Droplet: 3.8GB RAM, 2GB swap
 - PM2 cron tick: 60s, tutto deve completare in <50s
 
-## Prossimi step (Phase 5)
+## Prossimi step
 
-1. Genetic Optimizer per scoperta automatica strategie
-2. 10 nuovi indicatori (Ichimoku, PSAR, CCI, Keltner...)
-3. Kelly Criterion position sizing
-4. Walk-forward validation k-fold
-5. Calendario macro funzionante
-6. Multi-lingua (i18n)
+1. Walk-forward validation k-fold
+2. Calendario macro funzionante
+3. Multi-lingua (i18n)
+4. Dominio personalizzato + HTTPS
+5. Monitoring (Sentry error tracking)
+6. Alerting Telegram/Discord per trade

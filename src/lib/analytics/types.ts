@@ -65,6 +65,9 @@ export interface AnalyticReport {
   // Phase 4.6 — Full Backtest summary (top 5 ranked strategies)
   backtestSummary?: BacktestSummary;
 
+  // Phase 6 — Predictive profiles (3 risk tiers)
+  predictiveProfile?: import('@/lib/analytics/predictive-discovery').PredictiveProfile;
+
   // Phase 3 — Living Brain (tutti opzionali per retrocompat)
   liveContext?: LiveContext;
   newsDigest?: NewsDigest;
