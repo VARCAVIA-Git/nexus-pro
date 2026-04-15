@@ -1,10 +1,9 @@
 #!/usr/bin/env node
 // ═══════════════════════════════════════════════════════════════
-// NEXUS PRO — Cron Worker (Phase 6)
+// NexusOne — Cron Worker
 //
-// Two tick cycles:
-//   - Fast tick (30s): live observer + mine engine (continuous AI)
-//   - Slow tick (60s): bot tick, analytic, news, auto-retrain
+// Fast tick (30s): NexusOne signal/execution + live prices
+// Slow tick (60s): legacy infra (analytic queue, news)
 // ═══════════════════════════════════════════════════════════════
 
 const http = require('http');
@@ -67,46 +66,37 @@ function callTick(path, label) {
 let tickCounter = 0;
 
 /**
- * Fast tick (every 30s): live observer + mine engine.
- * These are the Phase 6 continuous AI components.
+ * Fast tick (every 30s): NexusOne signal/execution + live prices.
  */
 function fastTick() {
   tickCounter++;
-  // Live observer: all symbols in parallel
+  // NexusOne: signal evaluation + execution + monitoring
+  callTick('/api/nexusone/tick', 'nexusone');
+  // Live prices for dashboard
   callTick('/api/cron/live-observer-tick', 'live');
-  // Mine engine: continuous evaluator + limit order monitoring
-  callTick('/api/cron/mine-tick', 'mine');
 }
 
 /**
- * Slow tick (every 60s): bot tick, analytic queue, news, auto-retrain.
- * These are heavier operations that don't need 30s cadence.
+ * Slow tick (every 60s): infrastructure only.
+ * Discovery/retrain DISABLED per NexusOne manual.
  */
 function slowTick() {
-  const now = Math.floor(Date.now() / 1000);
-
+  // Legacy bot tick (kept for monitoring, no discovery)
   callTick('/api/cron/tick', 'tick');
-  callTick('/api/cron/analytic-tick', 'analytic');
+  // News (passive context only)
   callTick('/api/cron/news-tick', 'news');
-
-  // Auto-retrain: every 1h (3600s) with 60s window
-  if (now % 3600 < 60) {
-    callTick('/api/cron/auto-retrain-tick', 'auto-retrain');
-  }
+  // NOTE: analytic-tick and auto-retrain-tick DISABLED
+  // They are discovery-driven and not part of NexusOne live path
 }
 
 console.log('═══════════════════════════════════════');
-console.log('NEXUS PRO — Cron Worker (Phase 6)');
-console.log(`Fast tick: 30s on :${PORT} (live observer + mine engine)`);
-console.log(`Slow tick: 60s on :${PORT} (bot, analytic, news, retrain)`);
-console.log('  Fast:');
-console.log('  - /api/cron/live-observer-tick    (all symbols, 30s)');
-console.log('  - /api/cron/mine-tick             (evaluator + mines, 30s)');
-console.log('  Slow:');
-console.log('  - /api/cron/tick                  (legacy bot, 60s)');
-console.log('  - /api/cron/analytic-tick         (queue worker, 60s)');
-console.log('  - /api/cron/news-tick             (1 symbol round-robin, 60s)');
-console.log('  - /api/cron/auto-retrain-tick     (every 1h)');
+console.log('NexusOne — Cron Worker');
+console.log(`Fast tick: 30s on :${PORT}`);
+console.log('  - /api/nexusone/tick             (signal + execution)');
+console.log('  - /api/cron/live-observer-tick    (prices)');
+console.log(`Slow tick: 60s on :${PORT}`);
+console.log('  - /api/cron/tick                  (legacy bot monitor)');
+console.log('  - /api/cron/news-tick             (passive context)');
 console.log('═══════════════════════════════════════');
 console.log('');
 
