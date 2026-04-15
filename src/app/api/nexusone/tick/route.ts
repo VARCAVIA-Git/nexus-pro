@@ -2,6 +2,7 @@
 
 import { NextResponse } from 'next/server';
 import { nexusOneTick } from '@/lib/nexusone/worker-tick';
+import { fetchBars, fetchFunding, fetchLivePrice } from '@/lib/nexusone/data/market-data';
 import type { MarketBar } from '@/lib/nexusone/types';
 
 export const dynamic = 'force-dynamic';
@@ -13,61 +14,30 @@ function authorized(req: Request): boolean {
   return req.headers.get('x-cron-secret') === required;
 }
 
-// Minimal data fetchers — will be replaced with proper OKX adapter
-async function fetchBars(): Promise<MarketBar[]> {
-  // For now, use Alpaca 5m bars as proxy
-  const key = process.env.ALPACA_API_KEY ?? '';
-  const secret = process.env.ALPACA_API_SECRET ?? '';
-  if (!key) return [];
+const SYMBOL = 'BTC/USD';
 
-  try {
-    const end = new Date();
-    const start = new Date(end.getTime() - 7 * 86400000);
-    const params = new URLSearchParams({
-      timeframe: '5Min',
-      start: start.toISOString(),
-      end: end.toISOString(),
-      limit: '100',
-      symbols: 'BTC/USD',
-    });
-    const res = await fetch(`https://data.alpaca.markets/v1beta3/crypto/us/bars?${params}`, {
-      headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret },
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const bars = data.bars?.['BTC/USD'] ?? [];
-    return bars.map((b: any) => ({
-      venue: 'alpaca',
-      symbol: 'BTC-USD',
-      timeframe: '5m',
-      ts_open: new Date(b.t).getTime(),
-      ts_close: new Date(b.t).getTime() + 5 * 60_000,
-      open: b.o,
-      high: b.h,
-      low: b.l,
-      close: b.c,
-      volume: b.v,
-    }));
-  } catch { return []; }
+async function getBars(): Promise<MarketBar[]> {
+  const bars = await fetchBars(SYMBOL, '5m', 100);
+  return bars.map(b => ({
+    venue: 'alpaca',
+    symbol: 'BTC-USD',
+    timeframe: '5m',
+    ts_open: b.ts_open,
+    ts_close: b.ts_open + 5 * 60_000,
+    open: b.open,
+    high: b.high,
+    low: b.low,
+    close: b.close,
+    volume: b.volume,
+  }));
 }
 
-async function fetchFunding(): Promise<number[]> {
-  // Funding rate not available from Alpaca — return empty for now
-  // TODO: add OKX funding rate adapter
-  return [];
+async function getFunding(): Promise<number[]> {
+  return fetchFunding(SYMBOL, 100);
 }
 
-async function fetchPrice(): Promise<number> {
-  try {
-    const key = process.env.ALPACA_API_KEY ?? '';
-    const secret = process.env.ALPACA_API_SECRET ?? '';
-    const res = await fetch('https://data.alpaca.markets/v1beta3/crypto/us/latest/trades?symbols=BTC/USD', {
-      headers: { 'APCA-API-KEY-ID': key, 'APCA-API-SECRET-KEY': secret },
-    });
-    if (!res.ok) return 0;
-    const data = await res.json();
-    return data.trades?.['BTC/USD']?.p ?? 0;
-  } catch { return 0; }
+async function getPrice(): Promise<number> {
+  return fetchLivePrice(SYMBOL);
 }
 
 async function handler(req: Request): Promise<Response> {
@@ -75,7 +45,7 @@ async function handler(req: Request): Promise<Response> {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const result = await nexusOneTick(fetchBars, fetchFunding, fetchPrice);
+  const result = await nexusOneTick(getBars, getFunding, getPrice);
   return NextResponse.json(result);
 }
 

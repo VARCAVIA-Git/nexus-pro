@@ -1,0 +1,233 @@
+// ═══════════════════════════════════════════════════════════════
+// NexusOne — Order Router
+//
+// Thin wrapper over BrokerAdapter (Alpaca) for order routing.
+// All methods catch errors and return structured results.
+// The worker tick never crashes from a broker failure.
+// ═══════════════════════════════════════════════════════════════
+
+import { createDefaultBrokerAsync, AlpacaBroker } from '@/lib/broker';
+import type { BrokerAdapter } from '@/lib/broker/base';
+import type { BrokerOrder, BrokerBalance, Side } from '@/types';
+
+export interface OrderResult {
+  success: boolean;
+  orderId: string | null;
+  filledPrice: number | null;
+  filledQty: number | null;
+  status: BrokerOrder['status'] | null;
+  error: string | null;
+}
+
+export interface AccountInfo {
+  equity: number;
+  buyingPower: number;
+  cash: number;
+}
+
+/** Lazy-init singleton broker instance (async — resolves live keys from Redis). */
+let _broker: BrokerAdapter | null = null;
+let _brokerInitPromise: Promise<BrokerAdapter> | null = null;
+
+async function getBroker(): Promise<BrokerAdapter> {
+  if (_broker) return _broker;
+  if (!_brokerInitPromise) {
+    // Mine Engine always uses PAPER Alpaca for safe demo trading
+    // Users see results in the UI to verify AI works before going live
+    const key = process.env.ALPACA_API_KEY ?? '';
+    const secret = process.env.ALPACA_API_SECRET ?? '';
+    if (key && secret) {
+      _brokerInitPromise = Promise.resolve(new AlpacaBroker(key, secret, true)).then(b => { _broker = b; return b; });
+    } else {
+      _brokerInitPromise = createDefaultBrokerAsync().then(b => { _broker = b; return b; });
+    }
+  }
+  return _brokerInitPromise;
+}
+
+/** Reset broker instance (for testing). */
+export function _resetBroker(mock?: BrokerAdapter): void {
+  _broker = mock ?? null;
+}
+
+// ─── Order Placement ──────────────────────────────────────────
+
+/** Place a market order for mine entry/exit. */
+export async function placeMarketOrder(
+  symbol: string,
+  side: 'long' | 'short',
+  qty: number,
+): Promise<OrderResult> {
+  try {
+    const broker = await getBroker();
+    const brokerSide: Side = side === 'long' ? 'LONG' : 'SHORT';
+    const order = await broker.placeOrder({
+      symbol,
+      side: brokerSide,
+      type: 'market',
+      quantity: qty,
+    });
+    return {
+      success: true,
+      orderId: order.id,
+      filledPrice: order.filledPrice || null,
+      filledQty: order.filledQty || null,
+      status: order.status,
+      error: null,
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      orderId: null,
+      filledPrice: null,
+      filledQty: null,
+      status: null,
+      error: e?.message ?? String(e),
+    };
+  }
+}
+
+/** Place a limit order. */
+export async function placeLimitOrder(
+  symbol: string,
+  side: 'long' | 'short',
+  qty: number,
+  limitPrice: number,
+): Promise<OrderResult> {
+  try {
+    const broker = await getBroker();
+    const brokerSide: Side = side === 'long' ? 'LONG' : 'SHORT';
+    const order = await broker.placeOrder({
+      symbol,
+      side: brokerSide,
+      type: 'limit',
+      quantity: qty,
+      price: limitPrice,
+    });
+    return {
+      success: true,
+      orderId: order.id,
+      filledPrice: order.filledPrice || null,
+      filledQty: order.filledQty || null,
+      status: order.status,
+      error: null,
+    };
+  } catch (e: any) {
+    return {
+      success: false,
+      orderId: null,
+      filledPrice: null,
+      filledQty: null,
+      status: null,
+      error: e?.message ?? String(e),
+    };
+  }
+}
+
+// ─── Order Management ─────────────────────────────────────────
+
+/** Cancel an open order. */
+export async function cancelOrder(orderId: string): Promise<boolean> {
+  try {
+    const broker = await getBroker();
+    await broker.cancelOrder(orderId);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Get order status. */
+export async function getOrderStatus(orderId: string): Promise<BrokerOrder | null> {
+  try {
+    const broker = await getBroker();
+    return await broker.getOrder(orderId);
+  } catch {
+    return null;
+  }
+}
+
+// ─── Account Info ─────────────────────────────────────────────
+
+/** Get account info (equity, buying power). */
+export async function getAccountInfo(): Promise<AccountInfo | null> {
+  try {
+    const broker = await getBroker();
+    const balance: BrokerBalance = await broker.getBalance();
+    return {
+      equity: balance.total,
+      buyingPower: balance.available,
+      cash: balance.total - balance.locked,
+    };
+  } catch {
+    return null;
+  }
+}
+
+// ─── Close Position (market exit) ─────────────────────────────
+
+/** Close a mine position by placing an opposing market order. */
+export async function closePosition(
+  symbol: string,
+  direction: 'long' | 'short',
+  qty: number,
+): Promise<OrderResult> {
+  // To close a long, sell; to close a short, buy
+  const exitSide = direction === 'long' ? 'short' : 'long';
+  return placeMarketOrder(symbol, exitSide, qty);
+}
+
+// ─── Phase 6: Pending Limit Order Management ─────────────────
+
+export interface PendingOrderCheck {
+  mineId: string;
+  orderId: string;
+  status: 'filled' | 'expired' | 'still_pending' | 'cancelled' | 'error';
+  filledPrice?: number;
+  filledQty?: number;
+  error?: string;
+}
+
+/**
+ * Check status of a pending limit order.
+ * Returns structured result for mine-tick to act on.
+ */
+export async function checkPendingLimitOrder(
+  orderId: string,
+  mineId: string,
+  limitCreatedAt: number,
+  limitTimeoutMs: number,
+): Promise<PendingOrderCheck> {
+  try {
+    const order = await getOrderStatus(orderId);
+    if (!order) {
+      return { mineId, orderId, status: 'error', error: 'order not found' };
+    }
+
+    if (order.status === 'filled') {
+      return {
+        mineId,
+        orderId,
+        status: 'filled',
+        filledPrice: order.filledPrice ?? undefined,
+        filledQty: order.filledQty ?? undefined,
+      };
+    }
+
+    if (order.status === 'cancelled' || order.status === 'rejected') {
+      return { mineId, orderId, status: 'cancelled' };
+    }
+
+    // Check timeout
+    const elapsed = Date.now() - limitCreatedAt;
+    if (elapsed >= limitTimeoutMs) {
+      // Cancel the order
+      await cancelOrder(orderId);
+      return { mineId, orderId, status: 'expired' };
+    }
+
+    return { mineId, orderId, status: 'still_pending' };
+  } catch (e: any) {
+    return { mineId, orderId, status: 'error', error: e?.message ?? String(e) };
+  }
+}

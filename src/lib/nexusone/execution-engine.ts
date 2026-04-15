@@ -11,7 +11,7 @@
 import type { SignalEvent, OrderAttempt, TradeResult } from './types';
 import { getActiveStrategy, getSystemMode } from './strategy-registry';
 import { checkPreTrade, calculatePositionSize, evaluatePostTrade } from './risk-engine';
-import { placeMarketOrder, placeLimitOrder, getOrderStatus, cancelOrder, getAccountInfo } from '@/lib/mine/execution';
+import { placeMarketOrder, placeLimitOrder, getOrderStatus, cancelOrder, getAccountInfo } from './order-router';
 import { redisGet, redisSet, redisLpush } from '@/lib/db/redis';
 import { nanoid } from 'nanoid';
 

@@ -66,37 +66,37 @@ function callTick(path, label) {
 let tickCounter = 0;
 
 /**
- * Fast tick (every 30s): NexusOne signal/execution + live prices.
+ * Fast tick (every 30s): NexusOne signal/execution only.
  */
 function fastTick() {
   tickCounter++;
   // NexusOne: signal evaluation + execution + monitoring
   callTick('/api/nexusone/tick', 'nexusone');
-  // Live prices for dashboard
-  callTick('/api/cron/live-observer-tick', 'live');
 }
 
 /**
- * Slow tick (every 60s): infrastructure only.
- * Discovery/retrain DISABLED per NexusOne manual.
+ * Slow tick (every 60s): data health + monitoring only.
+ * ALL legacy discovery/mining/retrain paths DISABLED.
  */
 function slowTick() {
-  // Legacy bot tick (kept for monitoring, no discovery)
-  callTick('/api/cron/tick', 'tick');
-  // News (passive context only)
-  callTick('/api/cron/news-tick', 'news');
-  // NOTE: analytic-tick and auto-retrain-tick DISABLED
-  // They are discovery-driven and not part of NexusOne live path
+  // Health check (lightweight)
+  callTick('/api/health', 'health');
+  // NOTE: ALL legacy ticks disabled:
+  // - tick (discovery bot)
+  // - live-observer-tick (discovery regime)
+  // - analytic-tick (discovery training)
+  // - auto-retrain-tick (discovery retrain)
+  // - mine-tick (discovery mines)
+  // - news-tick (not needed for S1)
 }
 
 console.log('═══════════════════════════════════════');
-console.log('NexusOne — Cron Worker');
+console.log('NexusOne — Cron Worker (clean)');
 console.log(`Fast tick: 30s on :${PORT}`);
-console.log('  - /api/nexusone/tick             (signal + execution)');
-console.log('  - /api/cron/live-observer-tick    (prices)');
+console.log('  - /api/nexusone/tick     (signal + execution)');
 console.log(`Slow tick: 60s on :${PORT}`);
-console.log('  - /api/cron/tick                  (legacy bot monitor)');
-console.log('  - /api/cron/news-tick             (passive context)');
+console.log('  - /api/health            (health check)');
+console.log('Legacy ticks: ALL DISABLED');
 console.log('═══════════════════════════════════════');
 console.log('');
 
