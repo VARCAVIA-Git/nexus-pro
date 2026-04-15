@@ -13,8 +13,44 @@
 // with frozen parameters and tells you what would have happened.
 // ═══════════════════════════════════════════════════════════════
 
-import type { StrategyManifest, MarketBar } from '../types';
+import type { StrategyManifest, MarketBar, SignalEvent } from '../types';
 import { calcS1Features, evaluateS1Trigger } from '../strategies/s1';
+import { calcS2Features, evaluateS2Trigger, strategyS2 } from '../strategies/s2-momentum';
+import { calcS3Features, evaluateS3Trigger, strategyS3 } from '../strategies/s3-reversion';
+
+/** Generic signal evaluator — dispatches to the correct strategy. */
+function evaluateStrategy(
+  strategyId: string,
+  bars: MarketBar[],
+  funding: number[],
+  barIndex: number,
+): { signal: SignalEvent | null; direction: 'long' | 'short' } {
+  const barsSlice = bars.slice(0, barIndex + 1);
+
+  if (strategyId === 'S1_FUNDING_HIGH_AC_TRENDING_SHORT_V1') {
+    const fundingSlice = funding.slice(0, Math.min(funding.length, barIndex + 1));
+    if (fundingSlice.length < 10) return { signal: null, direction: 'short' };
+    const features = calcS1Features(barsSlice, fundingSlice);
+    if (!features) return { signal: null, direction: 'short' };
+    return { signal: evaluateS1Trigger(features), direction: 'short' };
+  }
+
+  if (strategyId === 'S2_MOMENTUM_BREAKOUT_V1') {
+    const features = calcS2Features(barsSlice);
+    if (!features) return { signal: null, direction: 'long' };
+    const sig = evaluateS2Trigger(features);
+    return { signal: sig, direction: features.breakout_direction ?? 'long' };
+  }
+
+  if (strategyId === 'S3_MEAN_REVERSION_OVEREXT_V1') {
+    const features = calcS3Features(barsSlice);
+    if (!features) return { signal: null, direction: 'long' };
+    const sig = evaluateS3Trigger(features);
+    return { signal: sig, direction: features.direction ?? 'long' };
+  }
+
+  return { signal: null, direction: 'long' };
+}
 
 // ─── Cost Model ──────────────────────────────────────────────
 
@@ -107,6 +143,7 @@ export function runBacktest(
   let entryBar = 0;
   let entryPrice = 0;
   let cooldownUntil = 0;
+  let tradeDirection: 'long' | 'short' = strategy.direction;
 
   const holdBars = strategy.execution.hold_bars;
   const cooldownBars = strategy.risk.cooldown_bars;
@@ -116,7 +153,7 @@ export function runBacktest(
     // Check if we need to exit (hold period expired)
     if (inPosition && (i - entryBar) >= holdBars) {
       const exitPrice = bars[i].close;
-      const grossBps = strategy.direction === 'short'
+      const grossBps = tradeDirection === 'short'
         ? ((entryPrice - exitPrice) / entryPrice) * 10000
         : ((exitPrice - entryPrice) / entryPrice) * 10000;
 
@@ -125,7 +162,7 @@ export function runBacktest(
         exit_bar: i,
         entry_price: entryPrice,
         exit_price: exitPrice,
-        direction: strategy.direction,
+        direction: tradeDirection,
         gross_pnl_bps: Math.round(grossBps * 100) / 100,
         cost_bps: rtCost,
         net_pnl_bps: Math.round((grossBps - rtCost) * 100) / 100,
@@ -148,30 +185,22 @@ export function runBacktest(
     );
     if (i < minBars) continue;
 
-    // Calculate features using the strategy's own functions
-    const barsSlice = bars.slice(0, i + 1);
-    // Use funding rates up to this point (no lookahead)
-    const fundingSlice = funding.slice(0, Math.min(funding.length, i + 1));
-
-    if (fundingSlice.length < 10) continue;
-
-    const features = calcS1Features(barsSlice, fundingSlice);
-    if (!features) continue;
-
-    // Evaluate trigger
-    const signal = evaluateS1Trigger(features);
+    // Evaluate strategy signal (no lookahead — only bars up to i)
+    const { signal, direction } = evaluateStrategy(strategy.id, bars, funding, i);
 
     if (signal) {
       inPosition = true;
       entryBar = i;
       entryPrice = bars[i].close;
+      // Override strategy direction if signal provides one (e.g. S2 is bidirectional)
+      tradeDirection = direction;
     }
   }
 
   // Close any open position at end
   if (inPosition) {
     const exitPrice = bars[bars.length - 1].close;
-    const grossBps = strategy.direction === 'short'
+    const grossBps = tradeDirection === 'short'
       ? ((entryPrice - exitPrice) / entryPrice) * 10000
       : ((exitPrice - entryPrice) / entryPrice) * 10000;
 
@@ -180,7 +209,7 @@ export function runBacktest(
       exit_bar: bars.length - 1,
       entry_price: entryPrice,
       exit_price: exitPrice,
-      direction: strategy.direction,
+      direction: tradeDirection,
       gross_pnl_bps: Math.round(grossBps * 100) / 100,
       cost_bps: rtCost,
       net_pnl_bps: Math.round((grossBps - rtCost) * 100) / 100,

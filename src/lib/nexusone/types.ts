@@ -27,7 +27,7 @@ export interface StrategyManifest {
     max_open_positions: number;
     cooldown_bars: number;
   };
-  status: 'draft' | 'paper' | 'live' | 'disabled';
+  status: 'draft' | 'research' | 'rejected' | 'paper' | 'live_candidate' | 'live' | 'retired' | 'disabled';
   research_metrics?: ResearchMetrics;
   notes?: string;
 }
