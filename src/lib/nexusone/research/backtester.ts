@@ -18,6 +18,7 @@ import { calcS1Features, evaluateS1Trigger } from '../strategies/s1';
 import { calcS2Features, evaluateS2Trigger, strategyS2 } from '../strategies/s2-momentum';
 import { calcS3Features, evaluateS3Trigger, strategyS3 } from '../strategies/s3-reversion';
 import { calcS4Features, evaluateS4Trigger, strategyS4 } from '../strategies/s4-vol-breakout';
+import { calcS5Features, evaluateS5Trigger, strategyS5 } from '../strategies/s5-rsi-bidir';
 
 /** Generic signal evaluator — dispatches to the correct strategy. */
 function evaluateStrategy(
@@ -55,6 +56,13 @@ function evaluateStrategy(
     if (!features) return { signal: null, direction: 'long' };
     const sig = evaluateS4Trigger(features);
     return { signal: sig, direction: features.breakout_direction ?? 'long' };
+  }
+
+  if (strategyId === 'S5_RSI_BIDIR_MAKER_V1') {
+    const features = calcS5Features(barsSlice);
+    if (!features) return { signal: null, direction: 'long' };
+    const sig = evaluateS5Trigger(features);
+    return { signal: sig, direction: features.direction ?? 'long' };
   }
 
   return { signal: null, direction: 'long' };

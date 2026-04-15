@@ -11,6 +11,7 @@
 
 import type { StrategyManifest } from './types';
 import { strategyS1 } from './strategies/s1';
+import { strategyS5 } from './strategies/s5-rsi-bidir';
 import { redisGetRaw, redisSetRaw } from '@/lib/db/redis';
 
 const KEY_ACTIVE = 'nexusone:strategy:active';
@@ -20,7 +21,8 @@ const KEY_MODE = 'nexusone:mode';
 
 /** All registered strategies. Add new ones here. */
 const STRATEGIES: Record<string, StrategyManifest> = {
-  [strategyS1.id]: strategyS1,
+  [strategyS1.id]: strategyS1,       // REJECTED — funding too rare
+  [strategyS5.id]: strategyS5,       // PAPER CANDIDATE — +1339 bps/60d, WF stable
 };
 
 /** Get a strategy by ID. */
