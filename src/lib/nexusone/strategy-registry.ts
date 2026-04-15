@@ -58,16 +58,28 @@ export async function clearActiveStrategy(): Promise<void> {
 
 // ─── System Mode ─────────────────────────────────────────────
 
-export type SystemMode = 'disabled' | 'paper' | 'live';
+export type SystemMode = 'disabled' | 'paper' | 'live_guarded';
 
 /** Get current system mode. */
 export async function getSystemMode(): Promise<SystemMode> {
   const val = await redisGetRaw(KEY_MODE);
-  if (val === 'paper' || val === 'live') return val;
+  if (val === 'paper') return 'paper';
+  if (val === 'live_guarded') return 'live_guarded';
   return 'disabled';
 }
 
-/** Set system mode. */
+/**
+ * Set system mode.
+ * live_guarded requires explicit approval — cannot be set programmatically
+ * without checking all gates first.
+ */
 export async function setSystemMode(mode: SystemMode): Promise<void> {
+  if (mode === 'live_guarded') {
+    // Gate check: only allow live if active strategy has paper track record
+    const strategy = await getActiveStrategy();
+    if (!strategy) throw new Error('Cannot enable live: no active strategy');
+    if (strategy.status !== 'live' && strategy.status !== 'paper')
+      throw new Error(`Cannot enable live: strategy status is ${strategy.status}`);
+  }
   await redisSetRaw(KEY_MODE, mode);
 }
