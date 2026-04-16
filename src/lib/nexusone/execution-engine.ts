@@ -58,7 +58,7 @@ export async function executeSignal(signal: SignalEvent): Promise<ExecutionResul
 
   // Calculate size
   const sizing = calculatePositionSize(account.equity);
-  const price = signal.feature_snapshot.close;
+  const price = signal.feature_snapshot.price ?? signal.feature_snapshot.close;
   if (!price || price <= 0) return { executed: false, order: null, reason: 'no price' };
 
   const quantity = sizing.notional / price;
