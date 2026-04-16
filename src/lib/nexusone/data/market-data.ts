@@ -1,19 +1,18 @@
 // ═══════════════════════════════════════════════════════════════
-// NexusOne Data — Market Data Adapter
+// NexusOne Data — Market Data Adapter (Multi-Provider)
 //
-// Single entry point for all market data needed by NexusOne.
-// Currently supports:
-//   - OHLCV bars: Alpaca Data API (crypto + stocks)
-//   - Funding rates: Binance public API
-//   - Live price: Alpaca latest trades
+// Provider priority:
+//   1. OKX (primary for crypto: candles, funding, price, OI)
+//   2. Alpaca (fallback for crypto, primary for stocks + execution)
 //
-// All functions return typed data or empty arrays on failure.
-// No exceptions thrown to callers — errors are logged and degraded.
+// All functions degrade gracefully — return empty on failure.
 // ═══════════════════════════════════════════════════════════════
 
-import { fetchFundingRateValues } from './binance-funding';
+import {
+  fetchOkxCandles, fetchOkxFundingHistory, fetchOkxFundingRate,
+  fetchOkxPrice, fetchOkxOpenInterest,
+} from './okx';
 
-/** Raw bar from data provider (before NexusOne enrichment). */
 export interface RawBar {
   ts_open: number;
   open: number;
@@ -22,6 +21,12 @@ export interface RawBar {
   close: number;
   volume: number;
 }
+
+function isCrypto(symbol: string): boolean {
+  return symbol.includes('/') || symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('SOL');
+}
+
+// ─── Alpaca (fallback for bars, primary for stocks) ──────────
 
 const ALPACA_DATA = 'https://data.alpaca.markets';
 
@@ -40,28 +45,13 @@ function tfToAlpaca(tf: string): string {
   return map[tf] ?? '5Min';
 }
 
-function isCrypto(symbol: string): boolean {
-  return symbol.includes('/') || symbol.includes('BTC') || symbol.includes('ETH') || symbol.includes('SOL');
-}
-
-// ─── OHLCV Bars ──────────────────────────────────────────────
-
-/**
- * Fetch OHLCV bars from Alpaca.
- * Returns oldest-first, with volume.
- */
-export async function fetchBars(
-  symbol: string,
-  timeframe: string = '5m',
-  limit: number = 200,
-): Promise<RawBar[]> {
+async function fetchAlpacaBars(symbol: string, timeframe: string, limit: number): Promise<RawBar[]> {
   const headers = alpacaHeaders();
   if (!headers['APCA-API-KEY-ID']) return [];
 
   const tf = tfToAlpaca(timeframe);
   const end = new Date();
-  const start = new Date(end.getTime() - limit * 5 * 60 * 1000 * 2); // 2x buffer
-
+  const start = new Date(end.getTime() - limit * 5 * 60_000 * 2);
   const crypto = isCrypto(symbol);
   const encoded = encodeURIComponent(symbol);
 
@@ -78,56 +68,22 @@ export async function fetchBars(
   });
 
   try {
-    const url = crypto
-      ? `${base}?${params}`
-      : `${base}?${params}`;
-    const res = await fetch(url, { headers });
-    if (!res.ok) {
-      console.error(`[DATA] Bars ${symbol} ${tf}: HTTP ${res.status}`);
-      return [];
-    }
+    const res = await fetch(`${base}?${params}`, { headers });
+    if (!res.ok) return [];
     const data = await res.json();
     const bars = crypto ? (data.bars?.[symbol] ?? []) : (data.bars ?? []);
-
     return bars.map((b: any) => ({
       ts_open: new Date(b.t).getTime(),
-      open: b.o,
-      high: b.h,
-      low: b.l,
-      close: b.c,
-      volume: b.v,
+      open: b.o, high: b.h, low: b.l, close: b.c, volume: b.v,
     }));
-  } catch (err: any) {
-    console.error(`[DATA] Bars error: ${err.message}`);
-    return [];
-  }
+  } catch { return []; }
 }
 
-// ─── Funding Rates ───────────────────────────────────────────
-
-/**
- * Fetch funding rate values from Binance.
- * Returns oldest-first array of rate values.
- */
-export async function fetchFunding(
-  symbol: string,
-  limit: number = 100,
-): Promise<number[]> {
-  return fetchFundingRateValues(symbol, limit);
-}
-
-// ─── Live Price ──────────────────────────────────────────────
-
-/**
- * Get the latest trade price from Alpaca.
- */
-export async function fetchLivePrice(symbol: string): Promise<number> {
+async function fetchAlpacaPrice(symbol: string): Promise<number> {
   const headers = alpacaHeaders();
   if (!headers['APCA-API-KEY-ID']) return 0;
-
   const crypto = isCrypto(symbol);
   const encoded = encodeURIComponent(symbol);
-
   try {
     const url = crypto
       ? `${ALPACA_DATA}/v1beta3/crypto/us/latest/trades?symbols=${encoded}`
@@ -135,12 +91,71 @@ export async function fetchLivePrice(symbol: string): Promise<number> {
     const res = await fetch(url, { headers });
     if (!res.ok) return 0;
     const data = await res.json();
-    return crypto
-      ? (data.trades?.[symbol]?.p ?? 0)
-      : (data.trade?.p ?? 0);
-  } catch {
-    return 0;
+    return crypto ? (data.trades?.[symbol]?.p ?? 0) : (data.trade?.p ?? 0);
+  } catch { return 0; }
+}
+
+// ─── Public API: Bars ────────────────────────────────────────
+
+/**
+ * Fetch OHLCV bars. OKX primary for crypto, Alpaca fallback.
+ */
+export async function fetchBars(
+  symbol: string,
+  timeframe: string = '5m',
+  limit: number = 100,
+): Promise<RawBar[]> {
+  if (isCrypto(symbol)) {
+    // Try OKX first
+    const okxBars = await fetchOkxCandles(symbol, timeframe, limit);
+    if (okxBars.length > 0) {
+      return okxBars.map(b => ({
+        ts_open: b.ts, open: b.open, high: b.high, low: b.low, close: b.close, volume: b.volume,
+      }));
+    }
+    console.warn(`[DATA] OKX candles failed for ${symbol}, falling back to Alpaca`);
   }
+  return fetchAlpacaBars(symbol, timeframe, limit);
+}
+
+// ─── Public API: Funding ─────────────────────────────────────
+
+/**
+ * Fetch funding rate history. OKX only (Binance geo-blocked).
+ */
+export async function fetchFunding(
+  symbol: string,
+  limit: number = 100,
+): Promise<number[]> {
+  return fetchOkxFundingHistory(symbol, limit);
+}
+
+/**
+ * Get current funding rate.
+ */
+export async function fetchCurrentFunding(symbol: string): Promise<number | null> {
+  return fetchOkxFundingRate(symbol);
+}
+
+// ─── Public API: Live Price ──────────────────────────────────
+
+/**
+ * Get latest price. OKX primary for crypto, Alpaca fallback.
+ */
+export async function fetchLivePrice(symbol: string): Promise<number> {
+  if (isCrypto(symbol)) {
+    const okxPrice = await fetchOkxPrice(symbol);
+    if (okxPrice > 0) return okxPrice;
+    console.warn(`[DATA] OKX price failed for ${symbol}, falling back to Alpaca`);
+  }
+  return fetchAlpacaPrice(symbol);
+}
+
+// ─── Public API: Open Interest ───────────────────────────────
+
+export async function fetchOpenInterest(symbol: string): Promise<number> {
+  const oi = await fetchOkxOpenInterest(symbol);
+  return oi?.oiCcy ?? 0;
 }
 
 // ─── Data Quality ────────────────────────────────────────────
@@ -149,23 +164,23 @@ export interface DataQuality {
   bars_count: number;
   bars_expected: number;
   bars_ok: boolean;
+  bars_source: string;
   funding_count: number;
   funding_ok: boolean;
   latest_bar_age_s: number;
   stale: boolean;
   price: number;
   price_ok: boolean;
+  price_source: string;
+  open_interest: number;
 }
 
-/**
- * Check data quality for a symbol.
- * Returns a quality report — used by health checks.
- */
 export async function checkDataQuality(symbol: string): Promise<DataQuality> {
-  const [bars, funding, price] = await Promise.all([
+  const [bars, funding, price, oi] = await Promise.all([
     fetchBars(symbol, '5m', 50),
     fetchFunding(symbol, 30),
     fetchLivePrice(symbol),
+    fetchOpenInterest(symbol),
   ]);
 
   const now = Date.now();
@@ -173,15 +188,22 @@ export async function checkDataQuality(symbol: string): Promise<DataQuality> {
     ? Math.round((now - bars[bars.length - 1].ts_open) / 1000)
     : Infinity;
 
+  // Detect source (OKX timestamps are round ms, Alpaca are ISO-derived)
+  const barsSource = bars.length > 0 && bars[0].ts_open % 1000 === 0 ? 'OKX' : 'Alpaca';
+  const priceSource = price > 0 ? (isCrypto(symbol) ? 'OKX' : 'Alpaca') : 'none';
+
   return {
     bars_count: bars.length,
     bars_expected: 50,
     bars_ok: bars.length >= 30,
+    bars_source: barsSource,
     funding_count: funding.length,
     funding_ok: funding.length >= 10,
     latest_bar_age_s: latestBarAge,
-    stale: latestBarAge > 600, // stale if last bar > 10 min old
+    stale: latestBarAge > 600,
     price,
     price_ok: price > 0,
+    price_source: priceSource,
+    open_interest: oi,
   };
 }
