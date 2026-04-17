@@ -85,6 +85,8 @@ export class AlpacaBroker implements BrokerAdapter {
     const res = await fetch(url, {
       ...options,
       headers: { ...this.headers, ...options.headers },
+      cache: 'no-store',
+      next: { revalidate: 0 },
     });
 
     if (!res.ok) {
@@ -97,7 +99,7 @@ export class AlpacaBroker implements BrokerAdapter {
 
   private async dataRequest<T>(path: string): Promise<T> {
     const url = `${ALPACA_DATA_URL}${path}`;
-    const res = await fetch(url, { headers: this.headers });
+    const res = await fetch(url, { headers: this.headers, cache: 'no-store', next: { revalidate: 0 } });
 
     if (!res.ok) {
       const body = await res.text().catch(() => '');

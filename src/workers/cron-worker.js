@@ -47,6 +47,11 @@ function callTick(path, label) {
         } else if (label === 'mine') {
           const p6 = d.waitingMines != null ? ` waiting=${d.waitingMines} filled=${d.limitOrdersFilled ?? 0} expired=${d.limitOrdersExpired ?? 0} evals=${d.evaluations ?? 0}` : '';
           console.log(`[${ts}] Mine: ${res.statusCode} | enabled=${d.enabled ?? false} aic=${d.aicOnline ? 'ON' : 'off'}${d.regime ? ' regime=' + d.regime : ''} monitored=${d.monitored ?? 0} signals=${d.signalsDetected ?? 0} actions=${d.actionsExecuted ?? 0}${p6} ${d.elapsedMs ?? 0}ms${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}${d.errors?.length ? ' errors=' + d.errors.join(';') : ''}`);
+        } else if (label === 'nexusone-v2') {
+          const regime = d.regime ?? '-';
+          const skipped = d.skipped && d.skipped.length ? ` [skipped: ${d.skipped.length}]` : '';
+          const errs = d.errors && d.errors.length ? ` errs=${d.errors.length}` : '';
+          console.log(`[${ts}] v2:${res.statusCode} mode=${d.mode ?? '-'} regime=${regime} eval=${d.evaluated ?? 0} sig=${d.signals ?? 0} exec=${d.executed ?? 0} exits=${d.exits ?? 0}${skipped}${errs} ${d.elapsedMs ?? 0}ms`);
         } else if (label === 'auto-retrain') {
           console.log(`[${ts}] AutoRetrain: ${res.statusCode} | scheduled=${d.scheduled?.scheduled ?? 'none'} reason=${d.scheduled?.reason ?? '-'} incr=${d.incrementalResult ? (d.incrementalResult.skipped ? 'skipped:'+d.incrementalResult.reason : 'done:'+d.incrementalResult.symbol) : 'none'}${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}`);
         } else {
@@ -70,8 +75,10 @@ let tickCounter = 0;
  */
 function fastTick() {
   tickCounter++;
-  // NexusOne: signal evaluation + execution + monitoring
+  // NexusOne v1 (legacy, will no-op when v2 takes over)
   callTick('/api/nexusone/tick', 'nexusone');
+  // NexusOne v2 — no-op until mode is flipped to 'paper' via /api/nexusone/v2/mode
+  callTick('/api/nexusone/v2/tick', 'nexusone-v2');
 }
 
 /**
@@ -93,7 +100,8 @@ function slowTick() {
 console.log('═══════════════════════════════════════');
 console.log('NexusOne — Cron Worker (clean)');
 console.log(`Fast tick: 30s on :${PORT}`);
-console.log('  - /api/nexusone/tick     (signal + execution)');
+console.log('  - /api/nexusone/tick     (legacy v1 — orders likely rejected)');
+console.log('  - /api/nexusone/v2/tick  (v2 — disabled until mode=paper)');
 console.log(`Slow tick: 60s on :${PORT}`);
 console.log('  - /api/health            (health check)');
 console.log('Legacy ticks: ALL DISABLED');

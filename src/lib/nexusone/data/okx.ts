@@ -10,6 +10,13 @@
 
 const OKX_BASE = 'https://www.okx.com/api/v5';
 
+// All OKX fetches MUST bypass Next.js Data Cache — stale data = wrong trades.
+const NO_CACHE = {
+  cache: 'no-store' as RequestCache,
+  next: { revalidate: 0 },
+  headers: { 'Cache-Control': 'no-cache' },
+};
+
 function toOkxInstId(symbol: string): string {
   const map: Record<string, string> = {
     'BTC/USD': 'BTC-USDT-SWAP',
@@ -51,7 +58,7 @@ export async function fetchOkxCandles(
   const url = `${OKX_BASE}/market/candles?instId=${instId}&bar=${bar}&limit=${limit}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) { console.error(`[OKX] candles ${instId}: HTTP ${res.status}`); return []; }
     const data = await res.json();
     if (data.code !== '0') { console.error(`[OKX] candles error: ${data.msg}`); return []; }
@@ -78,7 +85,7 @@ export async function fetchOkxFundingRate(symbol: string): Promise<number | null
   const url = `${OKX_BASE}/public/funding-rate?instId=${instId}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) return null;
     const data = await res.json();
     if (data.code !== '0' || !data.data?.length) return null;
@@ -94,7 +101,7 @@ export async function fetchOkxFundingHistory(
   const url = `${OKX_BASE}/public/funding-rate-history?instId=${instId}&limit=${limit}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) return [];
     const data = await res.json();
     if (data.code !== '0') return [];
@@ -110,7 +117,7 @@ export async function fetchOkxPrice(symbol: string): Promise<number> {
   const url = `${OKX_BASE}/market/ticker?instId=${instId}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) return 0;
     const data = await res.json();
     if (data.code !== '0' || !data.data?.length) return 0;
@@ -130,7 +137,7 @@ export async function fetchOkxOpenInterest(symbol: string): Promise<OkxOpenInter
   const url = `${OKX_BASE}/public/open-interest?instType=SWAP&instId=${instId}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) return null;
     const data = await res.json();
     if (data.code !== '0' || !data.data?.length) return null;

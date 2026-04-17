@@ -68,7 +68,7 @@ async function fetchAlpacaBars(symbol: string, timeframe: string, limit: number)
   });
 
   try {
-    const res = await fetch(`${base}?${params}`, { headers });
+    const res = await fetch(`${base}?${params}`, { headers, cache: 'no-store', next: { revalidate: 0 } });
     if (!res.ok) return [];
     const data = await res.json();
     const bars = crypto ? (data.bars?.[symbol] ?? []) : (data.bars ?? []);
@@ -88,7 +88,7 @@ async function fetchAlpacaPrice(symbol: string): Promise<number> {
     const url = crypto
       ? `${ALPACA_DATA}/v1beta3/crypto/us/latest/trades?symbols=${encoded}`
       : `${ALPACA_DATA}/v2/stocks/${encoded}/trades/latest`;
-    const res = await fetch(url, { headers });
+    const res = await fetch(url, { headers, cache: 'no-store', next: { revalidate: 0 } });
     if (!res.ok) return 0;
     const data = await res.json();
     return crypto ? (data.trades?.[symbol]?.p ?? 0) : (data.trade?.p ?? 0);

@@ -17,6 +17,12 @@ export interface FundingRate {
 
 const BINANCE_FAPI = 'https://fapi.binance.com';
 
+const NO_CACHE = {
+  cache: 'no-store' as RequestCache,
+  next: { revalidate: 0 },
+  headers: { 'Cache-Control': 'no-cache' },
+};
+
 /**
  * Map NexusOne symbols to Binance futures symbols.
  * Alpaca uses BTC/USD, Binance uses BTCUSDT.
@@ -48,7 +54,7 @@ export async function fetchFundingRates(
   const url = `${BINANCE_FAPI}/fapi/v1/fundingRate?symbol=${binanceSymbol}&limit=${limit}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetch(url, NO_CACHE);
     if (!res.ok) {
       console.error(`[BINANCE] Funding ${binanceSymbol}: HTTP ${res.status}`);
       return [];
