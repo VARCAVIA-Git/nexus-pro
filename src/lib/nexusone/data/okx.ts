@@ -11,9 +11,9 @@
 const OKX_BASE = 'https://www.okx.com/api/v5';
 
 // All OKX fetches MUST bypass Next.js Data Cache — stale data = wrong trades.
-const NO_CACHE = {
-  cache: 'no-store' as RequestCache,
-  next: { revalidate: 0 },
+// Next 14 accepts either `cache: 'no-store'` OR `next.revalidate: 0`, not both.
+const NO_CACHE: RequestInit = {
+  cache: 'no-store',
   headers: { 'Cache-Control': 'no-cache' },
 };
 
@@ -156,7 +156,9 @@ export async function fetchOkxTakerBuyRatio(
   symbol: string,
   period: '5m' | '1H' | '1D' = '5m',
 ): Promise<number | null> {
-  const instType = 'SWAP';
+  // OKX rubik taker-volume only accepts instType in {SPOT, CONTRACTS}.
+  // SPOT reflects cash-market retail flow; swap/perp data isn't exposed here.
+  const instType = 'SPOT';
   const ccy = symbol.includes('ETH') ? 'ETH' : symbol.includes('SOL') ? 'SOL' : 'BTC';
   const url = `${OKX_BASE}/rubik/stat/taker-volume?ccy=${ccy}&instType=${instType}&period=${period}`;
 
