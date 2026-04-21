@@ -47,6 +47,9 @@ function callTick(path, label) {
         } else if (label === 'mine') {
           const p6 = d.waitingMines != null ? ` waiting=${d.waitingMines} filled=${d.limitOrdersFilled ?? 0} expired=${d.limitOrdersExpired ?? 0} evals=${d.evaluations ?? 0}` : '';
           console.log(`[${ts}] Mine: ${res.statusCode} | enabled=${d.enabled ?? false} aic=${d.aicOnline ? 'ON' : 'off'}${d.regime ? ' regime=' + d.regime : ''} monitored=${d.monitored ?? 0} signals=${d.signalsDetected ?? 0} actions=${d.actionsExecuted ?? 0}${p6} ${d.elapsedMs ?? 0}ms${d.skipped ? ' [skipped: ' + d.skipped + ']' : ''}${d.errors?.length ? ' errors=' + d.errors.join(';') : ''}`);
+        } else if (label === 'feature-log') {
+          const errs = d.errors && d.errors.length ? ` errs=${d.errors.length}` : '';
+          console.log(`[${ts}] feat-log:${res.statusCode} ins=${d.rows_inserted ?? 0} bf=${d.rows_backfilled ?? 0}${errs} ${d.elapsed_ms ?? 0}ms`);
         } else if (label === 'nexusone-v2') {
           const regime = d.regime ?? '-';
           const skipped = d.skipped && d.skipped.length ? ` [skipped: ${d.skipped.length}]` : '';
@@ -88,6 +91,8 @@ function fastTick() {
 function slowTick() {
   // Health check (lightweight)
   callTick('/api/health', 'health');
+  // Passive multi-dimensional feature logger — runs even with v2 mode=disabled
+  callTick('/api/nexusone/v2/feature-log', 'feature-log');
   // NOTE: ALL legacy ticks disabled:
   // - tick (discovery bot)
   // - live-observer-tick (discovery regime)
@@ -104,6 +109,7 @@ console.log('  - /api/nexusone/tick     (legacy v1 — orders likely rejected)')
 console.log('  - /api/nexusone/v2/tick  (v2 — disabled until mode=paper)');
 console.log(`Slow tick: 60s on :${PORT}`);
 console.log('  - /api/health            (health check)');
+console.log('  - /api/nexusone/v2/feature-log (passive dataset logger)');
 console.log('Legacy ticks: ALL DISABLED');
 console.log('═══════════════════════════════════════');
 console.log('');

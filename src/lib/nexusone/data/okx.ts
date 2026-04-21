@@ -147,3 +147,59 @@ export async function fetchOkxOpenInterest(symbol: string): Promise<OkxOpenInter
     };
   } catch { return null; }
 }
+
+// ─── Taker Buy Ratio (order flow) ─────────────────────────────
+// OKX rubik stats: aggregated taker buy/sell volume over a bucket.
+// Returns buyVol / (buyVol + sellVol) ∈ [0,1], or null on error.
+
+export async function fetchOkxTakerBuyRatio(
+  symbol: string,
+  period: '5m' | '1H' | '1D' = '5m',
+): Promise<number | null> {
+  const instType = 'SWAP';
+  const ccy = symbol.includes('ETH') ? 'ETH' : symbol.includes('SOL') ? 'SOL' : 'BTC';
+  const url = `${OKX_BASE}/rubik/stat/taker-volume?ccy=${ccy}&instType=${instType}&period=${period}`;
+
+  try {
+    const res = await fetch(url, NO_CACHE);
+    if (!res.ok) {
+      console.warn(`[okx/taker-volume] HTTP ${res.status}`);
+      return null;
+    }
+    const json = await res.json();
+    if (json.code !== '0' || !json.data?.length) {
+      console.warn(`[okx/taker-volume] API code=${json.code} msg=${json.msg}`);
+      return null;
+    }
+    // json.data rows: [ts, sellVol, buyVol] — newest first.
+    const latest = json.data[0];
+    const sellVol = parseFloat(latest[1]);
+    const buyVol = parseFloat(latest[2]);
+    const total = sellVol + buyVol;
+    if (total <= 0) return null;
+    return buyVol / total;
+  } catch (err) {
+    console.error('[okx/taker-volume] fetch failed:', err);
+    return null;
+  }
+}
+
+// ─── Predicted (next) Funding Rate ────────────────────────────
+// The /public/funding-rate endpoint also returns the *predicted*
+// next funding rate alongside the current settled one; that is
+// more actionable for derivatives strategies.
+
+export async function fetchOkxPredictedFunding(symbol: string): Promise<number | null> {
+  const instId = toOkxInstId(symbol);
+  const url = `${OKX_BASE}/public/funding-rate?instId=${instId}`;
+  try {
+    const res = await fetch(url, NO_CACHE);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (json.code !== '0' || !json.data?.length) return null;
+    const predicted = parseFloat(json.data[0].nextFundingRate);
+    return Number.isFinite(predicted) ? predicted : null;
+  } catch {
+    return null;
+  }
+}
