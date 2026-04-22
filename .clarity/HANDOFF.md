@@ -17,4 +17,15 @@
 
 ### Decisioni in sospeso:
 - Quale progetto lavorare?
-- Quali sono le priorità dell'utente?Popolare CONTEXT.md con informazioni del progettoCreare primo backlog di taskIniziare esecuzione
+- Quali sono le priorità dell'utente?Popolare CONTEXT.md con informazioni del progettoCreare primo backlog di taskIniziare esecuzione### Cosa deve fare la PROSSIMA sessione:
+1. [P0] Popolare CONTEXT.md con informazioni del progetto
+2. [P1] Creare primo backlog di task
+3. [P1] Iniziare esecuzione del progetto
+
+### Contesto critico:
+- Questo è il primo ciclo in assoluto del sistema
+- Nessuna memoria pregressa
+
+### Decisioni in sospeso:
+- Quale progetto lavorare?
+- Quali sono le priorità dell'utente?148. Aggiorna anche HANDOFF.md, COMPLETED.md, BACKLOG.md, eval/LAST_EVAL.md

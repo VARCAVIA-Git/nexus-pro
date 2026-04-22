@@ -19,4 +19,7 @@
 - File modificati: 0
 
 ## Note
-In esecuzione del ciclo #93. In attesa di completare TASK-002.
+In esecuzione del ciclo #93. In attesa di completare TASK-002.148. Chiudi — OBBLIGATORIO sovrascrivere STATE.md con contenuto FRESCO che rifletta:
+- Cosa è concretamente fatto nel ciclo
+- Blocchi correnti (se ci sono)
+- Prossimo passo
