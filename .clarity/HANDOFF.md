@@ -29,3 +29,7 @@
 ### Decisioni in sospeso:
 - Quale progetto lavorare?
 - Quali sono le priorità dell'utente?148. Aggiorna anche HANDOFF.md, COMPLETED.md, BACKLOG.md, eval/LAST_EVAL.md
+### Cosa deve fare la PROSSIMA sessione:
+1. [P0] Definire il progetto con l'utente
+2. [P1] Popolare CONTEXT.md con dettagli progetto
+3. [P1] Iniziare esecuzione
