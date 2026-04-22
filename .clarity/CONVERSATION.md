@@ -1,0 +1,1 @@
+Ciclo #8 iniziato. Prossimo passo: eseguire task #TASK-002 (popolare CONTEXT.md con dettagli progetto)

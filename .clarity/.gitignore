@@ -1,0 +1,7 @@
+logs/*.log
+context/cycle_*_prompt.md
+context/history/
+.daemon.pid
+.stop_daemon
+.cycle_count
+backups/
