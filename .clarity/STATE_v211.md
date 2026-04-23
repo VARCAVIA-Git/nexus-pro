@@ -23,5 +23,3 @@ In esecuzione del ciclo #93. In attesa di completare TASK-002.148. Chiudi — OB
 - Cosa è concretamente fatto nel ciclo
 - Blocchi correnti (se ci sono)
 - Prossimo passo
-## Status: 🟡 IN PROGRESS
-

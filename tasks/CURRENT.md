@@ -1,5 +1,1 @@
-## Task Corrente
-
-**Attivo**: TASK-002
-
-## Prossimo: TASK-003
+Sviluppare strategie base (Bollinger, RSI). Priorità: basso.
