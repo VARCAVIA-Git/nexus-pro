@@ -19,3 +19,9 @@ setup.log
 # Runtime logs
 logs/*
 !logs/.gitkeep
+
+.env
+.env*
+# Alpaca credentials
+.env
+.env.local.v3-state/
