@@ -1,0 +1,142 @@
+{
+  "per_asset": {
+    "BTC": {
+      "always_on": {
+        "apr_pct": -1.7235970950197566,
+        "max_dd_pct": 0.51131687003194,
+        "sharpe": -0.19187649264152856,
+        "trades": 1,
+        "final_pct": -0.43916309544339,
+        "calmar": -3.370898157363926,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 0.0,
+        "max_dd_pct": 0.0,
+        "sharpe": 0,
+        "trades": 0,
+        "final_pct": 0.0,
+        "calmar": 0,
+        "name": "regime(ema=3,in=1.0,out=-0.5)"
+      }
+    },
+    "ETH": {
+      "always_on": {
+        "apr_pct": -1.452167497094842,
+        "max_dd_pct": 0.4,
+        "sharpe": 0.14983086539635465,
+        "trades": 1,
+        "final_pct": -0.37000432117758986,
+        "calmar": -3.630418742737105,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 0.02813277406242779,
+        "max_dd_pct": 0.39358871745081997,
+        "sharpe": 0.002208569256903629,
+        "trades": 1,
+        "final_pct": 0.007168076678919958,
+        "calmar": 0.07147759276393145,
+        "name": "regime(ema=3,in=0.5,out=-2.0)"
+      }
+    },
+    "SOL": {
+      "always_on": {
+        "apr_pct": -1.334239947040814,
+        "max_dd_pct": 0.63627968763177,
+        "sharpe": 0.26097767493304624,
+        "trades": 1,
+        "final_pct": -0.33995702760217994,
+        "calmar": -2.096939400983943,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 0.23565252607746576,
+        "max_dd_pct": 0.4,
+        "sharpe": 0.29627337036678575,
+        "trades": 1,
+        "final_pct": 0.06004297239782004,
+        "calmar": 0.5891313151936644,
+        "name": "regime(ema=3,in=0.5,out=-1.0)"
+      }
+    },
+    "BNB": {
+      "always_on": {
+        "apr_pct": 0.012873646977242923,
+        "max_dd_pct": 0.46422924180595,
+        "sharpe": 1.9324250346284555,
+        "trades": 1,
+        "final_pct": 0.003280134709270115,
+        "calmar": 0.02773122806129513,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 1.721148245914101,
+        "max_dd_pct": 0.39056564629814994,
+        "sharpe": 2.0768930751739303,
+        "trades": 1,
+        "final_pct": 0.43853914210962025,
+        "calmar": 4.406809104250329,
+        "name": "regime(ema=6,in=0.5,out=-2.0)"
+      }
+    },
+    "XRP": {
+      "always_on": {
+        "apr_pct": -2.59602052899106,
+        "max_dd_pct": 0.7122577571543799,
+        "sharpe": -1.2466728012155284,
+        "trades": 1,
+        "final_pct": -0.6614518060169003,
+        "calmar": -3.6447767720532944,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 0.0,
+        "max_dd_pct": 0.0,
+        "sharpe": 0,
+        "trades": 0,
+        "final_pct": 0.0,
+        "calmar": 0,
+        "name": "regime(ema=3,in=1.0,out=-0.5)"
+      }
+    },
+    "ADA": {
+      "always_on": {
+        "apr_pct": -1.4275008608327906,
+        "max_dd_pct": 0.4818661884203799,
+        "sharpe": 0.15858412389764145,
+        "trades": 1,
+        "final_pct": -0.36371939741766995,
+        "calmar": -2.9624424687532533,
+        "name": "always_on"
+      },
+      "best_regime": {
+        "apr_pct": 0.07507920186172312,
+        "max_dd_pct": 0.4990170217612298,
+        "sharpe": 0.03895069090219869,
+        "trades": 1,
+        "final_pct": 0.019129769241480143,
+        "calmar": 0.15045419011307212,
+        "name": "regime(ema=9,in=0.5,out=-2.0)"
+      }
+    }
+  },
+  "portfolio_all6": {
+    "apr_pct": -1.4201087136670054,
+    "max_dd_pct": 0.4,
+    "sharpe": 0.19236000474049872,
+    "trades": 1,
+    "final_pct": -0.3618359188247438,
+    "calmar": -3.5502717841675135,
+    "name": "portfolio_always_on"
+  },
+  "portfolio_best3": {
+    "apr_pct": -0.9555982369834627,
+    "max_dd_pct": 0.4119310655512598,
+    "sharpe": 0.766720428101399,
+    "trades": 1,
+    "final_pct": -0.24348119462866308,
+    "calmar": -2.3198013378880504,
+    "name": "portfolio_always_on"
+  }
+}
