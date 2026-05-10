@@ -29,6 +29,7 @@ import {
 import {
   getMode, loadTuples, saveTuples, loadPortfolio, savePortfolio,
   appendClosedTrades, isLiveApproved, getStateDir,
+  writeHeartbeat, appendEquitySnapshot,
 } from '../src/lib/nexusone/v3/persistence';
 import { precompute } from '../src/lib/nexusone/v3/indicators';
 import { fetchOkxBars } from '../src/lib/nexusone/v3/data-fetch';
@@ -127,8 +128,24 @@ async function tickAll(seen: SeenBars) {
   await saveTuples(tuples);
   await savePortfolio(portfolio);
 
+  const active = tuples.all().filter((t) => t.active).length;
+  const now = Date.now();
+  writeHeartbeat({
+    ts: now, mode,
+    equity: portfolio.equity, peakEquity: portfolio.peakEquity,
+    drawdownPct: portfolio.maxDrawdownPct,
+    openCount: portfolio.open.length, closedCount: portfolio.closed.length,
+    activeTuples: active, totalTuples: tuples.size(),
+  });
+  appendEquitySnapshot({
+    ts: now,
+    equity: portfolio.equity, peakEquity: portfolio.peakEquity,
+    drawdownPct: portfolio.maxDrawdownPct,
+    openCount: portfolio.open.length, closedCount: portfolio.closed.length,
+    activeTuples: active,
+  });
+
   if (totalExits || totalEntries) {
-    const active = tuples.all().filter((t) => t.active).length;
     logLine(`TICK summary mode=${mode} exits=${totalExits} entries=${totalEntries} skip=${totalSkipped} equity=$${portfolio.equity.toFixed(0)} open=${portfolio.open.length} active_tuples=${active}/${tuples.size()}`);
   }
   return { mode, totalExits, totalEntries, placements };

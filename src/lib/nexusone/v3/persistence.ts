@@ -22,8 +22,20 @@ export type NexusV3Mode = 'disabled' | 'paper' | 'live_micro' | 'live';
 const STATE_DIR = process.env.NEXUS_V3_STATE_DIR
   ?? path.join(process.cwd(), '.v3-state');
 
+let dirReady = false;
 function ensureDir() {
   fs.mkdirSync(STATE_DIR, { recursive: true });
+  if (!dirReady) {
+    // Clean orphan .tmp files from previous crashes
+    try {
+      for (const f of fs.readdirSync(STATE_DIR)) {
+        if (f.endsWith('.tmp')) {
+          try { fs.unlinkSync(path.join(STATE_DIR, f)); } catch {}
+        }
+      }
+    } catch {}
+    dirReady = true;
+  }
 }
 
 function readJson<T>(file: string, fallback: T): T {
@@ -39,9 +51,26 @@ function readJson<T>(file: string, fallback: T): T {
 function writeJson(file: string, data: unknown) {
   ensureDir();
   const p = path.join(STATE_DIR, file);
-  const tmp = p + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, p);
+  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`;
+  const payload = JSON.stringify(data, null, 2);
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const fd = fs.openSync(tmp, 'w');
+      try {
+        fs.writeSync(fd, payload);
+        fs.fsyncSync(fd);
+      } finally {
+        fs.closeSync(fd);
+      }
+      fs.renameSync(tmp, p);
+      return;
+    } catch (err) {
+      lastErr = err;
+      try { fs.unlinkSync(tmp); } catch {}
+    }
+  }
+  throw lastErr;
 }
 
 export async function getMode(): Promise<NexusV3Mode> {
@@ -93,4 +122,33 @@ export async function isLiveApproved(): Promise<boolean> {
 
 export function getStateDir(): string {
   return STATE_DIR;
+}
+
+export interface HeartbeatV3 {
+  ts: number;
+  mode: NexusV3Mode;
+  equity: number;
+  peakEquity: number;
+  drawdownPct: number;
+  openCount: number;
+  closedCount: number;
+  activeTuples: number;
+  totalTuples: number;
+}
+
+export function writeHeartbeat(h: HeartbeatV3): void {
+  writeJson('heartbeat.json', h);
+}
+
+export function appendEquitySnapshot(row: {
+  ts: number; equity: number; peakEquity: number; drawdownPct: number;
+  openCount: number; closedCount: number; activeTuples: number;
+}): void {
+  ensureDir();
+  const file = path.join(STATE_DIR, 'equity-snapshots.csv');
+  const header = 'ts,iso,equity,peak_equity,drawdown_pct,open_count,closed_count,active_tuples\n';
+  const exists = fs.existsSync(file);
+  const iso = new Date(row.ts).toISOString();
+  const line = `${row.ts},${iso},${row.equity.toFixed(4)},${row.peakEquity.toFixed(4)},${row.drawdownPct.toFixed(6)},${row.openCount},${row.closedCount},${row.activeTuples}\n`;
+  fs.appendFileSync(file, exists ? line : header + line);
 }
