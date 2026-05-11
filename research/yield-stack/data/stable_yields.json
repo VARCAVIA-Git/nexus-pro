@@ -1,0 +1,261 @@
+[
+  {
+    "protocol": "fluid-lending",
+    "chain": "Base",
+    "symbol": "USDC",
+    "apr_pct": 6.47,
+    "apy_base_pct": 5.01,
+    "apy_reward_pct": 1.46,
+    "tvl_usd_m": 16.4,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "7372edda-f07f-4598-83e5-4edec48c4039",
+    "underlying": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    ]
+  },
+  {
+    "protocol": "fluid-lending",
+    "chain": "Arbitrum",
+    "symbol": "USDC",
+    "apr_pct": 5.14,
+    "apy_base_pct": 4.46,
+    "apy_reward_pct": 0.68,
+    "tvl_usd_m": 51.3,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "4c45cc9e-e1a4-43c9-8a3d-687d96abb07c",
+    "underlying": [
+      "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    ]
+  },
+  {
+    "protocol": "fluid-lending",
+    "chain": "Ethereum",
+    "symbol": "USDC",
+    "apr_pct": 4.84,
+    "apy_base_pct": 3.71,
+    "apy_reward_pct": 1.13,
+    "tvl_usd_m": 193.1,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "4438dabc-7f0c-430b-8136-2722711ae663",
+    "underlying": [
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    ]
+  },
+  {
+    "protocol": "fluid-lending",
+    "chain": "Ethereum",
+    "symbol": "USDT",
+    "apr_pct": 4.56,
+    "apy_base_pct": 2.89,
+    "apy_reward_pct": 1.67,
+    "tvl_usd_m": 129.9,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "4e8cc592-c8d5-4824-8155-128ba521e903",
+    "underlying": [
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    ]
+  },
+  {
+    "protocol": "yearn-finance",
+    "chain": "Ethereum",
+    "symbol": "USDC",
+    "apr_pct": 3.54,
+    "apy_base_pct": 3.54,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 29.8,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "7d89af7a-24c9-4292-aa38-7c71b05fbd6d",
+    "underlying": [
+      "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Ethereum",
+    "symbol": "USDC",
+    "apr_pct": 3.31,
+    "apy_base_pct": 3.31,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 167.6,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "aa70268e-4b52-42bf-a116-608b370f9501",
+    "underlying": [
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    ]
+  },
+  {
+    "protocol": "compound-v3",
+    "chain": "Ethereum",
+    "symbol": "USDC",
+    "apr_pct": 3.31,
+    "apy_base_pct": 3.17,
+    "apy_reward_pct": 0.14,
+    "tvl_usd_m": 39.9,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "7da72d09-56ca-4ec5-a45f-59114353e487",
+    "underlying": [
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Base",
+    "symbol": "USDC",
+    "apr_pct": 3.26,
+    "apy_base_pct": 3.26,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 26.7,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "7e0661bf-8cf3-45e6-9424-31916d4c7b84",
+    "underlying": [
+      "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+    ]
+  },
+  {
+    "protocol": "compound-v3",
+    "chain": "Ethereum",
+    "symbol": "USDT",
+    "apr_pct": 3.19,
+    "apy_base_pct": 3.05,
+    "apy_reward_pct": 0.14,
+    "tvl_usd_m": 27.9,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "f4d5b566-e815-4ca2-bb07-7bcd8bc797f1",
+    "underlying": [
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Ethereum",
+    "symbol": "USDT",
+    "apr_pct": 3.15,
+    "apy_base_pct": 3.15,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 209.1,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "f981a304-bb6c-45b8-b0c5-fd2f515ad23a",
+    "underlying": [
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Arbitrum",
+    "symbol": "USDC",
+    "apr_pct": 3.08,
+    "apy_base_pct": 3.08,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 20.3,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "d9fa8e14-0447-4207-9ae8-7810199dfa1f",
+    "underlying": [
+      "0xaf88d065e77c8cC2239327C5EDb3A432268e5831"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Ethereum",
+    "symbol": "DAI",
+    "apr_pct": 2.95,
+    "apy_base_pct": 2.95,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 18.4,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "3665ee7e-6c5d-49d9-abb7-c47ab5d9d4ac",
+    "underlying": [
+      "0x6B175474E89094C44Da98b954EedeAC495271d0F"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Polygon",
+    "symbol": "USDC",
+    "apr_pct": 2.49,
+    "apy_base_pct": 2.49,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 14.0,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "1b8b4cdb-0728-42a8-bf13-2c8fea7427ee",
+    "underlying": [
+      "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359"
+    ]
+  },
+  {
+    "protocol": "convex-finance",
+    "chain": "Ethereum",
+    "symbol": "FRAX-USDE",
+    "apr_pct": 2.37,
+    "apy_base_pct": 0.01,
+    "apy_reward_pct": 2.36,
+    "tvl_usd_m": 54.7,
+    "il_risk": "no",
+    "exposure": "multi",
+    "pool_id": "5fac4a47-5360-49b7-8b61-66f88a3d939f",
+    "underlying": [
+      "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+      "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"
+    ]
+  },
+  {
+    "protocol": "curve-dex",
+    "chain": "Ethereum",
+    "symbol": "FRAX-USDE",
+    "apr_pct": 1.56,
+    "apy_base_pct": 0.01,
+    "apy_reward_pct": 1.55,
+    "tvl_usd_m": 54.9,
+    "il_risk": "no",
+    "exposure": "multi",
+    "pool_id": "12ca9565-0369-404e-b209-631305e4012a",
+    "underlying": [
+      "0x853d955aCEf822Db058eb8505911ED77F175b99e",
+      "0x4c9EDD5852cd905f086C759E8383e09bff1E68B3"
+    ]
+  },
+  {
+    "protocol": "aave-v3",
+    "chain": "Ethereum",
+    "symbol": "USDS",
+    "apr_pct": 0.58,
+    "apy_base_pct": 0.58,
+    "apy_reward_pct": 0,
+    "tvl_usd_m": 23.0,
+    "il_risk": "no",
+    "exposure": "single",
+    "pool_id": "e65588a1-27ad-4e20-9232-68a6cfaccf63",
+    "underlying": [
+      "0xdC035D45d973E3EC169d2276DDab16f1e407384F"
+    ]
+  },
+  {
+    "protocol": "curve-dex",
+    "chain": "Ethereum",
+    "symbol": "DAI-USDC-USDT",
+    "apr_pct": 0.0,
+    "apy_base_pct": 0,
+    "apy_reward_pct": 0.0,
+    "tvl_usd_m": 161.8,
+    "il_risk": "no",
+    "exposure": "multi",
+    "pool_id": "25171c4c-1877-449a-9f88-45a9f153ee31",
+    "underlying": [
+      "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+      "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "0xdAC17F958D2ee523a2206206994597C13D831ec7"
+    ]
+  }
+]
