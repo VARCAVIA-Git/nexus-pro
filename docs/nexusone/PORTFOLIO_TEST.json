@@ -1,0 +1,189 @@
+{
+  "generated_at": "2026-05-01T20:49:30.530Z",
+  "source": "STRATEGY_SCREENING.json",
+  "full_pool": {
+    "size": 13,
+    "strategies": [
+      "ETH-USD/1H/DONCH_24_h48",
+      "ETH-USD/1H/DONCH_48_h48",
+      "ETH-USD/1H/DONCH_96_h48",
+      "SOL-USD/1H/RSI_CROSS_35_65_h12",
+      "SOL-USD/1H/BB_REV_s2_h12",
+      "BTC-USD/1H/EMA_PB_100_h48",
+      "SOL-USD/1H/BB_REV_s2_h24",
+      "ETH-USD/1H/DONCH_48_h24",
+      "ETH-USD/1H/DONCH_96_h24",
+      "BTC-USD/1H/DONCH_24_h48",
+      "SOL-USD/1H/BB_REV_s2.5_h24",
+      "BTC-USD/1H/DONCH_24_h24",
+      "SOL-USD/1H/BB_REV_s2.5_h12"
+    ],
+    "sumByFold": [
+      1233.7,
+      725.5,
+      1357.7,
+      -947
+    ],
+    "total": 2369.9,
+    "allFoldsPositive": false,
+    "minFold": -947
+  },
+  "greedy_stability": {
+    "size": 4,
+    "strategies": [
+      "ETH-USD/1H/DONCH_24_h48",
+      "ETH-USD/1H/DONCH_48_h24",
+      "BTC-USD/1H/DONCH_24_h48",
+      "BTC-USD/1H/DONCH_24_h24"
+    ],
+    "sumByFold": [
+      439.1,
+      542.5,
+      806.2,
+      770
+    ],
+    "total": 2557.8,
+    "allFoldsPositive": true,
+    "minFold": 439.1
+  },
+  "per_symbol": {
+    "size": 3,
+    "strategies": [
+      "ETH-USD/1H/DONCH_24_h48",
+      "SOL-USD/1H/RSI_CROSS_35_65_h12",
+      "BTC-USD/1H/EMA_PB_100_h48"
+    ],
+    "sumByFold": [
+      872.5,
+      -74.5,
+      2460.2,
+      80.5
+    ],
+    "total": 3338.7,
+    "allFoldsPositive": false,
+    "minFold": -74.5
+  },
+  "per_family": {
+    "size": 6,
+    "strategies": [
+      "ETH-USD/1H/DONCH_24_h48",
+      "ETH-USD/1H/DONCH_48_h48",
+      "ETH-USD/1H/DONCH_96_h48",
+      "SOL-USD/1H/RSI_CROSS_35_65_h12",
+      "SOL-USD/1H/BB_REV_s2_h12",
+      "BTC-USD/1H/EMA_PB_100_h48"
+    ],
+    "sumByFold": [
+      1334.5,
+      1511.4,
+      1879.5,
+      -1283.4
+    ],
+    "total": 3442,
+    "allFoldsPositive": false,
+    "minFold": -1283.4
+  },
+  "per_symbol_strategies": [
+    {
+      "id": "DONCH_24_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "folds": [
+        919.8,
+        -1714.6,
+        3286.1,
+        2365.7
+      ]
+    },
+    {
+      "id": "RSI_CROSS_35_65_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "folds": [
+        -236.2,
+        54.7,
+        3794.1,
+        499.3
+      ]
+    },
+    {
+      "id": "EMA_PB_100_h48",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "folds": [
+        1934,
+        1436.4,
+        300.4,
+        -2623.6
+      ]
+    }
+  ],
+  "per_family_strategies": [
+    {
+      "id": "DONCH_24_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "folds": [
+        919.8,
+        -1714.6,
+        3286.1,
+        2365.7
+      ]
+    },
+    {
+      "id": "DONCH_48_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "folds": [
+        1551.7,
+        4417.4,
+        1545.5,
+        -2735
+      ]
+    },
+    {
+      "id": "DONCH_96_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "folds": [
+        2134.2,
+        3879.6,
+        294.5,
+        -3459.9
+      ]
+    },
+    {
+      "id": "RSI_CROSS_35_65_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "folds": [
+        -236.2,
+        54.7,
+        3794.1,
+        499.3
+      ]
+    },
+    {
+      "id": "BB_REV_s2_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "folds": [
+        1703.6,
+        994.7,
+        2056.6,
+        -1746.7
+      ]
+    },
+    {
+      "id": "EMA_PB_100_h48",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "folds": [
+        1934,
+        1436.4,
+        300.4,
+        -2623.6
+      ]
+    }
+  ]
+}

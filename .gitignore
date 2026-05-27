@@ -25,3 +25,5 @@ logs/*
 # Alpaca credentials
 .env
 .env.local.v3-state/
+.clarity/
+.v3-state/

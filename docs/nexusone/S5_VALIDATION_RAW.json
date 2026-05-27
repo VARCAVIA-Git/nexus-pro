@@ -1,0 +1,223 @@
+{
+  "generated_at": "2026-05-01T20:39:32.350Z",
+  "strategy": "S5_RSI_BIDIR_MAKER_V1",
+  "period_days": 60,
+  "timeframe": "5m",
+  "cost_model": {
+    "maker_fee_bps": 1.5,
+    "taker_fee_bps": 1.5,
+    "slippage_bps": 1,
+    "spread_bps": 1
+  },
+  "cost_model_round_trip_bps": 6,
+  "results": [
+    {
+      "symbol": "BTC-USD",
+      "bars_count": 17400,
+      "full": {
+        "total_trades": 220,
+        "winning_trades": 120,
+        "losing_trades": 100,
+        "win_rate": 54.55,
+        "gross_pnl_bps": 1105.86,
+        "total_cost_bps": 1320,
+        "net_pnl_bps": -214.14,
+        "avg_trade_bps": -0.97,
+        "avg_winner_bps": 46.6,
+        "avg_loser_bps": -58.06,
+        "max_drawdown_bps": 816.2,
+        "sharpe_ratio": -0.4,
+        "profit_factor": 0.96,
+        "t_stat": -0.19,
+        "expectancy_bps": -0.97
+      },
+      "walk_forward": {
+        "folds_count": 4,
+        "all_positive": false,
+        "avg_net_bps": -58.26,
+        "fold_metrics": [
+          {
+            "fold": 1,
+            "trades": 58,
+            "net_bps": -278.14,
+            "win_rate": 56.9,
+            "sharpe": -1.6
+          },
+          {
+            "fold": 2,
+            "trades": 57,
+            "net_bps": -45.34,
+            "win_rate": 54.39,
+            "sharpe": -0.37
+          },
+          {
+            "fold": 3,
+            "trades": 46,
+            "net_bps": 480.44,
+            "win_rate": 56.52,
+            "sharpe": 4.44
+          },
+          {
+            "fold": 4,
+            "trades": 56,
+            "net_bps": -390.02,
+            "win_rate": 51.79,
+            "sharpe": -3.33
+          }
+        ]
+      },
+      "bootstrap": {
+        "p_value": 0.567,
+        "mean": -0.9733636363636365,
+        "ci_low": -11.606909090909095,
+        "ci_high": 9.082545454545452
+      },
+      "verdict": "NO_GO",
+      "reasons": [
+        "Full-period net edge ≤ 0",
+        "Walk-forward not all-positive",
+        "Bootstrap p-value 0.567 ≥ 0.05",
+        "Profit factor 0.96 < 1.1"
+      ]
+    },
+    {
+      "symbol": "ETH-USD",
+      "bars_count": 17400,
+      "full": {
+        "total_trades": 208,
+        "winning_trades": 102,
+        "losing_trades": 106,
+        "win_rate": 49.04,
+        "gross_pnl_bps": -840.43,
+        "total_cost_bps": 1248,
+        "net_pnl_bps": -2088.43,
+        "avg_trade_bps": -10.04,
+        "avg_winner_bps": 59.27,
+        "avg_loser_bps": -76.74,
+        "max_drawdown_bps": 2349.72,
+        "sharpe_ratio": -3.11,
+        "profit_factor": 0.74,
+        "t_stat": -1.42,
+        "expectancy_bps": -10.04
+      },
+      "walk_forward": {
+        "folds_count": 4,
+        "all_positive": false,
+        "avg_net_bps": -586.57,
+        "fold_metrics": [
+          {
+            "fold": 1,
+            "trades": 56,
+            "net_bps": -539.74,
+            "win_rate": 48.21,
+            "sharpe": -2.69
+          },
+          {
+            "fold": 2,
+            "trades": 48,
+            "net_bps": -1060.94,
+            "win_rate": 43.75,
+            "sharpe": -7.61
+          },
+          {
+            "fold": 3,
+            "trades": 50,
+            "net_bps": 233.01,
+            "win_rate": 56,
+            "sharpe": 1.31
+          },
+          {
+            "fold": 4,
+            "trades": 51,
+            "net_bps": -978.62,
+            "win_rate": 45.1,
+            "sharpe": -7.2
+          }
+        ]
+      },
+      "bootstrap": {
+        "p_value": 0.926,
+        "mean": -10.040528846153846,
+        "ci_low": -23.95846153846154,
+        "ci_high": 3.699134615384612
+      },
+      "verdict": "NO_GO",
+      "reasons": [
+        "Full-period net edge ≤ 0",
+        "Walk-forward not all-positive",
+        "Bootstrap p-value 0.926 ≥ 0.05",
+        "Profit factor 0.74 < 1.1"
+      ]
+    },
+    {
+      "symbol": "SOL-USD",
+      "bars_count": 17400,
+      "full": {
+        "total_trades": 211,
+        "winning_trades": 112,
+        "losing_trades": 99,
+        "win_rate": 53.08,
+        "gross_pnl_bps": 457.63,
+        "total_cost_bps": 1266,
+        "net_pnl_bps": -808.37,
+        "avg_trade_bps": -3.83,
+        "avg_winner_bps": 63.75,
+        "avg_loser_bps": -80.29,
+        "max_drawdown_bps": 1428.81,
+        "sharpe_ratio": -1.12,
+        "profit_factor": 0.9,
+        "t_stat": -0.51,
+        "expectancy_bps": -3.83
+      },
+      "walk_forward": {
+        "folds_count": 4,
+        "all_positive": false,
+        "avg_net_bps": -168.67,
+        "fold_metrics": [
+          {
+            "fold": 1,
+            "trades": 57,
+            "net_bps": -928.68,
+            "win_rate": 50.88,
+            "sharpe": -3.67
+          },
+          {
+            "fold": 2,
+            "trades": 54,
+            "net_bps": 84.44,
+            "win_rate": 57.41,
+            "sharpe": 0.58
+          },
+          {
+            "fold": 3,
+            "trades": 46,
+            "net_bps": 148.26,
+            "win_rate": 52.17,
+            "sharpe": 0.85
+          },
+          {
+            "fold": 4,
+            "trades": 51,
+            "net_bps": 21.29,
+            "win_rate": 50.98,
+            "sharpe": 0.22
+          }
+        ]
+      },
+      "bootstrap": {
+        "p_value": 0.687,
+        "mean": -3.8311374407582917,
+        "ci_low": -18.922464454976282,
+        "ci_high": 11.374075829383889
+      },
+      "verdict": "NO_GO",
+      "reasons": [
+        "Full-period net edge ≤ 0",
+        "Walk-forward not all-positive",
+        "Bootstrap p-value 0.687 ≥ 0.05",
+        "Profit factor 0.9 < 1.1"
+      ]
+    }
+  ],
+  "overall_verdict": "NO_GO"
+}

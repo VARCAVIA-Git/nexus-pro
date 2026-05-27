@@ -1,0 +1,639 @@
+{
+  "generated_at": "2026-05-01T20:48:29.574Z",
+  "cost_model_rt_bps": 6,
+  "total_combinations_tested": 108,
+  "candidates_reported": 23,
+  "passes": 0,
+  "results": [
+    {
+      "strategy": "DONCH_24_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 112,
+        "win_rate": 55.4,
+        "net_bps": 6644.6,
+        "avg_bps": 59.33,
+        "sharpe": 1.11,
+        "pf": 1.33,
+        "max_dd_bps": 2879.3
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        919.8,
+        -1714.6,
+        3286.1,
+        2365.7
+      ],
+      "bootstrap_p": 0.143,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [919.8, -1714.6, 3286.1, 2365.7]",
+        "p-value 0.143 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "DONCH_48_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 99,
+        "win_rate": 54.5,
+        "net_bps": 4757.7,
+        "avg_bps": 48.06,
+        "sharpe": 0.87,
+        "pf": 1.28,
+        "max_dd_bps": 4280.7
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1551.7,
+        4417.4,
+        1545.5,
+        -2735
+      ],
+      "bootstrap_p": 0.196,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1551.7, 4417.4, 1545.5, -2735]",
+        "p-value 0.196 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "DONCH_96_h48",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 77,
+        "win_rate": 46.8,
+        "net_bps": 4637.2,
+        "avg_bps": 60.22,
+        "sharpe": 0.94,
+        "pf": 1.32,
+        "max_dd_bps": 4542.4
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        2134.2,
+        3879.6,
+        294.5,
+        -3459.9
+      ],
+      "bootstrap_p": 0.154,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [2134.2, 3879.6, 294.5, -3459.9]",
+        "p-value 0.154 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "RSI_CROSS_35_65_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 261,
+        "win_rate": 50.2,
+        "net_bps": 3125.7,
+        "avg_bps": 11.98,
+        "sharpe": 0.65,
+        "pf": 1.11,
+        "max_dd_bps": 4010.2
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -236.2,
+        54.7,
+        3794.1,
+        499.3
+      ],
+      "bootstrap_p": 0.233,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-236.2, 54.7, 3794.1, 499.3]",
+        "p-value 0.233 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "BB_REV_s2_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 147,
+        "win_rate": 53.7,
+        "net_bps": 2892.8,
+        "avg_bps": 19.68,
+        "sharpe": 0.78,
+        "pf": 1.18,
+        "max_dd_bps": 2821.1
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1703.6,
+        994.7,
+        2056.6,
+        -1746.7
+      ],
+      "bootstrap_p": 0.223,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1703.6, 994.7, 2056.6, -1746.7]",
+        "p-value 0.223 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "EMA_PB_100_h48",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 146,
+        "win_rate": 52.7,
+        "net_bps": 2774.1,
+        "avg_bps": 19,
+        "sharpe": 0.81,
+        "pf": 1.2,
+        "max_dd_bps": 4647.9
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1934,
+        1436.4,
+        300.4,
+        -2623.6
+      ],
+      "bootstrap_p": 0.221,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1934, 1436.4, 300.4, -2623.6]",
+        "p-value 0.221 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "BB_REV_s2_h24",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 121,
+        "win_rate": 51.2,
+        "net_bps": 2222.1,
+        "avg_bps": 18.36,
+        "sharpe": 0.5,
+        "pf": 1.12,
+        "max_dd_bps": 3860.5
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        2518.2,
+        -2095.6,
+        1903.7,
+        -229.4
+      ],
+      "bootstrap_p": 0.331,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [2518.2, -2095.6, 1903.7, -229.4]",
+        "p-value 0.331 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "DONCH_48_h24",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 136,
+        "win_rate": 48.5,
+        "net_bps": 2217.3,
+        "avg_bps": 16.3,
+        "sharpe": 0.52,
+        "pf": 1.13,
+        "max_dd_bps": 3170.6
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -401.7,
+        2308.6,
+        -375.1,
+        -137.4
+      ],
+      "bootstrap_p": 0.303,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-401.7, 2308.6, -375.1, -137.4]",
+        "p-value 0.303 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "DONCH_24_h24",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 160,
+        "win_rate": 46.3,
+        "net_bps": 2048.8,
+        "avg_bps": 12.8,
+        "sharpe": 0.43,
+        "pf": 1.09,
+        "max_dd_bps": 2720.4
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -1523.7,
+        490.3,
+        1419.4,
+        1423.9
+      ],
+      "bootstrap_p": 0.334,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-1523.7, 490.3, 1419.4, 1423.9]",
+        "p-value 0.334 ≥ 0.05",
+        "PF 1.09 < 1.1"
+      ]
+    },
+    {
+      "strategy": "DONCH_96_h24",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 99,
+        "win_rate": 48.5,
+        "net_bps": 1945.9,
+        "avg_bps": 19.66,
+        "sharpe": 0.53,
+        "pf": 1.15,
+        "max_dd_bps": 3668.3
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        644.2,
+        585.2,
+        2346.3,
+        -3668.3
+      ],
+      "bootstrap_p": 0.263,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [644.2, 585.2, 2346.3, -3668.3]",
+        "p-value 0.263 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "RSI_CROSS_30_70_h24",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 125,
+        "win_rate": 51.2,
+        "net_bps": 1794.7,
+        "avg_bps": 14.36,
+        "sharpe": 0.4,
+        "pf": 1.09,
+        "max_dd_bps": 5138.7
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        2598.8,
+        -1883.3,
+        1181.6,
+        -141.2
+      ],
+      "bootstrap_p": 0.347,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [2598.8, -1883.3, 1181.6, -141.2]",
+        "p-value 0.347 ≥ 0.05",
+        "PF 1.09 < 1.1"
+      ]
+    },
+    {
+      "strategy": "DONCH_48_h96",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 66,
+        "win_rate": 43.9,
+        "net_bps": 1468.6,
+        "avg_bps": 22.25,
+        "sharpe": 0.26,
+        "pf": 1.08,
+        "max_dd_bps": 4361
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -3362.8,
+        -453.6,
+        3762.2,
+        -1932
+      ],
+      "bootstrap_p": 0.407,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-3362.8, -453.6, 3762.2, -1932]",
+        "p-value 0.407 ≥ 0.05",
+        "PF 1.08 < 1.1"
+      ]
+    },
+    {
+      "strategy": "EMA_PB_50_h48",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 146,
+        "win_rate": 51.4,
+        "net_bps": 1375.6,
+        "avg_bps": 9.42,
+        "sharpe": 0.4,
+        "pf": 1.09,
+        "max_dd_bps": 3852.7
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        605.8,
+        711.2,
+        1218.5,
+        -1633.2
+      ],
+      "bootstrap_p": 0.361,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [605.8, 711.2, 1218.5, -1633.2]",
+        "p-value 0.361 ≥ 0.05",
+        "PF 1.09 < 1.1"
+      ]
+    },
+    {
+      "strategy": "DONCH_24_h48",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 117,
+        "win_rate": 51.3,
+        "net_bps": 1362.6,
+        "avg_bps": 11.65,
+        "sharpe": 0.42,
+        "pf": 1.1,
+        "max_dd_bps": 1763.2
+      },
+      "walk_all_positive": true,
+      "walk_folds_net": [
+        1138,
+        685,
+        755.8,
+        272.3
+      ],
+      "bootstrap_p": 0.325,
+      "passes": false,
+      "reasons": [
+        "p-value 0.325 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "BB_REV_s2.5_h24",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 96,
+        "win_rate": 49,
+        "net_bps": 1352.2,
+        "avg_bps": 14.09,
+        "sharpe": 0.36,
+        "pf": 1.1,
+        "max_dd_bps": 3863.8
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        2314.9,
+        -2118.7,
+        1275.9,
+        -117.7
+      ],
+      "bootstrap_p": 0.35,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [2314.9, -2118.7, 1275.9, -117.7]",
+        "p-value 0.350 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "RSI_CROSS_30_70_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 158,
+        "win_rate": 51.3,
+        "net_bps": 1331.1,
+        "avg_bps": 8.42,
+        "sharpe": 0.37,
+        "pf": 1.08,
+        "max_dd_bps": 3360.6
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1475.7,
+        209.1,
+        1937.8,
+        -2039.4
+      ],
+      "bootstrap_p": 0.327,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1475.7, 209.1, 1937.8, -2039.4]",
+        "p-value 0.327 ≥ 0.05",
+        "PF 1.08 < 1.1"
+      ]
+    },
+    {
+      "strategy": "DONCH_24_h24",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 172,
+        "win_rate": 47.7,
+        "net_bps": 1304.2,
+        "avg_bps": 7.58,
+        "sharpe": 0.45,
+        "pf": 1.1,
+        "max_dd_bps": 1632.4
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        100.2,
+        891,
+        -441.9,
+        579.4
+      ],
+      "bootstrap_p": 0.323,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [100.2, 891, -441.9, 579.4]",
+        "p-value 0.323 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "RSI_CROSS_30_70_h12",
+      "symbol": "ETH-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 173,
+        "win_rate": 55.5,
+        "net_bps": 1272.2,
+        "avg_bps": 7.35,
+        "sharpe": 0.33,
+        "pf": 1.07,
+        "max_dd_bps": 3720.6
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -542,
+        2203.4,
+        1596.3,
+        -1618.2
+      ],
+      "bootstrap_p": 0.381,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-542, 2203.4, 1596.3, -1618.2]",
+        "p-value 0.381 ≥ 0.05",
+        "PF 1.07 < 1.1"
+      ]
+    },
+    {
+      "strategy": "BB_REV_s2.5_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 110,
+        "win_rate": 51.8,
+        "net_bps": 1169.1,
+        "avg_bps": 10.63,
+        "sharpe": 0.39,
+        "pf": 1.1,
+        "max_dd_bps": 2782.6
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1716.9,
+        108.4,
+        908.4,
+        -1310.2
+      ],
+      "bootstrap_p": 0.362,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1716.9, 108.4, 908.4, -1310.2]",
+        "p-value 0.362 ≥ 0.05"
+      ]
+    },
+    {
+      "strategy": "EMA_PB_50_h12",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 357,
+        "win_rate": 47.9,
+        "net_bps": 923.4,
+        "avg_bps": 2.59,
+        "sharpe": 0.32,
+        "pf": 1.05,
+        "max_dd_bps": 2568.7
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        157.9,
+        1887.7,
+        -92.3,
+        -530.1
+      ],
+      "bootstrap_p": 0.355,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [157.9, 1887.7, -92.3, -530.1]",
+        "p-value 0.355 ≥ 0.05",
+        "PF 1.05 < 1.1"
+      ]
+    },
+    {
+      "strategy": "EMA_PB_100_h24",
+      "symbol": "BTC-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 240,
+        "win_rate": 47.5,
+        "net_bps": 871.4,
+        "avg_bps": 3.63,
+        "sharpe": 0.26,
+        "pf": 1.05,
+        "max_dd_bps": 2028.7
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        -786.5,
+        736.1,
+        482.7,
+        -448.8
+      ],
+      "bootstrap_p": 0.372,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [-786.5, 736.1, 482.7, -448.8]",
+        "p-value 0.372 ≥ 0.05",
+        "PF 1.05 < 1.1"
+      ]
+    },
+    {
+      "strategy": "RSI_CROSS_25_75_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 81,
+        "win_rate": 58,
+        "net_bps": 727.4,
+        "avg_bps": 8.98,
+        "sharpe": 0.27,
+        "pf": 1.08,
+        "max_dd_bps": 2675.6
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1402,
+        -774.3,
+        731.3,
+        -631.6
+      ],
+      "bootstrap_p": 0.402,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1402, -774.3, 731.3, -631.6]",
+        "p-value 0.402 ≥ 0.05",
+        "PF 1.08 < 1.1"
+      ]
+    },
+    {
+      "strategy": "RSI_INSIDE_25_75_h12",
+      "symbol": "SOL-USD",
+      "tf": "1H",
+      "metrics": {
+        "trades": 73,
+        "win_rate": 58.9,
+        "net_bps": 427.1,
+        "avg_bps": 5.85,
+        "sharpe": 0.16,
+        "pf": 1.05,
+        "max_dd_bps": 2768
+      },
+      "walk_all_positive": false,
+      "walk_folds_net": [
+        1307.1,
+        -1151.9,
+        819.8,
+        -547.9
+      ],
+      "bootstrap_p": 0.427,
+      "passes": false,
+      "reasons": [
+        "walk-forward not all-positive: [1307.1, -1151.9, 819.8, -547.9]",
+        "p-value 0.427 ≥ 0.05",
+        "PF 1.05 < 1.1"
+      ]
+    }
+  ]
+}

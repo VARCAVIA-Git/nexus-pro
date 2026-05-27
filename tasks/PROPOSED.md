@@ -1,0 +1,1 @@
+Implementare AssetAnalytic coreConfigurare broker data pipelineSviluppare strategie base (Bollinger, RSI)Implementare AssetAnalytic coreConfigurare broker data pipelineSviluppare strategie base (Bollinger, RSI)Implementare AssetAnalytic coreConfigurare broker data pipeline

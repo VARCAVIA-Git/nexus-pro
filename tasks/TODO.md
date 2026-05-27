@@ -1,0 +1,1 @@
+Sviluppare strategie base (Bollinger, RSI)

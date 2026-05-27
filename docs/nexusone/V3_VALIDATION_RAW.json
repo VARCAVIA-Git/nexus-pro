@@ -1,0 +1,126 @@
+{
+  "generated_at": "2026-05-03T22:04:41.379Z",
+  "cost_model_rt_bps": 6,
+  "universe": [
+    "BTC-USD",
+    "ETH-USD",
+    "SOL-USD",
+    "BNB-USD",
+    "XRP-USD",
+    "ADA-USD"
+  ],
+  "timeframes": [
+    "1H",
+    "4H"
+  ],
+  "primitives": [
+    "DONCH_24",
+    "DONCH_48",
+    "BB_REV",
+    "RSI_CROSS",
+    "EMA_PB",
+    "RANGE_FADE"
+  ],
+  "config": {
+    "initialEquity": 10000,
+    "maxConcurrent": 6,
+    "dailyHaltPct": 0.03,
+    "weeklyHaltPct": 0.08
+  },
+  "folds": [
+    {
+      "fold": 1,
+      "start": "2024-05-04",
+      "end": "2024-11-03",
+      "metrics": {
+        "trades": 243,
+        "days": 100,
+        "trades_per_day": 2.43,
+        "final_equity": 9854,
+        "total_return_pct": -1.46,
+        "max_drawdown_pct": 1.8,
+        "sharpe": -3.22,
+        "win_rate": 33.7,
+        "profit_factor": 0.68
+      },
+      "bootstrap_p": 1
+    },
+    {
+      "fold": 2,
+      "start": "2024-11-03",
+      "end": "2025-05-04",
+      "metrics": {
+        "trades": 280,
+        "days": 100,
+        "trades_per_day": 2.8,
+        "final_equity": 10103,
+        "total_return_pct": 1.03,
+        "max_drawdown_pct": 1.2,
+        "sharpe": 1.32,
+        "win_rate": 42.5,
+        "profit_factor": 1.15
+      },
+      "bootstrap_p": 0.234
+    },
+    {
+      "fold": 3,
+      "start": "2025-05-04",
+      "end": "2025-11-02",
+      "metrics": {
+        "trades": 271,
+        "days": 103,
+        "trades_per_day": 2.63,
+        "final_equity": 10242,
+        "total_return_pct": 2.42,
+        "max_drawdown_pct": 0.72,
+        "sharpe": 2.81,
+        "win_rate": 46.5,
+        "profit_factor": 1.4
+      },
+      "bootstrap_p": 0.08
+    },
+    {
+      "fold": 4,
+      "start": "2025-11-02",
+      "end": "2026-05-03",
+      "metrics": {
+        "trades": 192,
+        "days": 75,
+        "trades_per_day": 2.56,
+        "final_equity": 9914,
+        "total_return_pct": -0.86,
+        "max_drawdown_pct": 1.48,
+        "sharpe": -2.79,
+        "win_rate": 29.2,
+        "profit_factor": 0.74
+      },
+      "bootstrap_p": 1
+    }
+  ],
+  "full_period": {
+    "metrics": {
+      "trades": 468,
+      "days": 264,
+      "trades_per_day": 1.77,
+      "final_equity": 10384,
+      "total_return_pct": 3.84,
+      "max_drawdown_pct": 1.81,
+      "sharpe": 1.5,
+      "win_rate": 37,
+      "profit_factor": 1.27
+    },
+    "bootstrap_p": 0.105
+  },
+  "gates": {
+    "all_folds_positive": false,
+    "all_folds_low_dd": true,
+    "full_positive": true,
+    "full_sharpe_gt_0_8": true,
+    "full_dd_lt_18": true,
+    "bootstrap_p_lt_0_10": false,
+    "trades_per_day_ge_1": true
+  },
+  "verdict": "NO_GO",
+  "top_tuples": [],
+  "bottom_tuples": []
+}
